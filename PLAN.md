@@ -119,10 +119,10 @@ All numbers live in one config file so balancing is just editing values.
 Each phase ends with something runnable. Don't start the next phase until the current one works.
 
 ### Phase 0 — Setup
-- [ ] Vite + TypeScript project
-- [ ] Fixed-rate simulation tick, separate from rendering
-- [ ] Canvas renderer drawing a test grid
-- [ ] Seeded random number generator
+- [x] Vite + TypeScript project
+- [x] Fixed-rate simulation tick, separate from rendering
+- [x] Canvas renderer drawing a test grid
+- [x] Seeded random number generator
 
 ### Phase 1 — The World
 - [ ] Tile types (floor, wall, door, resin, vent, shaft)
