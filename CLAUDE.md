@@ -22,6 +22,7 @@ The Dark Seam is a top-down 2D simulation of an alien hive (the Myrr) waking up 
 - Before a big change, explain the approach briefly and confirm it.
 - Explain new concepts (state machines, A*, pheromone maps, etc.) in plain language when they first come up. The developer is learning as we go.
 - Keep commits small and focused, with clear messages.
+- **Keep the build log updated.** After every step, update the "The Dark Seam — Build Log" doc: https://claude.ai/artifact/PQkf1jWYCKp5Rygs1E2e7v (a Claude Doc, edited through the Claude Docs connector). Add a Log row (date · phase · what was done · commit), refresh "Where we are", and record new concepts and decisions. This log becomes the final README / explainer page.
 
 ## Architecture rules
 - **Simulation and rendering are separate.** The sim runs on a fixed tick and never touches the canvas. The renderer only reads sim state. This lets the sim run headless for batch testing.
