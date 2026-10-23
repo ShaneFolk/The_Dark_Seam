@@ -125,11 +125,11 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Seeded random number generator
 
 ### Phase 1 — The World
-- [ ] Tile types (floor, wall, door, resin, vent, shaft)
-- [ ] Hand-built maps for all 3 levels
-- [ ] Level connections (elevator, ladders, chutes, vents)
-- [ ] Camera: pan (drag / WASD) and zoom (scroll)
-- [ ] Level switching + level activity sidebar
+- [x] Tile types (floor, wall, door, resin, vent, shaft)
+- [x] Hand-built maps for all 3 levels
+- [x] Level connections (elevator, ladders, chutes, vents)
+- [x] Camera: pan (drag / WASD) and zoom (scroll)
+- [x] Level switching + level activity sidebar
 
 ### Phase 2 — Movement
 - [ ] Base agent (position, speed, level)
@@ -180,7 +180,7 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [ ] Balance passes
 
 ### Phase 10 — Player Interference
-- [ ] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
+- [x] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
 
 ---
 
