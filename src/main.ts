@@ -7,6 +7,7 @@ import { createSim, step } from './sim.ts'
 import { Renderer } from './render/renderer.ts'
 import { createView } from './render/view.ts'
 import { Input } from './render/input.ts'
+import { Sidebar } from './render/sidebar.ts'
 
 /** Read ?seed=123 from the URL, or fall back to the default seed. */
 function getSeed(): number {
@@ -35,12 +36,17 @@ try {
 }
 const renderer = new Renderer(canvas)
 const view = createView(sim.world.levels.length)
-const input = new Input(canvas, view, (levelIndex) => { view.levelIndex = levelIndex })
+const selectLevel = (levelIndex: number) => { view.levelIndex = levelIndex }
+const input = new Input(canvas, view, selectLevel)
+const sidebarRoot = document.querySelector<HTMLElement>('#sidebar')
+if (!sidebarRoot) throw new Error('Missing #sidebar')
+const sidebar = new Sidebar(sidebarRoot, sim, selectLevel)
 
 startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
   update: () => step(sim),
   render: (frameMs) => {
     input.update(view, frameMs)
     renderer.render(sim, view)
+    sidebar.update(sim, view)
   },
 })

@@ -19,10 +19,10 @@ const COLORS = {
 }
 
 const TILE_COLORS: Record<Tile, string> = {
-  [Tile.Floor]: '#1f242c',
-  [Tile.Wall]: '#3d4552',
+  [Tile.Floor]: '#2c323b',
+  [Tile.Wall]: '#12161b',
   [Tile.Door]: '#c08a2e',
-  [Tile.Threshold]: '#2a303a',
+  [Tile.Threshold]: '#3a414c',
   [Tile.Vent]: '#4b2f5e',
   [Tile.Elevator]: '#38b2c9',
   [Tile.Ladder]: '#d08a3c',
@@ -32,14 +32,14 @@ const TILE_COLORS: Record<Tile, string> = {
 
 /** Floor tint per room type, so rooms read at a glance. Unlisted types use the default. */
 const ROOM_FLOOR: Partial<Record<RoomType, string>> = {
-  command: '#232c3d',
-  medbay: '#1d3332',
-  armory: '#3a2224',
-  generator: '#363220',
-  hive: '#2e1f36',
-  security: '#2a2a3d',
+  command: '#2f3b52',
+  medbay: '#284544',
+  armory: '#4a2e31',
+  generator: '#47422a',
+  hive: '#3d2948',
+  security: '#363650',
 }
-const DEFAULT_ROOM_FLOOR = '#262b33'
+const DEFAULT_ROOM_FLOOR = '#353c47'
 
 export class Renderer {
   private canvas: HTMLCanvasElement
