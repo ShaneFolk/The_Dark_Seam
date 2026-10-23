@@ -180,7 +180,7 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [ ] Balance passes
 
 ### Phase 10 — Player Interference
-- [x] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
+- [ ] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
 
 ---
 
