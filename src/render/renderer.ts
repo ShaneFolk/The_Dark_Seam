@@ -4,12 +4,18 @@ import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
 import type { Level, RoomType } from '../world/level.ts'
 import { Tile } from '../world/tiles.ts'
+import { describeTile } from '../world/loadWorld.ts'
+import { otherEnd } from '../world/links.ts'
+import type { Camera } from './camera.ts'
+import { currentCamera, type ViewState } from './view.ts'
 
 const COLORS = {
   background: '#0b0d10',
   text: '#c9d1d9',
   panel: 'rgba(0, 0, 0, 0.6)',
   roomLabel: 'rgba(230, 237, 243, 0.75)',
+  linkLabel: '#0b0d10',
+  hover: 'rgba(255, 255, 255, 0.35)',
 }
 
 const TILE_COLORS: Record<Tile, string> = {
@@ -49,34 +55,59 @@ export class Renderer {
     this.ctx = ctx
   }
 
-  render(sim: SimState, levelIndex: number): void {
+  render(sim: SimState, view: ViewState): void {
     this.resizeToWindow()
     this.updateFps()
 
     const { ctx, canvas } = this
     const w = canvas.clientWidth
     const h = canvas.clientHeight
-    const level = sim.world.levels[levelIndex]
+    const level = sim.world.levels[view.levelIndex]
+    const camera = currentCamera(view)
+    const base = CONFIG.render.tileSize
+    const worldW = level.width * base
+    const worldH = level.height * base
+
+    if (!camera.fitted) camera.fit(worldW, worldH, w, h)
+    camera.clamp(worldW, worldH)
 
     ctx.fillStyle = COLORS.background
     ctx.fillRect(0, 0, w, h)
 
-    // Fit the whole level on screen, centered. (Pan/zoom camera comes next.)
-    const base = CONFIG.render.tileSize
-    const scale = Math.min(w / (level.width * base), h / (level.height * base))
-    const tile = base * scale
-    const offsetX = (w - level.width * tile) / 2
-    const offsetY = (h - level.height * tile) / 2
+    // Screen position of the level's top-left corner, and tile size on screen.
+    const [ox, oy] = camera.worldToScreen(0, 0, w, h)
+    const tile = base * camera.zoom
 
-    this.drawTiles(level, offsetX, offsetY, tile)
-    this.drawRoomLabels(level, offsetX, offsetY, tile)
-    this.drawDebug(sim, level)
+    this.drawTiles(level, ox, oy, tile, w, h)
+    this.drawLinkMarkers(level, ox, oy, tile)
+    this.drawRoomLabels(level, ox, oy, tile)
+    const hovered = this.hoveredTile(level, camera, view, w, h)
+    if (hovered) {
+      ctx.strokeStyle = COLORS.hover
+      ctx.lineWidth = 2
+      ctx.strokeRect(ox + hovered.x * tile, oy + hovered.y * tile, tile, tile)
+    }
+    this.drawDebug(sim, level, camera, hovered)
   }
 
-  private drawTiles(level: Level, ox: number, oy: number, tile: number): void {
+  private hoveredTile(level: Level, camera: Camera, view: ViewState, w: number, h: number): { x: number; y: number } | null {
+    if (!view.mouse) return null
+    const [wx, wy] = camera.screenToWorld(view.mouse.x, view.mouse.y, w, h)
+    const x = Math.floor(wx / CONFIG.render.tileSize)
+    const y = Math.floor(wy / CONFIG.render.tileSize)
+    if (x < 0 || y < 0 || x >= level.width || y >= level.height) return null
+    return { x, y }
+  }
+
+  private drawTiles(level: Level, ox: number, oy: number, tile: number, w: number, h: number): void {
     const { ctx } = this
-    for (let y = 0; y < level.height; y++) {
-      for (let x = 0; x < level.width; x++) {
+    // Only draw the tiles that are on screen.
+    const x0 = Math.max(0, Math.floor(-ox / tile))
+    const y0 = Math.max(0, Math.floor(-oy / tile))
+    const x1 = Math.min(level.width - 1, Math.floor((w - ox) / tile))
+    const y1 = Math.min(level.height - 1, Math.floor((h - oy) / tile))
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
         const i = y * level.width + x
         ctx.fillStyle = this.tileColor(level, i)
         // Slightly oversized so neighbouring tiles leave no gaps when scaled.
@@ -93,6 +124,23 @@ export class Renderer {
     return ROOM_FLOOR[level.rooms[room].type] ?? DEFAULT_ROOM_FLOOR
   }
 
+  /** Up/down arrows on link tiles, once tiles are big enough to read. */
+  private drawLinkMarkers(level: Level, ox: number, oy: number, tile: number): void {
+    if (tile < CONFIG.render.linkLabelMinTilePx) return
+    const { ctx } = this
+    ctx.fillStyle = COLORS.linkLabel
+    ctx.font = `bold ${Math.round(tile * 0.7)}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const [i, link] of level.linksAt) {
+      const x = i % level.width
+      const y = (i - x) / level.width
+      const arrow = otherEnd(link, level.id).level < level.id ? '▲' : '▼'
+      ctx.fillText(arrow, ox + (x + 0.5) * tile, oy + (y + 0.5) * tile)
+    }
+    ctx.textAlign = 'left'
+  }
+
   private drawRoomLabels(level: Level, ox: number, oy: number, tile: number): void {
     if (tile < CONFIG.render.roomLabelMinTilePx) return
     const { ctx } = this
@@ -106,7 +154,7 @@ export class Renderer {
     ctx.textAlign = 'left'
   }
 
-  private drawDebug(sim: SimState, level: Level): void {
+  private drawDebug(sim: SimState, level: Level, camera: Camera, hovered: { x: number; y: number } | null): void {
     const { ctx } = this
     const lines = [
       `seed ${sim.seed}`,
@@ -114,7 +162,9 @@ export class Renderer {
       `sim time ${(sim.tick / CONFIG.sim.ticksPerSecond).toFixed(1)}s`,
       `fps ${this.fps}`,
       `level ${level.id}: ${level.name}`,
+      `zoom ${camera.zoom.toFixed(2)}`,
     ]
+    if (hovered) lines.push(`tile ${hovered.x}, ${hovered.y}: ${describeTile(level, hovered.x, hovered.y)}`)
     ctx.font = '13px monospace'
     ctx.textBaseline = 'top'
     const width = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16

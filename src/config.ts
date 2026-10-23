@@ -21,5 +21,13 @@ export const CONFIG = {
     tileSize: 16,
     /** Room names are drawn once a tile is at least this many screen pixels. */
     roomLabelMinTilePx: 9,
+    /** Link arrows are drawn once a tile is at least this many screen pixels. */
+    linkLabelMinTilePx: 12,
+    minZoom: 0.2,
+    maxZoom: 4,
+    /** Zoom change per mouse-wheel notch. */
+    zoomStep: 1.15,
+    /** Keyboard pan speed, in screen pixels per second. */
+    panSpeed: 900,
   },
 } as const

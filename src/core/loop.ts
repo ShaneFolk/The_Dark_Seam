@@ -8,8 +8,8 @@
 export interface LoopCallbacks {
   /** Advance the simulation one tick. */
   update: () => void
-  /** Draw the current state. */
-  render: () => void
+  /** Draw the current state. Gets the real time since the last frame. */
+  render: (frameMs: number) => void
 }
 
 export function startLoop(
@@ -22,7 +22,8 @@ export function startLoop(
   let accumulator = 0
 
   function frame(now: number): void {
-    accumulator += now - lastTime
+    const frameMs = now - lastTime
+    accumulator += frameMs
     lastTime = now
 
     let ticks = 0
@@ -35,7 +36,7 @@ export function startLoop(
     // instead of trying to catch up all at once.
     if (ticks === maxTicksPerFrame) accumulator = 0
 
-    callbacks.render()
+    callbacks.render(frameMs)
     requestAnimationFrame(frame)
   }
 

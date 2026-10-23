@@ -5,6 +5,8 @@ import { CONFIG } from './config.ts'
 import { startLoop } from './core/loop.ts'
 import { createSim, step } from './sim.ts'
 import { Renderer } from './render/renderer.ts'
+import { createView } from './render/view.ts'
+import { Input } from './render/input.ts'
 
 /** Read ?seed=123 from the URL, or fall back to the default seed. */
 function getSeed(): number {
@@ -32,8 +34,13 @@ try {
   throw err
 }
 const renderer = new Renderer(canvas)
+const view = createView(sim.world.levels.length)
+const input = new Input(canvas, view, (levelIndex) => { view.levelIndex = levelIndex })
 
 startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
   update: () => step(sim),
-  render: () => renderer.render(sim, 0),
+  render: (frameMs) => {
+    input.update(view, frameMs)
+    renderer.render(sim, view)
+  },
 })
