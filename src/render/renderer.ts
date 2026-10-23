@@ -1,16 +1,39 @@
 // Draws the sim state to the canvas. Only reads the sim, never changes it.
 
 import { CONFIG } from '../config.ts'
-import { TILE_WALL, type SimState } from '../sim.ts'
+import type { SimState } from '../sim.ts'
+import type { Level, RoomType } from '../world/level.ts'
+import { Tile } from '../world/tiles.ts'
 
 const COLORS = {
   background: '#0b0d10',
-  floor: '#1c2128',
-  wall: '#4a5361',
-  gridLine: '#0b0d10',
   text: '#c9d1d9',
   panel: 'rgba(0, 0, 0, 0.6)',
+  roomLabel: 'rgba(230, 237, 243, 0.75)',
 }
+
+const TILE_COLORS: Record<Tile, string> = {
+  [Tile.Floor]: '#1f242c',
+  [Tile.Wall]: '#3d4552',
+  [Tile.Door]: '#c08a2e',
+  [Tile.Threshold]: '#2a303a',
+  [Tile.Vent]: '#4b2f5e',
+  [Tile.Elevator]: '#38b2c9',
+  [Tile.Ladder]: '#d08a3c',
+  [Tile.Chute]: '#8a6a45',
+  [Tile.VentShaft]: '#9b59c4',
+}
+
+/** Floor tint per room type, so rooms read at a glance. Unlisted types use the default. */
+const ROOM_FLOOR: Partial<Record<RoomType, string>> = {
+  command: '#232c3d',
+  medbay: '#1d3332',
+  armory: '#3a2224',
+  generator: '#363220',
+  hive: '#2e1f36',
+  security: '#2a2a3d',
+}
+const DEFAULT_ROOM_FLOOR = '#262b33'
 
 export class Renderer {
   private canvas: HTMLCanvasElement
@@ -26,49 +49,78 @@ export class Renderer {
     this.ctx = ctx
   }
 
-  render(sim: SimState): void {
+  render(sim: SimState, levelIndex: number): void {
     this.resizeToWindow()
     this.updateFps()
 
     const { ctx, canvas } = this
     const w = canvas.clientWidth
     const h = canvas.clientHeight
+    const level = sim.world.levels[levelIndex]
 
     ctx.fillStyle = COLORS.background
     ctx.fillRect(0, 0, w, h)
 
-    // Fit the whole grid on screen, centered. (Pan/zoom camera is Phase 1.)
+    // Fit the whole level on screen, centered. (Pan/zoom camera comes next.)
     const base = CONFIG.render.tileSize
-    const scale = Math.min(w / (sim.gridWidth * base), h / (sim.gridHeight * base))
+    const scale = Math.min(w / (level.width * base), h / (level.height * base))
     const tile = base * scale
-    const offsetX = (w - sim.gridWidth * tile) / 2
-    const offsetY = (h - sim.gridHeight * tile) / 2
+    const offsetX = (w - level.width * tile) / 2
+    const offsetY = (h - level.height * tile) / 2
 
-    for (let y = 0; y < sim.gridHeight; y++) {
-      for (let x = 0; x < sim.gridWidth; x++) {
-        const t = sim.tiles[y * sim.gridWidth + x]
-        ctx.fillStyle = t === TILE_WALL ? COLORS.wall : COLORS.floor
-        // 1px gap between tiles so the grid is visible.
-        ctx.fillRect(offsetX + x * tile, offsetY + y * tile, tile - 1, tile - 1)
-      }
-    }
-
-    this.drawDebug(sim)
+    this.drawTiles(level, offsetX, offsetY, tile)
+    this.drawRoomLabels(level, offsetX, offsetY, tile)
+    this.drawDebug(sim, level)
   }
 
-  private drawDebug(sim: SimState): void {
+  private drawTiles(level: Level, ox: number, oy: number, tile: number): void {
+    const { ctx } = this
+    for (let y = 0; y < level.height; y++) {
+      for (let x = 0; x < level.width; x++) {
+        const i = y * level.width + x
+        ctx.fillStyle = this.tileColor(level, i)
+        // Slightly oversized so neighbouring tiles leave no gaps when scaled.
+        ctx.fillRect(ox + x * tile, oy + y * tile, tile + 0.5, tile + 0.5)
+      }
+    }
+  }
+
+  private tileColor(level: Level, i: number): string {
+    const t = level.tiles[i] as Tile
+    if (t !== Tile.Floor) return TILE_COLORS[t]
+    const room = level.roomOf[i]
+    if (room < 0) return TILE_COLORS[Tile.Floor]
+    return ROOM_FLOOR[level.rooms[room].type] ?? DEFAULT_ROOM_FLOOR
+  }
+
+  private drawRoomLabels(level: Level, ox: number, oy: number, tile: number): void {
+    if (tile < CONFIG.render.roomLabelMinTilePx) return
+    const { ctx } = this
+    ctx.fillStyle = COLORS.roomLabel
+    ctx.font = `${Math.round(Math.min(14, tile * 0.9))}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (const room of level.rooms) {
+      ctx.fillText(room.name, ox + (room.centerX + 0.5) * tile, oy + (room.centerY + 0.5) * tile)
+    }
+    ctx.textAlign = 'left'
+  }
+
+  private drawDebug(sim: SimState, level: Level): void {
     const { ctx } = this
     const lines = [
       `seed ${sim.seed}`,
       `tick ${sim.tick}`,
       `sim time ${(sim.tick / CONFIG.sim.ticksPerSecond).toFixed(1)}s`,
       `fps ${this.fps}`,
+      `level ${level.id}: ${level.name}`,
     ]
-    ctx.fillStyle = COLORS.panel
-    ctx.fillRect(8, 8, 150, 16 + lines.length * 16)
-    ctx.fillStyle = COLORS.text
     ctx.font = '13px monospace'
     ctx.textBaseline = 'top'
+    const width = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16
+    ctx.fillStyle = COLORS.panel
+    ctx.fillRect(8, 8, width, 16 + lines.length * 16)
+    ctx.fillStyle = COLORS.text
     lines.forEach((line, i) => ctx.fillText(line, 16, 16 + i * 16))
   }
 

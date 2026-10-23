@@ -11,16 +11,15 @@ export const CONFIG = {
     defaultSeed: 12345,
   },
 
-  grid: {
-    /** Test grid size, in tiles. */
-    width: 64,
-    height: 40,
-    /** Chance that a test-grid tile is drawn as a "wall". */
-    testWallChance: 0.15,
+  world: {
+    /** A room bigger than this is reported as a map mistake (usually a missing door). */
+    maxRoomTiles: 400,
   },
 
   render: {
     /** Tile size in pixels at zoom 1. */
     tileSize: 16,
+    /** Room names are drawn once a tile is at least this many screen pixels. */
+    roomLabelMinTilePx: 9,
   },
 } as const

@@ -11,3 +11,15 @@ body {
   width: 100vw;
   height: 100vh;
 }
+
+.fatal {
+  position: fixed;
+  inset: 16px;
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  background: #2a1215;
+  color: #ffb4b4;
+  font: 13px/1.5 monospace;
+  white-space: pre-wrap;
+}
