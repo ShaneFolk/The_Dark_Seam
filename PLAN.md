@@ -243,8 +243,8 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Run summary / event log
 
 ### Phase 9 — Tuning
-- [ ] Speed controls (pause, 1x, 2x, 4x)
-- [ ] Batch mode: run many seeds headless and report who won
+- [x] Speed controls (pause, 1x, 2x, 4x, plus 8x). Space pauses, + and - change speed
+- [x] Batch mode: run many seeds headless and report who won (`npm run batch`, see `scripts/batch.ts`)
 - [ ] Utility-AI scoring for smarter decisions
 - [ ] Balance passes
 
