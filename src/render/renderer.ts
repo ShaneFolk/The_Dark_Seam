@@ -30,6 +30,8 @@ export class Renderer {
   private fpsTimer = performance.now()
   /** Each level's tiles drawn once at zoom 1. Redrawn only when invalidated. */
   private levelCache = new Map<number, HTMLCanvasElement>()
+  /** How many entries of each level's change list have been repainted. */
+  private changesSeen = new Map<number, number>()
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -63,6 +65,7 @@ export class Renderer {
 
     this.drawLevel(level, ox, oy, tile)
     this.drawLinkMarkers(level, ox, oy, tile)
+    if (view.showPheromones) this.drawPheromones(sim, view.levelIndex, ox, oy, tile)
     this.drawAgents(sim, view.levelIndex, ox, oy, tile)
     this.drawRoomLabels(level, ox, oy, tile)
     const hovered = this.hoveredTile(level, camera, view, w, h)
@@ -90,10 +93,17 @@ export class Renderer {
 
   private drawLevel(level: Level, ox: number, oy: number, tile: number): void {
     let cache = this.levelCache.get(level.id)
-    if (!cache) {
+    const seen = this.changesSeen.get(level.id) ?? 0
+    const total = level.changesTrimmed + level.changes.length
+    // Repaint everything if the change list was trimmed past what we've seen.
+    if (!cache || seen < level.changesTrimmed) {
       cache = this.paintLevel(level)
       this.levelCache.set(level.id, cache)
+    } else if (seen < total) {
+      const ctx = cache.getContext('2d')!
+      for (let k = seen - level.changesTrimmed; k < level.changes.length; k++) this.paintTile(ctx, level, level.changes[k])
     }
+    this.changesSeen.set(level.id, total)
     this.ctx.imageSmoothingEnabled = false
     this.ctx.drawImage(cache, ox, oy, level.width * tile, level.height * tile)
   }
@@ -105,18 +115,32 @@ export class Renderer {
     canvas.width = level.width * size
     canvas.height = level.height * size
     const ctx = canvas.getContext('2d')!
-    for (let y = 0; y < level.height; y++) {
-      for (let x = 0; x < level.width; x++) {
-        const i = y * level.width + x
-        const room = level.roomOf[i]
-        const kind: FloorKind = room >= 0
-          ? { room: level.rooms[room].type, outdoor: level.rooms[room].outdoor }
-          : level.natural[i] ? 'natural' : 'built'
-        TILE_ART[level.tiles[i] as Tile](ctx, x * size, y * size, size, floorColor(kind))
-        if (level.resin[i]) drawResin(ctx, x * size, y * size, size, '')
-      }
-    }
+    for (let i = 0; i < level.tiles.length; i++) this.paintTile(ctx, level, i)
     return canvas
+  }
+
+  private paintTile(ctx: CanvasRenderingContext2D, level: Level, i: number): void {
+    const size = CONFIG.render.tileSize
+    const x = i % level.width, y = Math.floor(i / level.width)
+    const room = level.roomOf[i]
+    const kind: FloorKind = room >= 0
+      ? { room: level.rooms[room].type, outdoor: level.rooms[room].outdoor }
+      : level.natural[i] ? 'natural' : 'built'
+    TILE_ART[level.tiles[i] as Tile](ctx, x * size, y * size, size, floorColor(kind))
+    if (level.resin[i]) drawResin(ctx, x * size, y * size, size, '')
+  }
+
+  /** Trail scent as green squares, brighter where stronger. */
+  private drawPheromones(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
+    const map = sim.pheromones.trail[levelIndex]
+    const w = sim.world.levels[levelIndex].width
+    const { ctx } = this
+    for (let i = 0; i < map.length; i++) {
+      const s = map[i]
+      if (s < 0.05) continue
+      ctx.fillStyle = `rgba(90, 230, 120, ${Math.min(0.75, 0.15 + s / 10)})`
+      ctx.fillRect(ox + (i % w) * tile, oy + Math.floor(i / w) * tile, tile, tile)
+    }
   }
 
   /** Agents on the shown level. Those riding a link are drawn faded at the link. */

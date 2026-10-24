@@ -8,6 +8,7 @@ import { formatClock } from '../core/clock.ts'
 export class Sidebar {
   private buttons: HTMLButtonElement[] = []
   private clock: HTMLElement
+  private hiveInfo: HTMLElement
   private lastShown = ''
 
   constructor(root: HTMLElement, sim: SimState, onSelect: (levelIndex: number) => void) {
@@ -29,15 +30,21 @@ export class Sidebar {
       this.buttons.push(btn)
     })
 
+    this.hiveInfo = document.createElement('p')
+    this.hiveInfo.className = 'help'
+    root.appendChild(this.hiveInfo)
+
     const help = document.createElement('p')
     help.className = 'help'
-    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level'
+    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>P to show hive scent'
     root.appendChild(help)
   }
 
   update(sim: SimState, view: ViewState): void {
     const time = formatClock(sim.tick)
     if (this.clock.textContent !== time) this.clock.textContent = time
+    const hive = `Hive: ${sim.hive.captives.length} captives · ${sim.hive.resinTiles} resin tiles`
+    if (this.hiveInfo.textContent !== hive) this.hiveInfo.textContent = hive
     const counts = sim.world.levels.map((_, i) => levelActivity(sim, i))
     const key = `${view.levelIndex}|${counts.map((c) => `${c.humans},${c.myrr}`).join('|')}`
     if (key === this.lastShown) return

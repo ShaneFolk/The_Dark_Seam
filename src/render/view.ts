@@ -9,6 +9,8 @@ export interface ViewState {
   cameras: Camera[]
   /** Mouse position on the canvas in CSS pixels, or null when outside. */
   mouse: { x: number; y: number } | null
+  /** Show the trail scent overlay (toggle with P). */
+  showPheromones: boolean
 }
 
 export function createView(levelCount: number): ViewState {
@@ -16,6 +18,7 @@ export function createView(levelCount: number): ViewState {
     levelIndex: 0,
     cameras: Array.from({ length: levelCount }, () => new Camera()),
     mouse: null,
+    showPheromones: false,
   }
 }
 

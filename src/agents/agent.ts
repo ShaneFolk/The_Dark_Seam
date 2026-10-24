@@ -2,9 +2,10 @@
 
 import type { PathNode, Side } from '../world/pathfinding.ts'
 import type { CivilianData } from './civilian.ts'
+import type { MyrrData } from './myrr.ts'
 
 /** What an agent looks like. The renderer maps each kind to a drawing. */
-export type AgentKind = 'civilian' | 'wanderer-myrr'
+export type AgentKind = 'civilian' | 'taker' | 'brood-mother' | 'wanderer-myrr'
 
 export type AgentState =
   | { name: 'idle'; ticksLeft: number }
@@ -30,6 +31,8 @@ export interface Agent {
   state: AgentState
   /** Civilian-only data (job, routine, fear). */
   civ?: CivilianData
+  /** Myrr-only data (role and current task). */
+  myrr?: MyrrData
 }
 
 export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNode, speed: number): Agent {

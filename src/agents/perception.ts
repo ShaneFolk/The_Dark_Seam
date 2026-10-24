@@ -26,10 +26,10 @@ export function lineOfSight(level: Level, x0: number, y0: number, x1: number, y1
 }
 
 /** Can `viewer` see `target`? Same level, within range, clear line. */
-export function canSee(viewer: Agent, target: Agent, level: Level): boolean {
+export function canSee(viewer: Agent, target: Agent, level: Level, range: number = CONFIG.perception.sightRange): boolean {
   if (viewer.levelIndex !== target.levelIndex || target.state.name === 'crossing') return false
   const dist = Math.hypot(target.x - viewer.x, target.y - viewer.y)
-  if (dist > CONFIG.perception.sightRange) return false
+  if (dist > range) return false
   return lineOfSight(level, Math.floor(viewer.x), Math.floor(viewer.y), Math.floor(target.x), Math.floor(target.y))
 }
 

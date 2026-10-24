@@ -9,5 +9,8 @@ export function describeAgent(agent: Agent): string {
     const doing = civ.mode === 'routine' ? `${civ.activity}${civ.target ? ` → ${civ.target.room.name}` : ''}` : civ.mode
     return `Civilian #${agent.id} · ${civ.job} (${shift}) · ${doing} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
   }
+  const m = agent.myrr
+  if (m?.role === 'mother') return `Brood Mother #${agent.id}`
+  if (m) return `Taker #${agent.id} · ${m.task}${m.targetId >= 0 ? ` · target #${m.targetId}` : ''}`
   return `Myrr #${agent.id} · ${agent.state.name}`
 }

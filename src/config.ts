@@ -64,7 +64,7 @@ export const CONFIG = {
     /** Seconds to stay put before moving to another spot in the same room (min, max). */
     millSeconds: [4, 12] as [number, number],
     /** Running speed when fleeing or panicking, as a multiple of walking speed. */
-    runMultiplier: 1.5,
+    runMultiplier: 1.3,
   },
 
   perception: {
@@ -111,9 +111,56 @@ export const CONFIG = {
     fleeDistance: [12, 28] as [number, number],
   },
 
-  /** Test wanderers for Phase 2. The Myrr ones stay as threats until the hive arrives in Phase 4. */
+  hive: {
+    takers: 6,
+    /** How far Myrr see, in tiles (same blockers as for humans). */
+    sightRange: 10,
+    /** A human counts as "alone" with no other free human within this many tiles. */
+    loneRadius: 5,
+    /** Takers back off from a human with this many or more others nearby. */
+    groupSize: 2,
+    /** Seconds of contact needed to grab a lone human. */
+    grabSeconds: 0.75,
+    /** Within this many tiles of its target a Taker pounces, moving faster. */
+    pounceRange: 3,
+    pounceMultiplier: 1.3,
+    /** A hunt that lasts longer than this is dropped, in seconds. */
+    maxHuntSeconds: 25,
+    /** After giving up, a Taker ignores that human for this long, in seconds. */
+    ignoreSeconds: 60,
+    /** Carrying someone slows a Taker to this share of its speed. */
+    carrySpeedMultiplier: 0.7,
+    /** Rest in the hive between trips, in seconds (min, max). */
+    restSeconds: [4, 12] as [number, number],
+    /** Scouting trips without finding prey before going home to rest. */
+    tripsBeforeReturn: 3,
+    /** Chance a scout follows the strongest trail scent instead of exploring. */
+    followTrailChance: 0.6,
+    /** Where exploring scouts go: chance of Level 1, 2, 3. */
+    scoutLevelWeights: [0.35, 0.45, 0.2],
+    /** A hunt is dropped if the target is out of sight this long, in seconds. */
+    huntGiveUpSeconds: 6,
+    /** Hunters re-plan their route this often, in seconds. */
+    repathSeconds: 1,
+    /** Chance a rested Taker spreads resin instead of scouting. */
+    resinTaskChance: 0.3,
+  },
+
+  pheromones: {
+    /** Scent laid per tile while carrying prey home. */
+    carryTrail: 1,
+    /** Scent laid where prey is seen, and where it is caught. */
+    sighting: 3,
+    capture: 8,
+    /** Scent halves this often, in seconds. */
+    halfLifeSeconds: 180,
+    /** Scent weaker than this is ignored by scouts. */
+    minFollow: 0.5,
+  },
+
+  /** Test Myrr wanderers from Phase 2 (0 now that the hive has real Takers). */
   wanderers: {
-    myrr: 12,
+    myrr: 0,
     /** Chance a new destination is on another level (exercises the links). */
     otherLevelChance: 0.35,
     /** Rest between walks, in seconds (min, max). */
@@ -123,6 +170,12 @@ export const CONFIG = {
   resin: {
     /** Resin covers this many tiles around the hive core at the start. */
     startRadius: 14,
+    /** Seconds a Taker spends coating one patch of resin. */
+    patchSeconds: 4,
+    /** Size of a resin patch: tiles out from the centre. */
+    patchRadius: 1,
+    /** Resin stops spreading once this many tiles are covered (all levels). */
+    maxTiles: 3000,
   },
 
   render: {

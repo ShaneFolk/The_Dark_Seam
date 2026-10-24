@@ -23,6 +23,8 @@ export const CIVILIAN_MODE_COLORS: Record<Mode, string> = {
   hide: '#8fa3b8',
   flee: '#ffb347',
   panic: '#ff5ce1',
+  captured: '#f2f2f2',
+  captive: '#b18bd1',
 }
 
 export const AGENT_ART: Record<AgentKind, AgentDraw> = {
@@ -30,5 +32,17 @@ export const AGENT_ART: Record<AgentKind, AgentDraw> = {
     const mode = agent.civ?.mode ?? 'routine'
     dot(ctx, cx, cy, tile * 0.32, CIVILIAN_MODE_COLORS[mode], '#0b2540', tile)
   },
+  taker: (ctx, cx, cy, tile, agent) => {
+    dot(ctx, cx, cy, tile * 0.36, '#e0533d', '#3a0d06', tile)
+    // A white ring while carrying someone.
+    if (agent.myrr?.task === 'carry') {
+      ctx.beginPath()
+      ctx.arc(cx, cy, tile * 0.55, 0, Math.PI * 2)
+      ctx.strokeStyle = '#f2f2f2'
+      ctx.lineWidth = Math.max(1, tile * 0.1)
+      ctx.stroke()
+    }
+  },
+  'brood-mother': (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.9, '#e0559f', '#ffd76a', tile),
   'wanderer-myrr': (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.36, '#e0533d', '#3a0d06', tile),
 }

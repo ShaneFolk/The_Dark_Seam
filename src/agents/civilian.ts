@@ -19,7 +19,8 @@ import { canHear, canSee } from './perception.ts'
 
 export type Job = keyof typeof CONFIG.civilians.jobs
 export type Activity = 'eat' | 'work' | 'free' | 'sleep'
-export type Mode = 'routine' | 'flee' | 'hide' | 'panic'
+/** `captured` = being carried by a Taker; `captive` = held in the hive. */
+export type Mode = 'routine' | 'flee' | 'hide' | 'panic' | 'captured' | 'captive'
 
 export interface CivilianData {
   job: Job
@@ -117,6 +118,7 @@ export function roomFor(civ: CivilianData, activity: Activity, levelIndex: numbe
 
 export function updateCivilian(agent: Agent, ctx: CivilianContext): void {
   const civ = agent.civ!
+  if (civ.mode === 'captured' || civ.mode === 'captive') return // the hive moves them now
   // Senses run every few ticks, staggered by id so not everyone thinks on the same tick.
   if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) sense(agent, civ, ctx)
 
@@ -130,6 +132,7 @@ export function updateCivilian(agent: Agent, ctx: CivilianContext): void {
     case 'flee': return flee(agent, civ, ctx)
     case 'hide': return hide(agent, civ, ctx)
     case 'panic': return panic(agent, civ, ctx)
+    default: return
   }
 }
 
@@ -215,7 +218,7 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
       sightGain += F.sight * (1 - (0.5 * dist) / CONFIG.perception.sightRange)
       civ.threat = { levelIndex: other.levelIndex, x: other.x, y: other.y }
       civ.lastSeenTick = ctx.tick
-    } else if (Math.hypot(other.x - agent.x, other.y - agent.y) <= F.companyRadius) {
+    } else if (isFree(other) && Math.hypot(other.x - agent.x, other.y - agent.y) <= F.companyRadius) {
       company++
     }
   }
@@ -256,6 +259,11 @@ function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
 }
 
 // ---------------------------------------------------------------- helpers
+
+/** A human who isn't captured or held by the hive. */
+export function isFree(agent: Agent): boolean {
+  return agent.side === 'human' && agent.civ?.mode !== 'captured' && agent.civ?.mode !== 'captive'
+}
 
 function walkTo(agent: Agent, ctx: CivilianContext, to: PathNode): boolean {
   const path = findPath(ctx.world, tileOf(agent), to, 'human')

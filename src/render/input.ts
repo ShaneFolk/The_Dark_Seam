@@ -52,6 +52,7 @@ export class Input {
     window.addEventListener('keydown', (e) => {
       if (e.code in PAN_KEYS) e.preventDefault()
       this.keysDown.add(e.code)
+      if (e.code === 'KeyP') view.showPheromones = !view.showPheromones
       const digit = Number(e.key)
       if (Number.isInteger(digit) && digit >= 1 && digit <= view.cameras.length) onLevelKey(digit - 1)
     })
