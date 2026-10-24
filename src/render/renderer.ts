@@ -130,16 +130,22 @@ export class Renderer {
     if (level.resin[i]) drawResin(ctx, x * size, y * size, size, '')
   }
 
-  /** Trail scent as green squares, brighter where stronger. */
+  /** Scent as coloured squares, brighter where stronger. */
   private drawPheromones(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
-    const map = sim.pheromones.trail[levelIndex]
     const w = sim.world.levels[levelIndex].width
     const { ctx } = this
-    for (let i = 0; i < map.length; i++) {
-      const s = map[i]
-      if (s < 0.05) continue
-      ctx.fillStyle = `rgba(90, 230, 120, ${Math.min(0.75, 0.15 + s / 10)})`
-      ctx.fillRect(ox + (i % w) * tile, oy + Math.floor(i / w) * tile, tile, tile)
+    // Green = trail (prey), red = alarm.
+    const layers: [Float32Array, string][] = [
+      [sim.pheromones.trail[levelIndex], '90, 230, 120'],
+      [sim.pheromones.alarm[levelIndex], '255, 70, 60'],
+    ]
+    for (const [map, rgb] of layers) {
+      for (let i = 0; i < map.length; i++) {
+        const s = map[i]
+        if (s < 0.05) continue
+        ctx.fillStyle = `rgba(${rgb}, ${Math.min(0.75, 0.15 + s / 10)})`
+        ctx.fillRect(ox + (i % w) * tile, oy + Math.floor(i / w) * tile, tile, tile)
+      }
     }
   }
 
@@ -221,7 +227,7 @@ export class Renderer {
       // Any agent within half a tile of the mouse.
       for (const agent of sim.agents) {
         if (agent.levelIndex !== level.id - 1) continue
-        if (Math.abs(agent.x - (hovered.x + 0.5)) <= 0.75 && Math.abs(agent.y - (hovered.y + 0.5)) <= 0.75) lines.push(describeAgent(agent))
+        if (Math.abs(agent.x - (hovered.x + 0.5)) <= 0.75 && Math.abs(agent.y - (hovered.y + 0.5)) <= 0.75) lines.push(describeAgent(agent, sim.tick))
       }
     }
     ctx.font = '13px monospace'

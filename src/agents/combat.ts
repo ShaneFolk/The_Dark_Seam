@@ -2,6 +2,7 @@
 
 import { CONFIG } from '../config.ts'
 import { makeNoise } from '../systems/noise.ts'
+import { deposit } from '../systems/pheromones.ts'
 import type { Agent } from './agent.ts'
 import { canSee } from './perception.ts'
 import { setMode } from './civilian.ts'
@@ -115,6 +116,11 @@ export function damage(target: Agent, amount: number, source: Agent | null, ctx:
     target.civ.lastSeenTick = ctx.tick
   }
   if (target.soldier) ctx.onSoldierHurt?.(target, target.health <= 0)
+  // A hurt Myrr releases alarm scent; a dying one releases more.
+  if (target.myrr) {
+    const amount = target.health <= 0 ? CONFIG.pheromones.alarmOnDeath : CONFIG.pheromones.alarmOnHurt
+    deposit(ctx.pheromones, 'alarm', ctx.world, target.levelIndex, target.x, target.y, amount)
+  }
   if (target.health <= 0) kill(target, ctx)
   else if (target.myrr) ctx.onMyrrHurt?.(target, source)
 }
