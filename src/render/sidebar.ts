@@ -4,6 +4,13 @@
 import { levelActivity, type SimState } from '../sim.ts'
 import type { ViewState } from './view.ts'
 import { formatClock } from '../core/clock.ts'
+import { CONFIG } from '../config.ts'
+import { totalStock } from '../systems/supplies.ts'
+
+function stockLine(sim: SimState): string {
+  const t = totalStock(sim.supplies)
+  return `${t.rifleMags} rifle mags · ${t.pistolMags} pistol mags · ${t.pistols} pistols · ${t.stabilizers} stabilizers`
+}
 
 export class Sidebar {
   private buttons: HTMLButtonElement[] = []
@@ -57,6 +64,10 @@ export class Sidebar {
     const hive = `Hive: ${takers} Takers · ${spinebacks} Spinebacks · ${broodlings} Broodlings · ${sim.hive.captives.length} captives · ${cocoons} cocoons · ${sim.hive.hatched} hatched · ${sim.hive.resinTiles} resin tiles · ${sim.hive.tunnelsDug} tunnels dug${sim.hive.dig ? ' (digging now)' : ''}`
       + `
 Colony: ${civilians} civilians · ${soldiers} soldiers · ${infected} infected walking around`
+      + `
+Supplies: ${stockLine(sim)}`
+      + sim.medbays.map((b) => `
+Med bay: ${b.beds.length}/${CONFIG.medbay.beds} beds`).join('')
       + sim.squads.map((s) => `
 Squad ${s.id + 1}: ${s.order} · morale ${Math.round(s.morale * 100)}%`).join('')
     if (this.hiveInfo.textContent !== hive) this.hiveInfo.textContent = hive

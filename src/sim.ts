@@ -9,12 +9,14 @@ import { updateWanderer } from './agents/wander.ts'
 import { activityAt, createCivilianData, roomFor, updateCivilian, type CivilianContext } from './agents/civilian.ts'
 import { createMyrrData, planDigging, takerHurt, updateTaker, type HiveState } from './agents/myrr.ts'
 import { updateBroodling, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
-import { makeWeapon, pruneShots, tickWeapon, type CombatContext, type Shot } from './agents/combat.ts'
+import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
 import { countResin, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
 import { createPheromones, decayPheromones, type Pheromones } from './systems/pheromones.ts'
 import { findRooms, randomTileIn, roomTiles, type RoomRef } from './world/rooms.ts'
+import { createSupplies, type Supplies } from './systems/supplies.ts'
+import { createMedBays, updateMedBays, type MedBay } from './systems/medbay.ts'
 import type { RoomType } from './world/level.ts'
 import type { PathNode } from './world/pathfinding.ts'
 
@@ -30,6 +32,8 @@ export interface SimState {
   squads: Squad[]
   /** Recent shots and swings, for tracers. */
   shots: Shot[]
+  supplies: Supplies
+  medbays: MedBay[]
 }
 
 export function createSim(seed: number): SimState {
@@ -45,7 +49,10 @@ export function createSim(seed: number): SimState {
     hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0 },
     squads: [],
     shots: [],
+    supplies: new Map(),
+    medbays: createMedBays(world),
   }
+  sim.supplies = createSupplies(world, sim.rng)
   seedHiveResin(world)
   sim.hive.resinTiles = countResin(world)
   spawnCivilians(sim)
@@ -65,9 +72,14 @@ export function step(sim: SimState): void {
   pruneShots(sim.shots, sim.tick)
   if (sim.tick % TPS === 0) decayPheromones(sim.pheromones)
 
-  const civCtx: CivilianContext = { world: sim.world, rng: sim.rng, tick: sim.tick, agents: sim.agents, noises: sim.noises }
-  const ctx: CombatContext = {
-    ...civCtx,
+  const ctx: CivilianContext = {
+    world: sim.world,
+    rng: sim.rng,
+    tick: sim.tick,
+    agents: sim.agents,
+    noises: sim.noises,
+    supplies: sim.supplies,
+    medbays: sim.medbays,
     pheromones: sim.pheromones,
     hive: sim.hive,
     shots: sim.shots,
@@ -76,6 +88,7 @@ export function step(sim: SimState): void {
   }
 
   updateInfections(ctx)
+  updateMedBays(sim.medbays, sim.agents, sim.world)
   updateSquads(sim.squads, ctx)
   planDigging(ctx)
 
@@ -86,7 +99,7 @@ export function step(sim: SimState): void {
     if (agent.dead) continue
     if (agent.weapon) tickWeapon(agent.weapon) // cooldowns and reloads, for everyone
     if (agent.civ) {
-      updateCivilian(agent, civCtx)
+      updateCivilian(agent, ctx)
       if (agent.soldier && !agent.dead && agent.civ.mode === 'routine') updateSoldier(agent, sim.squads, ctx)
       continue
     }

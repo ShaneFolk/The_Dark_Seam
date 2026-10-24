@@ -22,7 +22,9 @@ import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
 import { canHear, canSee } from './perception.ts'
 import { isFree, setMode } from './civilian.ts'
-import { nearestVisible, refill, roundsLeft, tryAttack, type CombatContext } from './combat.ts'
+import { nearestVisible, roundsLeft, tryAttack } from './combat.ts'
+import { roomsWith, stockIn, take } from '../systems/supplies.ts'
+import type { CivilianContext as CombatContext } from './civilian.ts'
 
 export interface SoldierData {
   squadId: number
@@ -99,13 +101,15 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     if (myrrSeen) squad.lastContactTick = ctx.tick
 
     const ammo = alive.reduce((sum, s) => sum + (s.weapon ? roundsLeft(s.weapon) : 0), 0)
-    const lowAmmo = ammo < alive.length * CONFIG.combat.weapons.rifle.magazine * 0.5
+    // Low on ammo, and somewhere still has some to restock from.
+    const restockAt = roomsWith(ctx.supplies, 'rifleMags', leader)[0] ?? null
+    const lowAmmo = !!restockAt && ammo < alive.length * CONFIG.combat.weapons.rifle.magazine * 0.5
 
     // Pick the order (see the list at the top of this file).
     if (squad.order === 'retreat' ? squad.morale < S.morale.regroupAt : squad.morale < S.morale.breakAt) {
       setOrder(squad, 'retreat', roomGoal(ctx, ['security'], leader))
     } else if (squad.order === 'resupply' || lowAmmo) {
-      if (squad.order !== 'resupply') setOrder(squad, 'resupply', roomGoal(ctx, ['armory'], leader))
+      if (squad.order !== 'resupply') setOrder(squad, 'resupply', restockAt ? randomTileIn(ctx.world, restockAt, ctx.rng) : roomGoal(ctx, ['armory'], leader))
     } else if (carrier) {
       setOrder(squad, 'rescue', tileOf(carrier))
       squad.targetId = carrier.id
@@ -202,9 +206,16 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
 
 function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
   if (squad.order === 'resupply') {
+    // Restock from what this room actually has.
+    const stock = stockIn(ctx.supplies, roomAt(ctx.world, tileOf(alive[0])))
     for (const s of alive) {
-      if (s.weapon) refill(s.weapon)
-      if (s.soldier!.role === 'medic') s.soldier!.stabilizers = S.stabilizers
+      const w = s.weapon
+      if (w && stock) {
+        const item = w.kind === 'rifle' ? 'rifleMags' : 'pistolMags'
+        w.spare += take(stock, item, Math.max(0, CONFIG.combat.spareMagazines - w.spare))
+        if (w.inMag === 0 && w.spare > 0 && w.reloading === 0) { w.inMag = CONFIG.combat.weapons[w.kind].magazine; w.spare-- }
+      }
+      if (s.soldier!.role === 'medic' && stock) s.soldier!.stabilizers += take(stock, 'stabilizers', S.stabilizers - s.soldier!.stabilizers)
     }
     setOrder(squad, 'patrol', null)
   } else if (squad.order === 'cut') {

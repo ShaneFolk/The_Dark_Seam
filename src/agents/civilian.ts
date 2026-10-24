@@ -12,13 +12,18 @@ import { hourOfDay } from '../core/clock.ts'
 import type { World } from '../world/loadWorld.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
 import { cornerTiles, findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
-import { makeNoise, type Noise } from '../systems/noise.ts'
+import { makeNoise } from '../systems/noise.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
 import { canHear, canSee } from './perception.ts'
+import { isRanged, nearestVisible, tryAttack, type CombatContext } from './combat.ts'
+import { roomsWith, stockIn, take, type Supplies } from '../systems/supplies.ts'
+import { medBayFor, needsMedBay, type MedBay } from '../systems/medbay.ts'
+import { makeWeapon } from './combat.ts'
 
 export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier'
-export type Activity = 'eat' | 'work' | 'free' | 'sleep'
+/** 'treat' = heading to or staying in the med bay (hurt, or knows they're infected). */
+export type Activity = 'eat' | 'work' | 'free' | 'sleep' | 'treat'
 /**
  * `paralyzed` = stung, can't act until it wears off; `captured` = being carried by a Taker;
  * `captive` = held in the hive waiting for the Brood Mother; `cocooned` = injected,
@@ -58,15 +63,16 @@ export interface CivilianData {
   rescued: boolean
   /** How they died, if they did. */
   deathCause: 'hatched' | 'killed' | null
+  /** Ticks spent in a med bay bed curing the current infection. */
+  cureTicks: number
+  /** Was cured of an infection in the med bay. */
+  cured: boolean
 }
 
 /** What the world looks like to a civilian this tick. */
-export interface CivilianContext {
-  world: World
-  rng: Rng
-  tick: number
-  agents: Agent[]
-  noises: Noise[]
+export interface CivilianContext extends CombatContext {
+  supplies: Supplies
+  medbays: MedBay[]
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -97,6 +103,8 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
     infection: null,
     rescued: false,
     deathCause: null,
+    cureTicks: 0,
+    cured: false,
   }
 }
 
@@ -132,6 +140,8 @@ export function roomFor(civ: CivilianData, activity: Activity, levelIndex: numbe
       const mess = findRooms(world, ['mess'], 0)
       return rng.chance(0.5) && mess.length ? mess[0] : civ.home
     }
+    case 'treat':
+      return findRooms(world, ['medbay'])[0] ?? civ.home
   }
 }
 
@@ -160,6 +170,8 @@ export function updateCivilian(agent: Agent, ctx: CivilianContext): void {
   }
   // Senses run every few ticks, staggered by id so not everyone thinks on the same tick.
   if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) sense(agent, civ, ctx)
+  // Armed civilians shoot back unless they're running for their lives.
+  if (agent.weapon && isRanged(agent.weapon) && (civ.mode === 'routine' || civ.mode === 'hide')) shootBack(agent, ctx)
 
   if (agent.state.name === 'crossing') {
     followPath(agent, ctx.world)
@@ -176,23 +188,25 @@ export function updateCivilian(agent: Agent, ctx: CivilianContext): void {
 }
 
 function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
-  const activity = activityAt(civ, ctx.tick)
+  // Hurt, or knowingly infected: the med bay comes before the schedule.
+  const medbay = needsMedBay(agent) ? medBayFor(ctx.medbays) : null
+  const activity: Activity = medbay ? 'treat' : activityAt(civ, ctx.tick)
   if (activity !== civ.activity || !civ.target) {
     civ.activity = activity
-    civ.target = roomFor(civ, activity, agent.levelIndex, ctx.world, ctx.rng)
+    civ.target = medbay ?? roomFor(civ, activity, agent.levelIndex, ctx.world, ctx.rng)
     agent.path = []
     agent.state = { name: 'idle', ticksLeft: 0 }
   }
 
   if (agent.state.name === 'moving') {
-    if (followPath(agent, ctx.world)) rest(agent, ctx.rng, civ.activity === 'sleep')
+    if (followPath(agent, ctx.world)) rest(agent, ctx.rng, civ.activity === 'sleep' || civ.activity === 'treat')
     return
   }
   if (agent.state.name === 'idle' && --agent.state.ticksLeft > 0) return
 
   // Not there yet: head for the target room. There already: move to another spot (unless asleep).
   const here = roomAt(ctx.world, tileOf(agent))
-  if (!sameRoom(here, civ.target) || civ.activity !== 'sleep') {
+  if (!sameRoom(here, civ.target) || (civ.activity !== 'sleep' && civ.activity !== 'treat')) {
     if (!walkTo(agent, ctx, randomTileIn(ctx.world, civ.target!, ctx.rng))) rest(agent, ctx.rng, false)
   } else {
     rest(agent, ctx.rng, true)
@@ -214,8 +228,11 @@ function flee(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
 
 function hide(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   if (agent.state.name === 'moving') {
-    // Arrived: settle in and stay still and quiet.
-    if (followPath(agent, ctx.world)) agent.state = { name: 'idle', ticksLeft: 1e9 }
+    // Arrived: grab a pistol if this room has one, then settle in, still and quiet.
+    if (followPath(agent, ctx.world)) {
+      tryArm(agent, ctx)
+      agent.state = { name: 'idle', ticksLeft: 1e9 }
+    }
     return
   }
   // A long idle state means "already hiding here".
@@ -297,6 +314,24 @@ export function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
   }
 }
 
+// ---------------------------------------------------------------- arming
+
+/** Take a pistol (and a couple of magazines) from the room, if it has one. Low skill. */
+function tryArm(agent: Agent, ctx: CivilianContext): void {
+  if (agent.weapon && isRanged(agent.weapon)) return
+  const stock = stockIn(ctx.supplies, roomAt(ctx.world, tileOf(agent)))
+  if (!stock || take(stock, 'pistols', 1) === 0) return
+  agent.weapon = makeWeapon('pistol', CONFIG.combat.skill.civilian)
+  agent.weapon.spare = take(stock, 'pistolMags', CONFIG.supplies.civilianMags)
+}
+
+function shootBack(agent: Agent, ctx: CivilianContext): void {
+  const range = CONFIG.combat.weapons[agent.weapon!.kind].range
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks !== 0 && agent.weapon!.cooldown > 0) return
+  const target = nearestVisible(agent, ctx, range, (a) => a.side === 'myrr')
+  if (target) tryAttack(agent, target, ctx)
+}
+
 // ---------------------------------------------------------------- helpers
 
 /** A human who isn't captured or held by the hive. */
@@ -340,6 +375,13 @@ function fleeDestination(agent: Agent, civ: CivilianData, ctx: CivilianContext):
 /** A corner of the nearest indoor room that isn't next to the threat. */
 function hidingSpot(agent: Agent, civ: CivilianData, ctx: CivilianContext): PathNode | null {
   const threat = civ.threat && civ.threat.levelIndex === agent.levelIndex ? civ.threat : null
+  // Unarmed? Hide somewhere with a pistol to grab, if one is close and away from the threat.
+  if (!agent.weapon || !isRanged(agent.weapon)) {
+    const armed = roomsWith(ctx.supplies, 'pistols', agent).find((r) =>
+      r.levelIndex === agent.levelIndex && Math.hypot(r.room.centerX - agent.x, r.room.centerY - agent.y) <= CONFIG.supplies.armRange &&
+      (!threat || Math.hypot(r.room.centerX - threat.x, r.room.centerY - threat.y) > F.fleeDistance[0]))
+    if (armed) return randomTileIn(ctx.world, armed, ctx.rng)
+  }
   const rooms = findRooms(ctx.world, ['quarters', 'command', 'armory', 'medbay', 'mess', 'supply', 'workshop', 'security', 'other', 'generator'], agent.levelIndex)
     .filter((r) => !r.room.outdoor)
     .filter((r) => !threat || Math.hypot(r.room.centerX - threat.x, r.room.centerY - threat.y) > F.fleeDistance[0])

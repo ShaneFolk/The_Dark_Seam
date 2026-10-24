@@ -250,6 +250,36 @@ export const CONFIG = {
     },
   },
 
+  supplies: {
+    /**
+     * Starting stock per room type: rifle and pistol magazines, spare pistols
+     * (for civilians to grab) and stabilizers. Each amount varies by up to
+     * `variation` either way, by seed. Lockers and supply rooms share type "supply".
+     */
+    stock: {
+      armory: { rifleMags: 60, pistolMags: 30, pistols: 10, stabilizers: 6 },
+      supply: { rifleMags: 6, pistolMags: 6, pistols: 2, stabilizers: 1 },
+      medbay: { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 8 },
+      security: { rifleMags: 10, pistolMags: 6, pistols: 2, stabilizers: 0 },
+    },
+    variation: 0.3,
+    /** A scared civilian goes for a pistol if a room with one is within this many tiles. */
+    armRange: 25,
+    /** Pistol magazines a civilian takes with a pistol. */
+    civilianMags: 2,
+  },
+
+  medbay: {
+    /** Patients treated at once (per med bay). */
+    beds: 4,
+    /** Seconds in a bed to cure an infection. */
+    cureSeconds: 60,
+    /** Health regained per second in a bed. */
+    healPerSecond: 2,
+    /** Civilians below this health go to the med bay when calm. */
+    seekBelowHealth: 50,
+  },
+
   pheromones: {
     /** Scent laid per tile while carrying prey home. */
     carryTrail: 1,
