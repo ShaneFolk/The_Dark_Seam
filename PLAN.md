@@ -231,7 +231,7 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Boarding up windows; Myrr smashing through windows
 - [x] Takers chewing through walls, with noise humans can detect
 - [x] Sentry turrets + reloading
-- [ ] Turrets start in the armory; squads carry them to choke / defence points
+- [x] Turrets start in the armory; squads carry them to choke / defence points
 - [x] Flamethrower, mining charges, motion sensors
 - [x] Generators, power, repairs
 - [x] Med bay cures
