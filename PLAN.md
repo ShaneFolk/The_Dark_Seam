@@ -237,8 +237,8 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Med bay cures
 
 ### Phase 8 — Commander & Endings
-- [ ] Commander decisions (alarm, lockdown, teams, evacuation)
-- [ ] Reinforcements: the Commander calls in a fresh squad that lands at the Landing Pad (arrival delay, limited calls per run)
+- [x] Commander decisions (alarm, lockdown, teams, evacuation)
+- [x] Reinforcements: the Commander calls in a fresh squad that lands at the Landing Pad (arrival delay, limited calls per run)
 - [x] Ending detection
 - [x] Run summary / event log
 
