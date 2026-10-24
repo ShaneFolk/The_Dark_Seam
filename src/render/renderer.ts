@@ -6,6 +6,8 @@ import type { Level } from '../world/level.ts'
 import type { Tile } from '../world/tiles.ts'
 import { TILE_ART, drawResin, floorColor, type FloorKind } from './tileArt.ts'
 import { AGENT_ART } from './agentArt.ts'
+import { describeAgent } from '../agents/describe.ts'
+import { formatClock } from '../core/clock.ts'
 import { describeTile } from '../world/loadWorld.ts'
 import { otherEnd } from '../world/links.ts'
 import type { Camera } from './camera.ts'
@@ -123,7 +125,7 @@ export class Renderer {
     for (const agent of sim.agents) {
       if (agent.levelIndex !== levelIndex) continue
       ctx.globalAlpha = agent.state.name === 'crossing' ? 0.4 : 1
-      AGENT_ART[agent.kind](ctx, ox + agent.x * tile, oy + agent.y * tile, tile)
+      AGENT_ART[agent.kind](ctx, ox + agent.x * tile, oy + agent.y * tile, tile, agent)
     }
     ctx.globalAlpha = 1
   }
@@ -170,7 +172,15 @@ export class Renderer {
       `level ${level.id}: ${level.name}`,
       `zoom ${camera.zoom.toFixed(2)}`,
     ]
-    if (hovered) lines.push(`tile ${hovered.x}, ${hovered.y}: ${describeTile(level, hovered.x, hovered.y)}`)
+    lines.splice(1, 0, formatClock(sim.tick))
+    if (hovered) {
+      lines.push(`tile ${hovered.x}, ${hovered.y}: ${describeTile(level, hovered.x, hovered.y)}`)
+      // Any agent within half a tile of the mouse.
+      for (const agent of sim.agents) {
+        if (agent.levelIndex !== level.id - 1) continue
+        if (Math.abs(agent.x - (hovered.x + 0.5)) <= 0.75 && Math.abs(agent.y - (hovered.y + 0.5)) <= 0.75) lines.push(describeAgent(agent))
+      }
+    }
     ctx.font = '13px monospace'
     ctx.textBaseline = 'top'
     const width = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16

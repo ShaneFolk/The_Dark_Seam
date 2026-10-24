@@ -3,15 +3,21 @@
 
 import { levelActivity, type SimState } from '../sim.ts'
 import type { ViewState } from './view.ts'
+import { formatClock } from '../core/clock.ts'
 
 export class Sidebar {
   private buttons: HTMLButtonElement[] = []
+  private clock: HTMLElement
   private lastShown = ''
 
   constructor(root: HTMLElement, sim: SimState, onSelect: (levelIndex: number) => void) {
     const title = document.createElement('h1')
     title.textContent = 'Carrow Deep'
     root.appendChild(title)
+
+    this.clock = document.createElement('p')
+    this.clock.className = 'clock'
+    root.appendChild(this.clock)
 
     sim.world.levels.forEach((level, i) => {
       const btn = document.createElement('button')
@@ -30,6 +36,8 @@ export class Sidebar {
   }
 
   update(sim: SimState, view: ViewState): void {
+    const time = formatClock(sim.tick)
+    if (this.clock.textContent !== time) this.clock.textContent = time
     const counts = sim.world.levels.map((_, i) => levelActivity(sim, i))
     const key = `${view.levelIndex}|${counts.map((c) => `${c.humans},${c.myrr}`).join('|')}`
     if (key === this.lastShown) return

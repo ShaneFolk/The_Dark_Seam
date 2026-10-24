@@ -31,9 +31,88 @@ export const CONFIG = {
     linkSeconds: { elevator: 8, ladder: 4, chute: 3, vent: 3 },
   },
 
-  /** Test wanderers for Phase 2. Replaced by real units in later phases. */
+  clock: {
+    /** Real (sim) minutes for one 24-hour colony day. */
+    dayLengthMinutes: 12,
+    /** Colony hour when a run starts. */
+    startHour: 6,
+  },
+
+  civilians: {
+    count: 50,
+    /** Hour each shift's day starts. Each civilian is on one shift. */
+    shiftStartHours: [6, 18],
+    /**
+     * The day, in hours from shift start. Activities: eat, work, free, sleep.
+     * Must add up to 24.
+     */
+    schedule: [
+      { activity: 'eat', hours: 1 },
+      { activity: 'work', hours: 5 },
+      { activity: 'eat', hours: 1 },
+      { activity: 'work', hours: 4 },
+      { activity: 'eat', hours: 1 },
+      { activity: 'free', hours: 3 },
+      { activity: 'sleep', hours: 9 },
+    ],
+    /** Jobs: chance of each, and where they work (level number + room types). */
+    jobs: {
+      miner: { weight: 0.45, level: 2, roomTypes: ['workshop', 'other', 'supply'] },
+      tech: { weight: 0.3, level: 1, roomTypes: ['workshop', 'generator', 'other'] },
+      staff: { weight: 0.25, level: 1, roomTypes: ['command', 'medbay', 'supply', 'mess', 'security'] },
+    },
+    /** Seconds to stay put before moving to another spot in the same room (min, max). */
+    millSeconds: [4, 12] as [number, number],
+    /** Running speed when fleeing or panicking, as a multiple of walking speed. */
+    runMultiplier: 1.5,
+  },
+
+  perception: {
+    /** How often senses are checked, in ticks. */
+    intervalTicks: 5,
+    /** How far a civilian can see, in tiles (walls, rock and doors block sight). */
+    sightRange: 9,
+    /** Sound loses this share of its range through walls. */
+    wallMuffle: 0.5,
+  },
+
+  noise: {
+    /** How far each kind of noise carries, in tiles. */
+    radius: { skitter: 5, scream: 12 },
+    /** Myrr make a skittering noise this often while moving, in seconds. */
+    skitterEverySeconds: 2,
+    /** Panicking humans scream this often, in seconds. */
+    screamEverySeconds: 2.5,
+  },
+
+  fear: {
+    /** Fear added per sense check while a Myrr is in sight (more when closer). */
+    sight: 0.25,
+    /** Fear added by hearing a scream or skittering. */
+    scream: 0.08,
+    skitter: 0.05,
+    /** Hearing alone never raises fear above this (enough to hide, not to flee). */
+    hearingCap: 0.35,
+    /** Fear lost per second when nothing scary is sensed. */
+    decayPerSecond: 0.02,
+    /** Fear is multiplied by this when alone, or when 2+ others are near. */
+    aloneMultiplier: 1.5,
+    groupMultiplier: 0.7,
+    /** "Near" for the alone/group check, in tiles. */
+    companyRadius: 5,
+    /** Mode thresholds (fear 0 to 1). Below `calm` a civilian returns to routine. */
+    calm: 0.15,
+    hide: 0.25,
+    flee: 0.4,
+    panic: 0.85,
+    /** Fleeing continues while a threat was seen this recently, in seconds. */
+    fleeMemorySeconds: 4,
+    /** Flee destination is searched this far away, in tiles (min, max). */
+    fleeDistance: [12, 28] as [number, number],
+  },
+
+  /** Test wanderers for Phase 2. The Myrr ones stay as threats until the hive arrives in Phase 4. */
   wanderers: {
-    humans: 30,
     myrr: 12,
     /** Chance a new destination is on another level (exercises the links). */
     otherLevelChance: 0.35,

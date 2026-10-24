@@ -104,3 +104,9 @@ body {
   font: 13px/1.5 monospace;
   white-space: pre-wrap;
 }
+
+.clock {
+  margin: -8px 0 16px;
+  font: 600 14px/1 monospace;
+  color: #c9d1d9;
+}
