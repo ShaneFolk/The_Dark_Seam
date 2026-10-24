@@ -3,9 +3,11 @@
 import type { PathNode, Side } from '../world/pathfinding.ts'
 import type { CivilianData } from './civilian.ts'
 import type { MyrrData } from './myrr.ts'
+import type { WeaponState } from './combat.ts'
+import type { SoldierData } from './soldier.ts'
 
 /** What an agent looks like. The renderer maps each kind to a drawing. */
-export type AgentKind = 'civilian' | 'taker' | 'spineback' | 'broodling' | 'brood-mother' | 'wanderer-myrr'
+export type AgentKind = 'civilian' | 'soldier' | 'medic' | 'taker' | 'spineback' | 'broodling' | 'brood-mother' | 'wanderer-myrr'
 
 export type AgentState =
   | { name: 'idle'; ticksLeft: number }
@@ -28,6 +30,12 @@ export interface Agent {
   baseSpeed: number
   health: number
   maxHealth: number
+  /** Killed (or, for humans, hatched). Dead agents stay in the list but do nothing. */
+  dead: boolean
+  /** Id of the Myrr holding this agent in its claws, or -1. */
+  heldBy: number
+  /** What it fights with, if anything. */
+  weapon?: WeaponState
   /** Remaining steps of the current path (first = next step). */
   path: PathNode[]
   state: AgentState
@@ -35,6 +43,8 @@ export interface Agent {
   civ?: CivilianData
   /** Myrr-only data (role and current task). */
   myrr?: MyrrData
+  /** Soldier-only data (squad and role). */
+  soldier?: SoldierData
 }
 
 export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNode, speed: number, health = 100): Agent {
@@ -49,6 +59,8 @@ export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNod
     baseSpeed: speed,
     health,
     maxHealth: health,
+    dead: false,
+    heldBy: -1,
     path: [],
     state: { name: 'idle', ticksLeft: 0 },
   }

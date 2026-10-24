@@ -40,6 +40,10 @@ export const CONFIG = {
 
   health: {
     human: 100,
+    taker: 80,
+    spineback: 160,
+    broodling: 30,
+    broodMother: 400,
     /** Health regained per second while calm (routine). */
     regenPerSecond: 0.2,
   },
@@ -84,7 +88,7 @@ export const CONFIG = {
 
   noise: {
     /** How far each kind of noise carries, in tiles. */
-    radius: { skitter: 5, scream: 12 },
+    radius: { skitter: 5, scream: 12, gunshot: 16 },
     /** Myrr make a skittering noise this often while moving, in seconds. */
     skitterEverySeconds: 2,
     /** Panicking humans scream this often, in seconds. */
@@ -97,6 +101,7 @@ export const CONFIG = {
     /** Fear added by hearing a scream or skittering. */
     scream: 0.08,
     skitter: 0.05,
+    gunshot: 0.04,
     /** Hearing alone never raises fear above this (enough to hide, not to flee). */
     hearingCap: 0.35,
     /** Fear lost per second when nothing scary is sensed. */
@@ -172,6 +177,52 @@ export const CONFIG = {
     lossBias: 0.1,
     /** Spinebacks stay within this many tiles of the Brood Mother. */
     guardRadius: 6,
+  },
+
+  combat: {
+    /**
+     * Weapons. range in tiles, damage per hit, shots (or swings) per second,
+     * magazine size and reload time (magazine 0 = melee, no ammo).
+     */
+    weapons: {
+      rifle: { range: 9, damage: 12, perSecond: 2, magazine: 30, reloadSeconds: 2.5 },
+      pistol: { range: 7, damage: 12, perSecond: 1.5, magazine: 12, reloadSeconds: 1.5 },
+      fists: { range: 1.2, damage: 4, perSecond: 1, magazine: 0, reloadSeconds: 0 },
+      claws: { range: 1.2, damage: 10, perSecond: 2, magazine: 0, reloadSeconds: 0 },
+      spines: { range: 1.4, damage: 22, perSecond: 1.5, magazine: 0, reloadSeconds: 0 },
+    },
+    /** Chance to hit at point blank. Falls off with distance (see hitFalloff). */
+    skill: { soldier: 0.6, medic: 0.5, civilian: 0.35, myrr: 0.8 },
+    /** At full range, hit chance is multiplied by (1 - hitFalloff). */
+    hitFalloff: 0.5,
+    /** Spare magazines a soldier carries (refilled at the armory). */
+    spareMagazines: 4,
+    /** Tracer lines stay on screen this long, in seconds. */
+    tracerSeconds: 0.15,
+  },
+
+  soldiers: {
+    count: 9,
+    /** Soldiers per squad. The last member of each squad is its medic. */
+    squadSize: 3,
+    /** Members further than this from their leader catch up, in tiles. */
+    followDistance: 3,
+    /** Seconds at the armory to restock. */
+    resupplySeconds: 6,
+    /** Seconds to cut a cocoon open. */
+    cutSeconds: 5,
+    /** A response is dropped when no Myrr has been seen for this long, in seconds. */
+    respondGiveUpSeconds: 20,
+    /** Morale (0 to 1): changes per event or per second. */
+    morale: {
+      squadmateDown: 0.3,
+      hitTaken: 0.03,
+      outnumberedPerSecond: 0.02,
+      recoverPerSecond: 0.01,
+      /** Below breakAt the squad retreats; above regroupAt it returns to duty. */
+      breakAt: 0.3,
+      regroupAt: 0.6,
+    },
   },
 
   pheromones: {
