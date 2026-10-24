@@ -47,6 +47,10 @@ export interface Agent {
   myrr?: MyrrData
   /** Soldier-only data (squad and role). */
   soldier?: SoldierData
+  /** Myrr: ticks spent holding still (see camouflage.ts). */
+  stillTicks: number
+  /** Myrr: ticks left in which an attack still counts as striking from hiding. */
+  ambushTicks: number
 }
 
 export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNode, speed: number, health = 100): Agent {
@@ -63,6 +67,8 @@ export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNod
     maxHealth: health,
     dead: false,
     heldBy: -1,
+    stillTicks: 0,
+    ambushTicks: 0,
     path: [],
     state: { name: 'idle', ticksLeft: 0 },
   }

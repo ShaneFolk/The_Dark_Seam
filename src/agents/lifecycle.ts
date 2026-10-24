@@ -10,17 +10,18 @@
 
 import { CONFIG } from '../config.ts'
 import { findPath } from '../world/pathfinding.ts'
-import { cornerTiles, findRooms, randomTileIn, roomTiles } from '../world/rooms.ts'
+import { cornerTiles, findRooms, randomTileIn, roomAt, roomTiles, sameRoom } from '../world/rooms.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 import { createAgent, tileOf, type Agent } from './agent.ts'
 import { isFree, setMode } from './civilian.ts'
 import { followPath } from './movement.ts'
-import { createMyrrData, type HiveContext } from './myrr.ts'
+import { createMyrrData, type HiveContext, type MyrrData } from './myrr.ts'
 import { makeWeapon, nearestVisible, tryAttack, type CombatContext } from './combat.ts'
 import { strongest } from '../systems/pheromones.ts'
 import { logEvent } from '../core/events.ts'
 import { who } from './describe.ts'
 import { kill } from './combat.ts'
+import { isHidden } from '../systems/camouflage.ts'
 import { canWalk } from '../world/pathfinding.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -28,19 +29,42 @@ const L = CONFIG.lifecycle
 
 // ---------------------------------------------------------------- Brood Mother
 
-/** Inject waiting captives one at a time; flee the hive if it's badly threatened. */
-export function updateMother(mother: Agent, ctx: HiveContext): void {
+/**
+ * The Brood Mother is rooted in her chamber, injecting captives one at a time.
+ * She bites anyone who comes within reach. Intruders in the hive core make her
+ * uproot (slow) and hunt them; when the hive core is quiet again she goes home
+ * and roots herself again. Badly threatened, she uproots and flees the hive.
+ */
+export function updateMother(mother: Agent, ctx: HiveContext & CombatContext): void {
   const m = mother.myrr!
   const { hive } = ctx
+  const check = ctx.tick % CONFIG.perception.intervalTicks === 0
 
-  if (hive.escapeTo) return flee(mother, ctx)
-  if (ctx.tick % CONFIG.perception.intervalTicks === 0 && badlyThreatened(mother, ctx)) {
+  bite(mother, ctx)
+
+  if (!hive.escapeTo && check && badlyThreatened(mother, ctx)) {
     hive.escapeTo = escapeSpot(mother, ctx)
     if (hive.escapeTo) {
-      mother.baseSpeed = mother.speed = L.motherFleeSpeed
-      logEvent(ctx, 'hive', 'The Brood Mother is fleeing into the deep tunnels with her escort')
-      return
+      logEvent(ctx, 'hive', m.rooted
+        ? 'The Brood Mother is tearing herself free to flee into the deep tunnels'
+        : 'The Brood Mother is fleeing into the deep tunnels with her escort')
+      if (m.rooted && m.task !== 'uproot') startUproot(m)
+      // Already loose (hunting): drop the hunt and run.
+      if (!m.rooted) { mother.path = []; mother.state = { name: 'idle', ticksLeft: 0 } }
     }
+  }
+  if (m.rooted && m.task === 'uproot') return uproot(mother, ctx)
+  if (hive.escapeTo) {
+    mother.baseSpeed = mother.speed = L.motherFleeSpeed
+    return flee(mother, ctx)
+  }
+  if (!m.rooted) return roam(mother, ctx)
+
+  // Rooted: intruders in the hive core make her tear free to fight them.
+  if (check && m.task !== 'inject' && intruder(mother, ctx)) {
+    startUproot(m)
+    logEvent(ctx, 'hive', 'The Brood Mother is uprooting herself to deal with the intruders')
+    return
   }
 
   if (m.task === 'inject') {
@@ -59,6 +83,100 @@ export function updateMother(mother: Agent, ctx: HiveContext): void {
   m.task = 'inject'
   m.targetId = next
   m.ticksLeft = Math.round(L.injectSeconds * TPS)
+}
+
+function addBroodling(at: PathNode, ctx: HiveContext): void {
+  const brood = createAgent(ctx.agents.length, 'broodling', 'myrr', at, CONFIG.movement.myrrSpeed * 0.5, CONFIG.health.broodling)
+  brood.myrr = createMyrrData('broodling')
+  brood.myrr.task = 'grow'
+  brood.myrr.ticksLeft = Math.round(L.growSeconds * TPS)
+  ctx.agents.push(brood)
+}
+
+function startUproot(m: MyrrData): void {
+  m.task = 'uproot'
+  m.targetId = -1
+  m.ticksLeft = Math.round(L.uprootSeconds * TPS)
+}
+
+/** Tearing free of the chamber floor. She can bite but not move until it's done. */
+function uproot(mother: Agent, ctx: HiveContext): void {
+  const m = mother.myrr!
+  // Calmed down: the intruders are gone and she isn't fleeing.
+  if (!ctx.hive.escapeTo && ctx.tick % CONFIG.perception.intervalTicks === 0 && !intruder(mother, ctx)) {
+    m.task = 'rest'
+    return
+  }
+  if (--m.ticksLeft > 0) return
+  m.rooted = false
+  m.task = 'hunt'
+  m.lastSeenTick = ctx.tick
+  mother.baseSpeed = mother.speed = L.motherSpeed
+  if (!ctx.hive.escapeTo) logEvent(ctx, 'hive', 'The Brood Mother has torn free and is hunting the intruders')
+}
+
+/** Uprooted: hunt intruders in the hive core, then go home and root again. */
+function roam(mother: Agent, ctx: HiveContext): void {
+  const m = mother.myrr!
+  if (m.task === 'root') {
+    if (--m.ticksLeft > 0) return
+    m.rooted = true
+    m.task = 'rest'
+    mother.baseSpeed = mother.speed = 0
+    return
+  }
+  if (ctx.tick % CONFIG.perception.intervalTicks === 0) {
+    const foe = intruder(mother, ctx)
+    m.targetId = foe ? foe.id : -1
+    if (foe) { m.lastSeenTick = ctx.tick; m.task = 'hunt' }
+  }
+  const target = m.targetId >= 0 ? ctx.agents[m.targetId] : null
+  if (target && !target.dead) {
+    if (ctx.tick >= m.repathTick) {
+      m.repathTick = ctx.tick + TPS
+      const path = findPath(ctx.world, tileOf(mother), tileOf(target), 'human')
+      if (path?.length) { mother.path = path; mother.state = { name: 'moving' } }
+    }
+    followPath(mother, ctx.world)
+    return
+  }
+  if (ctx.tick - m.lastSeenTick < L.motherCalmSeconds * TPS) return
+  // Quiet: walk home, then root herself again.
+  const home = ctx.hive.motherHome
+  if (!home || (Math.floor(mother.x) === home.x && Math.floor(mother.y) === home.y && mother.levelIndex === home.levelIndex)) {
+    m.task = 'root'
+    m.ticksLeft = Math.round(L.rerootSeconds * TPS)
+    mother.path = []
+    mother.state = { name: 'idle', ticksLeft: 0 }
+    return
+  }
+  if (m.task !== 'return' || mother.state.name !== 'moving') {
+    m.task = 'return'
+    const path = findPath(ctx.world, tileOf(mother), home, 'human')
+    if (path?.length) { mother.path = path; mother.state = { name: 'moving' } }
+    else { m.task = 'root'; m.ticksLeft = Math.round(L.rerootSeconds * TPS) }
+  }
+  if (mother.state.name === 'moving') followPath(mother, ctx.world)
+}
+
+/** Nearest free human (or turret) inside the hive core, if any. */
+function intruder(mother: Agent, ctx: HiveContext): Agent | null {
+  const core = findRooms(ctx.world, ['hive'])[0]
+  if (!core) return null
+  let best: Agent | null = null, bestD = Infinity
+  for (const a of ctx.agents) {
+    if (a.dead || a.side !== 'human' || a.levelIndex !== core.levelIndex || !(isFree(a) || a.kind === 'turret')) continue
+    if (!sameRoom(roomAt(ctx.world, tileOf(a)), core)) continue
+    const d = Math.hypot(a.x - mother.x, a.y - mother.y)
+    if (d < bestD) { best = a; bestD = d }
+  }
+  return best
+}
+
+/** Bite the nearest human (or turret) in reach, rooted or not. */
+function bite(mother: Agent, ctx: CombatContext): void {
+  const foe = nearestVisible(mother, ctx, CONFIG.combat.weapons.maw.range, (a) => a.side === 'human' && (isFree(a) || a.kind === 'turret'))
+  if (foe) tryAttack(mother, foe, ctx)
 }
 
 /** Infect and wrap a captive in a cocoon near the edge of the hive core. */
@@ -80,7 +198,9 @@ function cocoonSpot(ctx: HiveContext): PathNode {
   const taken = new Set(
     ctx.agents.filter((a) => a.civ?.mode === 'cocooned').map((a) => `${Math.floor(a.x)},${Math.floor(a.y)}`),
   )
-  const free = cornerTiles(ctx.world, hive).filter((t) => !taken.has(`${t.x},${t.y}`))
+  const home = ctx.hive.motherHome
+  const free = cornerTiles(ctx.world, hive).filter((t) => !taken.has(`${t.x},${t.y}`) &&
+    (!home || Math.hypot(t.x - home.x, t.y - home.y) > L.chamberRadius))
   return free.length ? ctx.rng.pick(free) : randomTileIn(ctx.world, hive, ctx.rng)
 }
 
@@ -144,11 +264,7 @@ export function updateInfections(ctx: HiveContext): void {
     host.civ!.deathCause = 'hatched'
     host.dead = true
     host.health = 0
-    const brood = createAgent(ctx.agents.length, 'broodling', 'myrr', tileOf(host), CONFIG.movement.myrrSpeed * 0.5, CONFIG.health.broodling)
-    brood.myrr = createMyrrData('broodling')
-    brood.myrr.task = 'grow'
-    brood.myrr.ticksLeft = Math.round(L.growSeconds * TPS)
-    ctx.agents.push(brood)
+    addBroodling(tileOf(host), ctx)
     ctx.hive.hatched++
     ctx.stats.hatched++
     logEvent(ctx, 'hatch', `A Broodling burst out of ${who(host).toLowerCase()} on Level ${host.levelIndex + 1}`)
@@ -221,6 +337,9 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
   const target = m.targetId >= 0 ? ctx.agents[m.targetId] : null
   if (target && !target.dead && (isFree(target) || target.kind === 'turret')) {
     if (tryAttack(agent, target, ctx)) return
+    // Ambush: a guard hidden in the resin keeps still until the human comes close.
+    if (!responding && isHidden(agent, ctx.world.levels[agent.levelIndex]) &&
+      Math.hypot(target.x - agent.x, target.y - agent.y) > CONFIG.camouflage.ambushRange) return
     if (ctx.tick >= m.repathTick) {
       m.repathTick = ctx.tick + TPS
       const path = findPath(ctx.world, tileOf(agent), tileOf(target), 'myrr')
@@ -241,7 +360,7 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
     else return
   }
   const far = mother && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > L.guardRadius)
-  if (far || ctx.rng.chance(1 / (6 * TPS))) guardSpot(agent, ctx)
+  if (far || ctx.rng.chance(1 / (L.guardWanderSeconds * TPS))) guardSpot(agent, ctx)
 }
 
 /** Go to the strongest alarm, if it's loud enough and enough guards stay behind. */

@@ -45,7 +45,7 @@ export const CONFIG = {
     taker: 80,
     spineback: 160,
     broodling: 30,
-    broodMother: 400,
+    broodMother: 1200,
     /** Health regained per second while calm (routine). */
     regenPerSecond: 0.2,
   },
@@ -86,6 +86,19 @@ export const CONFIG = {
     sightRange: 9,
     /** Sound loses this share of its range through walls. */
     wallMuffle: 0.5,
+  },
+
+  camouflage: {
+    /** Humans spot a hidden Myrr (holding still on resin) only within this many tiles. */
+    sightRange: 2.5,
+    /** Seconds a Myrr must hold still on resin before it blends in. Moving, attacking or getting hurt starts the count again. */
+    hideSeconds: 10,
+    /** A Myrr that was hidden this recently still strikes as an ambush, in seconds (it has to move to reach you). */
+    ambushWindowSeconds: 3,
+    /** Hidden guards wait until a human is this close before striking, in tiles. */
+    ambushRange: 4,
+    /** The first blow from hiding does this many times normal damage. */
+    ambushDamage: 2,
   },
 
   noise: {
@@ -204,6 +217,18 @@ export const CONFIG = {
     fleeWhenGuardsBelow: 1,
     /** How fast she moves when fleeing, in tiles per second. */
     motherFleeSpeed: 2.2,
+    /** She is rooted in her chamber. To move at all (to fight or to flee) she must first uproot, in seconds. */
+    uprootSeconds: 20,
+    /** Seconds to root herself again once back home. */
+    rerootSeconds: 8,
+    /** How fast she moves when hunting intruders in the hive core, in tiles per second. */
+    motherSpeed: 1.4,
+    /** Uprooted, she goes home after this long without an intruder in the hive core, in seconds. */
+    motherCalmSeconds: 12,
+    /** Her inner chamber: cocoons are placed farther than this from her home, in tiles. */
+    chamberRadius: 7,
+    /** Guards shift position about this often when nothing is happening, in seconds. */
+    guardWanderSeconds: 30,
     /** After she dies, the other Myrr lose this much health per second. */
     collapseDecayPerSecond: 2,
   },
@@ -221,6 +246,8 @@ export const CONFIG = {
       spines: { range: 1.4, damage: 22, perSecond: 1.5, magazine: 0, reloadSeconds: 0 },
       turret: { range: 10, damage: 10, perSecond: 3, magazine: 120, reloadSeconds: 0 },
       flamethrower: { range: 3.5, damage: 18, perSecond: 2, magazine: 40, reloadSeconds: 4 },
+      /** The Brood Mother's crushing bite: slow, but three bites kill a soldier. */
+      maw: { range: 1.8, damage: 40, perSecond: 0.75, magazine: 0, reloadSeconds: 0 },
     },
     /** Chance to hit at point blank. Falls off with distance (see hitFalloff). */
     skill: { soldier: 0.6, medic: 0.5, civilian: 0.35, myrr: 0.8 },
@@ -272,10 +299,10 @@ export const CONFIG = {
      * `variation` either way, by seed. Lockers and supply rooms share type "supply".
      */
     stock: {
-      armory: { rifleMags: 60, pistolMags: 30, pistols: 10, stabilizers: 6, turrets: 6 },
-      supply: { rifleMags: 6, pistolMags: 6, pistols: 2, stabilizers: 1, turrets: 0 },
-      medbay: { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 8, turrets: 0 },
-      security: { rifleMags: 10, pistolMags: 6, pistols: 2, stabilizers: 0, turrets: 0 },
+      armory: { rifleMags: 60, pistolMags: 30, pistols: 10, stabilizers: 6, turrets: 6, incendiaries: 24 },
+      supply: { rifleMags: 6, pistolMags: 6, pistols: 2, stabilizers: 1, turrets: 0, incendiaries: 0 },
+      medbay: { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 8, turrets: 0, incendiaries: 0 },
+      security: { rifleMags: 10, pistolMags: 6, pistols: 2, stabilizers: 0, turrets: 0, incendiaries: 4 },
     },
     variation: 0.3,
     /** A scared civilian goes for a pistol if a room with one is within this many tiles. */
@@ -331,6 +358,20 @@ export const CONFIG = {
     burnRadius: 1,
   },
 
+  incendiaries: {
+    /** Incendiary grenades each squad carries (restocked at the armory). */
+    perSquad: 4,
+    /** How far ahead along its route a squad throws one, in tiles. */
+    throwRange: 6,
+    /** Seconds the squad stops to throw. */
+    throwSeconds: 3,
+    /** Resin burns away this many tiles around where it lands; Myrr there take fire damage. */
+    radius: 2,
+    damage: 30,
+    /** Without grenades, the flamethrower can burn resin instead, using this much fuel each time. */
+    flamerFuel: 8,
+  },
+
   charges: {
     /** Mining charges, one each for the first squads. */
     count: 2,
@@ -358,7 +399,11 @@ export const CONFIG = {
     alarmClearSeconds: 300,
     /** Health of a locked powered door (Myrr must break it; humans open it). */
     lockHp: 200,
+    /** Squads skip burning resin when someone in a cocoon would hatch within this many seconds. */
+    riskHatchSeconds: 60,
     assault: {
+      /** Also attack a known hive that is down to this many Myrr or fewer, to finish it off. */
+      finishHiveAtOrBelow: 8,
       /** Sent when the hive is known and holds at least minCocoons cocoons, or has at least hiveSize Myrr. */
       minCocoons: 5,
       hiveSize: 20,

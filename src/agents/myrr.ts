@@ -28,7 +28,7 @@ import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 
 export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
-  | 'inject' // Brood Mother
+  | 'inject' | 'uproot' | 'root' // Brood Mother (she also uses 'rest', 'hunt' and 'return')
   | 'grow' // Broodlings
   | 'guard' | 'respond' // Spinebacks
 
@@ -52,6 +52,8 @@ export interface MyrrData {
   /** Human this Taker has given up on, and until when. */
   ignoreId: number
   ignoreUntilTick: number
+  /** Brood Mother: anchored in her chamber. She must uproot before she can move. */
+  rooted: boolean
 }
 
 export interface HiveState {
@@ -65,6 +67,8 @@ export interface HiveState {
   /** The Brood Mother is fleeing to this spot (escape ending if she gets there). */
   escapeTo: PathNode | null
   escaped: boolean
+  /** The Brood Mother's spot in the middle of her chamber. */
+  motherHome: PathNode | null
   /** Recent losses, used to decide what Broodlings grow into (Phase 6 fills these). */
   losses: { taker: number; spineback: number }
   /** Tiles covered in resin, all levels. */
@@ -89,7 +93,7 @@ const TPS = CONFIG.sim.ticksPerSecond
 const H = CONFIG.hive
 
 export function createMyrrData(role: MyrrData['role']): MyrrData {
-  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0 }
+  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother' }
 }
 
 // ---------------------------------------------------------------- update

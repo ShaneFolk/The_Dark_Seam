@@ -5,6 +5,7 @@ import { makeNoise } from '../systems/noise.ts'
 import { deposit, depositSpread } from '../systems/pheromones.ts'
 import type { Agent } from './agent.ts'
 import { canSee } from './perception.ts'
+import { reveal, takeAmbush } from '../systems/camouflage.ts'
 import { setMode } from './civilian.ts'
 import type { HiveContext } from './myrr.ts'
 import type { PowerState } from '../systems/power.ts'
@@ -105,13 +106,21 @@ export function tryAttack(attacker: Agent, target: Agent, ctx: CombatContext): b
   const dist = Math.hypot(target.x - attacker.x, target.y - attacker.y)
   const chance = w.skill * (1 - CONFIG.combat.hitFalloff * Math.min(1, dist / spec.range))
   const hit = ctx.rng.next() < chance
+  // Striking from hiding: a heavier first blow, and the attacker gives itself away.
+  const ambush = target.side === 'human' && takeAmbush(attacker)
+  reveal(attacker)
   w.cooldown = Math.max(1, Math.round(TPS / spec.perSecond))
   if (isRanged(w)) {
     w.inMag--
     makeNoise(ctx.noises, 'gunshot', attacker.levelIndex, attacker.x, attacker.y, ctx.tick, attacker.id)
   }
   ctx.shots.push({ levelIndex: attacker.levelIndex, x0: attacker.x, y0: attacker.y, x1: target.x, y1: target.y, hit, ranged: isRanged(w), flame: w.kind === 'flamethrower', tick: ctx.tick })
-  if (hit) damage(target, spec.damage, attacker, ctx)
+  if (hit) damage(target, spec.damage * (ambush ? CONFIG.camouflage.ambushDamage : 1), attacker, ctx)
+  if (ambush) {
+    ctx.stats.ambushes++
+    if (target.soldier) ctx.stats.squadAmbushes++
+    logEvent(ctx, 'hive', `${who(attacker)} ambushed ${who(target)} from the resin`)
+  }
   if (w.kind === 'flamethrower') burn(attacker, target, spec.damage, ctx)
   return true
 }
@@ -123,11 +132,19 @@ function burn(attacker: Agent, target: Agent, dmg: number, ctx: CombatContext): 
     if (a === target || a.dead || a.side !== 'myrr' || a.levelIndex !== target.levelIndex) continue
     if (Math.hypot(a.x - target.x, a.y - target.y) <= F.splash) damage(a, dmg * 0.6, attacker, ctx)
   }
-  const level = ctx.world.levels[target.levelIndex]
-  const cx = Math.floor(target.x), cy = Math.floor(target.y)
-  for (let dy = -F.burnRadius; dy <= F.burnRadius; dy++)
-    for (let dx = -F.burnRadius; dx <= F.burnRadius; dx++) {
-      const x = cx + dx, y = cy + dy
+  burnArea(tileOfPoint(target), F.burnRadius, 0, attacker, ctx)
+}
+
+/** Burn away resin in a square around a tile; Myrr standing in it take `dmg`. */
+export function burnArea(at: { levelIndex: number; x: number; y: number }, radius: number, dmg: number, source: Agent, ctx: CombatContext): void {
+  const level = ctx.world.levels[at.levelIndex]
+  if (dmg > 0) for (const a of ctx.agents) {
+    if (a.dead || a.side !== 'myrr' || a.levelIndex !== at.levelIndex) continue
+    if (Math.abs(Math.floor(a.x) - at.x) <= radius && Math.abs(Math.floor(a.y) - at.y) <= radius) damage(a, dmg, source, ctx)
+  }
+  for (let dy = -radius; dy <= radius; dy++)
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = at.x + dx, y = at.y + dy
       if (x < 0 || y < 0 || x >= level.width || y >= level.height) continue
       const i = y * level.width + x
       if (!level.resin[i]) continue
@@ -137,9 +154,14 @@ function burn(attacker: Agent, target: Agent, dmg: number, ctx: CombatContext): 
     }
 }
 
+function tileOfPoint(a: Agent): { levelIndex: number; x: number; y: number } {
+  return { levelIndex: a.levelIndex, x: Math.floor(a.x), y: Math.floor(a.y) }
+}
+
 export function damage(target: Agent, amount: number, source: Agent | null, ctx: CombatContext): void {
   if (target.dead) return
   target.health -= amount
+  reveal(target)
   if (target.civ && source && source.side === 'myrr') {
     target.civ.threat = { levelIndex: source.levelIndex, x: source.x, y: source.y }
     target.civ.lastSeenTick = ctx.tick

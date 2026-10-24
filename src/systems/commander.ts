@@ -2,9 +2,10 @@
 //
 //   alarm          first sighting or capture: civilians shelter at home; clears after a quiet spell
 //   lockdown       Myrr on the surface: powered doors lock (humans pass, Myrr must break them)
-//   assault        hive known and holding cocoons (or big): send healthy squads after the Brood
+//   assault        hive known and holding cocoons (or big, or nearly beaten): send healthy squads after the Brood
 //                  Mother (they cut cocoons free and fight whatever they meet on the way)
 //   reinforcements soldiers down to 60%: a fresh squad lands at the Landing Pad after a delay
+//   burn resin     after a squad is ambushed: squads burn resin ahead of them (unless lives are at stake)
 //   evacuation     few civilians left: a ship comes to the Landing Pad; whoever is on it leaves
 
 import { CONFIG } from '../config.ts'
@@ -38,6 +39,8 @@ export interface CommanderState {
   shipLeaves: number
   startSoldiers: number
   startCivilians: number
+  /** After a squad is ambushed: squads burn resin ahead of them before advancing. */
+  burnResin: boolean
 }
 
 export function createCommander(agents: Agent[]): CommanderState {
@@ -45,6 +48,7 @@ export function createCommander(agents: Agent[]): CommanderState {
     alarm: false, lockdown: false, locked: false, hiveKnown: false, lastSightingTick: -1e9,
     reinforcementsLeft: CONFIG.commander.reinforcements.calls, reinforcementsDue: null,
     evacuation: 'none', shipLands: 0, shipLeaves: 0,
+    burnResin: false,
     startSoldiers: agents.filter((a) => a.soldier).length,
     startCivilians: agents.filter((a) => a.civ && !a.soldier).length,
   }
@@ -81,6 +85,13 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
     cmd.alarm = false
     logEvent(ctx, 'command', 'All clear: the alarm is off')
     if (cmd.lockdown) { cmd.lockdown = false; logEvent(ctx, 'command', 'Lockdown lifted') }
+    cmd.burnResin = false
+  }
+
+  // A squad walked into an ambush: from now on, burn the resin before going in.
+  if (!cmd.burnResin && ctx.stats.squadAmbushes > 0 && cmd.alarm) {
+    cmd.burnResin = true
+    logEvent(ctx, 'command', 'After the ambush, the Commander orders squads to burn the resin before advancing')
   }
 
   // Lockdown: Myrr have been seen on the surface.
@@ -99,7 +110,7 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
   const cocoons = ctx.agents.filter((a) => a.civ?.mode === 'cocooned').length
   const hiveSize = ctx.agents.filter((a) => !a.dead && a.side === 'myrr').length
   const assaulting = squads.filter((s) => s.mission === 'assault')
-  if (cmd.hiveKnown && cmd.evacuation === 'none' && !assaulting.length && (cocoons >= C.assault.minCocoons || hiveSize >= C.assault.hiveSize)) {
+  if (cmd.hiveKnown && cmd.evacuation === 'none' && !assaulting.length && (cocoons >= C.assault.minCocoons || hiveSize >= C.assault.hiveSize || hiveSize <= C.assault.finishHiveAtOrBelow)) {
     const ready = squads.filter((s) => !s.mission && s.morale >= C.assault.minMorale && members(s, ctx).length >= C.assault.minMembers)
     const sent = ready.slice(0, C.assault.squads)
     for (const s of sent) { s.mission = 'assault'; s.missionGoal = null }

@@ -15,6 +15,11 @@ const TPS = CONFIG.sim.ticksPerSecond
 export const movementHooks: { onBreak?: (agent: Agent, kind: 'smash' | 'chew') => void } = {}
 
 /** Advance one tick. Returns true when the path is finished. */
+/** Actually on the move (some agents keep the 'moving' state after arriving). */
+export function isMoving(agent: Agent): boolean {
+  return agent.state.name === 'crossing' || (agent.state.name === 'moving' && agent.path.length > 0)
+}
+
 export function followPath(agent: Agent, world: World): boolean {
   if (agent.state.name === 'crossing') {
     agent.state.ticksLeft--

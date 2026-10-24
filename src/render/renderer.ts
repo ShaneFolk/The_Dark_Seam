@@ -6,6 +6,7 @@ import type { Level } from '../world/level.ts'
 import type { Tile } from '../world/tiles.ts'
 import { BARRIER_ART, TILE_ART, drawResin, floorColor, type FloorKind } from './tileArt.ts'
 import { AGENT_ART } from './agentArt.ts'
+import { isHidden } from '../systems/camouflage.ts'
 import { describeAgent } from '../agents/describe.ts'
 import { formatClock } from '../core/clock.ts'
 import { isLit } from '../systems/power.ts'
@@ -173,7 +174,8 @@ export class Renderer {
     const { ctx } = this
     for (const agent of sim.agents) {
       if (agent.dead || agent.civ?.mode === 'evacuated' || agent.levelIndex !== levelIndex) continue
-      ctx.globalAlpha = agent.state.name === 'crossing' ? 0.4 : 1
+      // Faint: crossing between levels, or a Myrr hidden in the resin (humans can't see it).
+      ctx.globalAlpha = agent.state.name === 'crossing' ? 0.4 : isHidden(agent, sim.world.levels[levelIndex]) ? 0.45 : 1
       const cx = ox + agent.x * tile, cy = oy + agent.y * tile
       AGENT_ART[agent.kind](ctx, cx, cy, tile, agent)
       // Health bar over anyone hurt, once zoomed in enough to read it.

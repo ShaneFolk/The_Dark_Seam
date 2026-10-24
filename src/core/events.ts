@@ -23,6 +23,9 @@ export interface RunStats {
   hatched: number
   myrrKilled: { taker: number; spineback: number; broodling: number; mother: number }
   evacuated: number
+  /** Blows struck by Myrr from hiding (and how many hit soldiers). */
+  ambushes: number
+  squadAmbushes: number
   /** Someone has seen a Myrr. */
   contact: boolean
 }
@@ -30,7 +33,7 @@ export interface RunStats {
 export function createStats(): RunStats {
   return {
     captures: 0, dropped: 0, cutFree: 0, cures: 0, civiliansKilled: 0, soldiersKilled: 0, hatched: 0,
-    myrrKilled: { taker: 0, spineback: 0, broodling: 0, mother: 0 }, evacuated: 0, contact: false,
+    myrrKilled: { taker: 0, spineback: 0, broodling: 0, mother: 0 }, evacuated: 0, ambushes: 0, squadAmbushes: 0, contact: false,
   }
 }
 

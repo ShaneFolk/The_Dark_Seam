@@ -5,6 +5,7 @@ import type { Level } from '../world/level.ts'
 import { TILE_INFO, type Tile } from '../world/tiles.ts'
 import type { Noise } from '../systems/noise.ts'
 import type { Agent } from './agent.ts'
+import { isHidden } from '../systems/camouflage.ts'
 
 /**
  * True if nothing that blocks sight lies between two tiles.
@@ -28,6 +29,8 @@ export function lineOfSight(level: Level, x0: number, y0: number, x1: number, y1
 /** Can `viewer` see `target`? Same level, within range, clear line. */
 export function canSee(viewer: Agent, target: Agent, level: Level, range: number = CONFIG.perception.sightRange): boolean {
   if (viewer.levelIndex !== target.levelIndex || target.state.name === 'crossing') return false
+  // A Myrr holding still on resin can only be spotted from close up.
+  if (viewer.side === 'human' && isHidden(target, level)) range = Math.min(range, CONFIG.camouflage.sightRange)
   const dist = Math.hypot(target.x - viewer.x, target.y - viewer.y)
   if (dist > range) return false
   return lineOfSight(level, Math.floor(viewer.x), Math.floor(viewer.y), Math.floor(target.x), Math.floor(target.y))

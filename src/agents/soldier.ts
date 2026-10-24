@@ -15,6 +15,9 @@
 //   assault / escort   the Commander's missions: storm the Hive Core / guard the evacuation
 //   patrol    otherwise walk the squad's route
 //
+// After an ambush the Commander has squads burn resin ahead of them (grenades, or
+// the flamethrower) before walking into it, unless someone is about to be lost.
+//
 // The leader walks to the squad's goal; the others keep close to the leader.
 // Every soldier shoots the nearest Myrr in reach on their own. Medics also wake
 // paralysed people and stabilize infected ones when it's safe.
@@ -27,7 +30,7 @@ import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
 import { canHear, canSee } from './perception.ts'
 import { isFree, setMode } from './civilian.ts'
-import { nearestVisible, roundsLeft, tryAttack } from './combat.ts'
+import { burnArea, nearestVisible, roundsLeft, tryAttack } from './combat.ts'
 import { roomsWith, stockIn, take } from '../systems/supplies.ts'
 import { Barrier, putBarrier, roomOpenings } from '../systems/barriers.ts'
 import { humanSight } from '../systems/power.ts'
@@ -83,6 +86,12 @@ export interface Squad {
   missionGoal: PathNode | null
   /** Has reached the mission goal (assault: the Hive Core). */
   missionReached: boolean
+  /** Incendiary grenades for burning resin. */
+  incendiaries: number
+  /** Where the squad is about to burn resin (while it stops to throw), or null. */
+  burnAt: PathNode | null
+  /** The Commander told it to skip burning to save someone (logged once per decision). */
+  riskTaken: boolean
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -131,7 +140,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     if (cocoon) squad.lastContactTick = ctx.tick
 
     // Assault done: at the hive, nothing left to fight or cut for a while.
-    if (squad.mission === 'assault' && squad.missionReached && ctx.tick - squad.lastContactTick > CONFIG.commander.assault.quietSeconds * TPS) {
+    if (squad.mission === 'assault' && squad.missionReached && !ctx.hive.escapeTo && ctx.tick - squad.lastContactTick > CONFIG.commander.assault.quietSeconds * TPS) {
       squad.mission = null
       squad.missionReached = false
       logEvent(ctx, 'command', `Squad ${squad.id + 1} finished its assault on the hive`)
@@ -245,7 +254,10 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
 
   // Timed work at the goal: restocking, cutting a cocoon, pausing on patrol.
   if (squad.ticksLeft > 0) {
-    if (--squad.ticksLeft === 0) finishWork(squad, alive, ctx)
+    if (--squad.ticksLeft === 0) {
+      if (squad.burnAt) throwIncendiary(squad, alive, ctx)
+      else finishWork(squad, alive, ctx)
+    }
     return
   }
 
@@ -283,7 +295,65 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     s.repathTick = ctx.tick + TPS
     walkTo(agent, goal, ctx)
   }
+  // Burn the resin ahead before walking into it (after an ambush), unless lives are at stake.
+  if (wantsToBurn(squad, ctx)) {
+    const spot = resinAhead(agent, ctx)
+    if (spot && canBurn(squad, alive)) {
+      squad.burnAt = spot
+      squad.ticksLeft = Math.round(CONFIG.incendiaries.throwSeconds * TPS)
+      agent.state = { name: 'idle', ticksLeft: 0 }
+      return
+    }
+  }
   followPath(agent, ctx.world)
+}
+
+/** Should this squad burn resin ahead of it? The Commander skips it when someone is about to be lost. */
+function wantsToBurn(squad: Squad, ctx: CombatContext): boolean {
+  if (!ctx.commander.burnResin || squad.order === 'retreat' || squad.order === 'resupply') return false
+  const urgent = squad.order === 'rescue' || ((squad.order === 'cut' || squad.mission === 'assault') && hatchingSoon(ctx))
+  if (urgent && !squad.riskTaken) {
+    logEvent(ctx, 'command', `The Commander takes the risk: Squad ${squad.id + 1} goes in without burning the resin to save lives`)
+  }
+  squad.riskTaken = urgent
+  return !urgent
+}
+
+/** Is someone in a cocoon close to hatching? */
+function hatchingSoon(ctx: CombatContext): boolean {
+  const soon = ctx.tick + CONFIG.commander.riskHatchSeconds * TPS
+  return ctx.agents.some((a) => a.civ?.mode === 'cocooned' && a.civ.infection && a.civ.infection.hatchTick < soon)
+}
+
+/** Grenades left, or a flamethrower with fuel to spare. */
+function canBurn(squad: Squad, alive: Agent[]): boolean {
+  return squad.incendiaries > 0 || alive.some((s) => s.weapon?.kind === 'flamethrower' && s.weapon.inMag >= CONFIG.incendiaries.flamerFuel)
+}
+
+/** The first resin tile on the leader's route within throwing range, if any. */
+function resinAhead(agent: Agent, ctx: CombatContext): PathNode | null {
+  const range = CONFIG.incendiaries.throwRange
+  for (const step of agent.path) {
+    if (step.levelIndex !== agent.levelIndex) return null
+    if (Math.hypot(step.x + 0.5 - agent.x, step.y + 0.5 - agent.y) > range) return null
+    const level = ctx.world.levels[step.levelIndex]
+    if (level.resin[step.y * level.width + step.x]) return step
+  }
+  return null
+}
+
+/** Throw a grenade (or use the flamethrower) at the resin ahead. */
+function throwIncendiary(squad: Squad, alive: Agent[], ctx: CombatContext): void {
+  const at = squad.burnAt!
+  squad.burnAt = null
+  if (squad.incendiaries > 0) squad.incendiaries--
+  else {
+    const flamer = alive.find((s) => s.weapon?.kind === 'flamethrower' && s.weapon.inMag >= CONFIG.incendiaries.flamerFuel)
+    if (!flamer) return
+    flamer.weapon!.inMag -= CONFIG.incendiaries.flamerFuel
+  }
+  burnArea(at, CONFIG.incendiaries.radius, CONFIG.incendiaries.damage, alive[0], ctx)
+  makeNoise(ctx.noises, 'smash', at.levelIndex, at.x, at.y, ctx.tick, alive[0].id)
 }
 
 function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
@@ -352,6 +422,7 @@ function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
       }
       if (s.soldier!.role === 'medic' && stock) s.soldier!.stabilizers += take(stock, 'stabilizers', S.stabilizers - s.soldier!.stabilizers)
     }
+    if (stock) squad.incendiaries += take(stock, 'incendiaries', CONFIG.incendiaries.perSquad - squad.incendiaries)
     setOrder(squad, 'patrol', null)
   } else if (squad.order === 'cut') {
     const person = ctx.agents[squad.targetId]

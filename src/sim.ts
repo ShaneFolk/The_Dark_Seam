@@ -6,12 +6,13 @@ import { Rng } from './core/rng.ts'
 import { createWorld, type World } from './world/world.ts'
 import { createAgent, type Agent } from './agents/agent.ts'
 import { updateWanderer } from './agents/wander.ts'
-import { movementHooks } from './agents/movement.ts'
+import { isMoving, movementHooks } from './agents/movement.ts'
 import { activityAt, createCivilianData, roomFor, updateCivilian, type CivilianContext } from './agents/civilian.ts'
 import { createMyrrData, planDigging, takerHurt, updateTaker, type HiveState } from './agents/myrr.ts'
 import { updateBroodling, updateCollapse, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
 import { createStats, logEvent, type GameEvent, type RunStats } from './core/events.ts'
 import { checkEnding, type Ending } from './systems/endings.ts'
+import { updateCamouflage } from './systems/camouflage.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
@@ -65,7 +66,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null },
     squads: [],
     shots: [],
     supplies: new Map(),
@@ -157,7 +158,8 @@ export function step(sim: SimState): void {
     else if (role === 'spineback') updateSpineback(agent, ctx)
     else if (agent.kind === 'wanderer-myrr') updateWanderer(agent, sim.world, sim.rng)
     // Moving Myrr skitter now and then.
-    if (agent.side === 'myrr' && agent.state.name === 'moving' && (sim.tick + agent.id) % SKITTER_TICKS === 0) {
+    if (agent.side === 'myrr') updateCamouflage(agent, sim.world.levels[agent.levelIndex])
+    if (agent.side === 'myrr' && isMoving(agent) && (sim.tick + agent.id) % SKITTER_TICKS === 0) {
       makeNoise(sim.noises, 'skitter', agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
     }
   }
@@ -228,6 +230,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
     charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
     mission: null, missionGoal: null, missionReached: false,
+    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false,
   })
   for (let n = 0; n < size; n++) {
     const isMedic = n === size - 1
@@ -257,7 +260,9 @@ function spawnHive(sim: SimState): void {
   )
   const mother = createAgent(sim.agents.length, 'brood-mother', 'myrr', centre, 0, CONFIG.health.broodMother)
   mother.myrr = createMyrrData('mother')
+  mother.weapon = makeWeapon('maw', CONFIG.combat.skill.myrr)
   sim.hive.motherId = mother.id
+  sim.hive.motherHome = centre
   sim.agents.push(mother)
 
   for (let n = 0; n < CONFIG.hive.takers; n++) {
