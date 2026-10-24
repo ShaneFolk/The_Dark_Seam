@@ -239,8 +239,8 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 ### Phase 8 — Commander & Endings
 - [ ] Commander decisions (alarm, lockdown, teams, evacuation)
 - [ ] Reinforcements: the Commander calls in a fresh squad that lands at the Landing Pad (arrival delay, limited calls per run)
-- [ ] Ending detection
-- [ ] Run summary / event log
+- [x] Ending detection
+- [x] Run summary / event log
 
 ### Phase 9 — Tuning
 - [ ] Speed controls (pause, 1x, 2x, 4x)
