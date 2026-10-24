@@ -4,6 +4,7 @@ import type { Agent } from './agent.ts'
 
 export function describeAgent(agent: Agent, tick: number): string {
   const civ = agent.civ
+  if (agent.kind === 'turret') return 'Sentry turret #' + agent.id + ' · ammo ' + (agent.weapon?.inMag ?? 0) + ' · health ' + Math.round(agent.health)
   if (agent.soldier && civ) {
     const w = agent.weapon
     const ammo = w ? `${w.inMag}+${w.spare} mags` : ''

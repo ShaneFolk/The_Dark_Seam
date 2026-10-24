@@ -29,7 +29,7 @@ export function needsMedBay(agent: Agent): boolean {
 }
 
 /** Fill free beds with patients standing in the room; heal and cure those in beds. */
-export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World): void {
+export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World, powered: boolean): void {
   for (const bay of medbays) {
     // Patients who left, died, or are fully better give up their bed.
     bay.beds = bay.beds.filter((id) => {
@@ -49,7 +49,8 @@ export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World):
       const a = agents[id]
       a.health = Math.min(a.maxHealth, a.health + CONFIG.medbay.healPerSecond / TPS)
       const civ = a.civ!
-      if (civ.infection && ++civ.cureTicks >= CONFIG.medbay.cureSeconds * TPS) {
+      // Curing needs power; healing doesn't.
+      if (civ.infection && powered && ++civ.cureTicks >= CONFIG.medbay.cureSeconds * TPS) {
         civ.infection = null
         civ.cured = true
       }

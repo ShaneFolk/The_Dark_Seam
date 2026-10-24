@@ -148,7 +148,7 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
   if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) {
     // Guards only chase intruders near the Brood Mother; responders fight anyone they see.
     const foe = nearestVisible(agent, ctx, CONFIG.hive.sightRange, (a) =>
-      a.side === 'human' && isFree(a) && (responding || (!!mother && a.levelIndex === mother.levelIndex &&
+      a.side === 'human' && (isFree(a) || a.kind === 'turret') && (responding || (!!mother && a.levelIndex === mother.levelIndex &&
       Math.hypot(a.x - mother.x, a.y - mother.y) <= chaseRange)))
     m.targetId = foe ? foe.id : -1
     if (foe) m.lastSeenTick = ctx.tick
@@ -156,7 +156,7 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
   }
 
   const target = m.targetId >= 0 ? ctx.agents[m.targetId] : null
-  if (target && !target.dead && isFree(target)) {
+  if (target && !target.dead && (isFree(target) || target.kind === 'turret')) {
     if (tryAttack(agent, target, ctx)) return
     if (ctx.tick >= m.repathTick) {
       m.repathTick = ctx.tick + TPS

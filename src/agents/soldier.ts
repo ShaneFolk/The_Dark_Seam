@@ -8,6 +8,8 @@
 //   rescue    a Taker is carrying someone: chase it and shoot it
 //   respond   Myrr in sight, or screams, gunfire, digging, smashing or chewing heard
 //   cut       a cocoon in sight: cut the person free
+//   blast     heavy fighting in an Upper Mine tunnel: collapse it with a mining charge
+//   reload    a turret is low: feed it spare rifle magazines
 //   patrol    otherwise walk the squad's route
 //
 // The leader walks to the squad's goal; the others keep close to the leader.
@@ -25,6 +27,13 @@ import { isFree, setMode } from './civilian.ts'
 import { nearestVisible, roundsLeft, tryAttack } from './combat.ts'
 import { roomsWith, stockIn, take } from '../systems/supplies.ts'
 import { Barrier, putBarrier, roomOpenings } from '../systems/barriers.ts'
+import { humanSight } from '../systems/power.ts'
+import { needsReload } from './turret.ts'
+import { strongest } from '../systems/pheromones.ts'
+import { chokePoint, collapseTunnel } from '../systems/digging.ts'
+import { countResin } from '../systems/resin.ts'
+import { makeNoise } from '../systems/noise.ts'
+import { kill } from './combat.ts'
 import type { CivilianContext as CombatContext } from './civilian.ts'
 
 export interface SoldierData {
@@ -40,7 +49,7 @@ export interface SoldierData {
   workTicks: number
 }
 
-export type Order = 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat'
+export type Order = 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast'
 
 export interface Squad {
   id: number
@@ -59,11 +68,12 @@ export interface Squad {
   ticksLeft: number
   /** Welded themselves in during the current retreat. */
   welded: boolean
+  /** Mining charges the squad carries. */
+  charges: number
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
 const S = CONFIG.soldiers
-const SIGHT = CONFIG.perception.sightRange
 
 // ---------------------------------------------------------------- squad brain
 
@@ -82,6 +92,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     let carrier: Agent | null = null
     let cocoon: Agent | null = null
     for (const s of alive) {
+      const SIGHT = humanSight(ctx.power, s.levelIndex)
       const m = nearestVisible(s, ctx, SIGHT, (a) => a.side === 'myrr')
       if (m && (!myrrSeen || dist(s, m) < dist(s, myrrSeen))) myrrSeen = m
       for (const a of ctx.agents) {
@@ -94,7 +105,9 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
         }
       }
     }
-    const heard = ctx.noises.find((n) => n.kind !== 'skitter' && n.sourceId >= 0 &&
+    // Sensor alerts go to the nearest squad; other noises only if a member hears them.
+    const alert = ctx.noises.find((n) => n.kind === 'sensor' && n.tick === ctx.tick && nearestSquad(squads, n, ctx) === squad)
+    const heard = alert ?? ctx.noises.find((n) => n.kind !== 'skitter' && n.kind !== 'sensor' && n.sourceId >= 0 &&
       !squad.members.includes(n.sourceId) && alive.some((s) => canHear(s, n, ctx.world.levels[s.levelIndex])))
 
     // Morale drifts: down while outnumbered, back up when it's quiet.
@@ -121,9 +134,15 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     } else if (cocoon && squad.order !== 'cut') {
       setOrder(squad, 'cut', tileOf(cocoon))
       squad.targetId = cocoon.id
+    } else if (squad.order === 'patrol' && squad.charges > 0 && blastSite(ctx)) {
+      setOrder(squad, 'blast', blastSite(ctx))
     } else if (heard && squad.order === 'patrol') {
       setOrder(squad, 'respond', { levelIndex: heard.levelIndex, x: Math.floor(heard.x), y: Math.floor(heard.y) })
       squad.lastContactTick = ctx.tick
+    } else if (squad.order === 'patrol' && turretToReload(ctx, leader)) {
+      const t = turretToReload(ctx, leader)!
+      setOrder(squad, 'reload', tileOf(t))
+      squad.targetId = t.id
     } else if (squad.order === 'respond' && ctx.tick - squad.lastContactTick > S.respondGiveUpSeconds * TPS) {
       setOrder(squad, 'patrol', null)
     } else if (squad.order === 'rescue' || (squad.order === 'cut' && !isCocooned(ctx, squad.targetId))) {
@@ -197,6 +216,8 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     if (squad.order === 'patrol') { squad.ticksLeft = 5 * TPS; squad.goal = null }
     if (squad.order === 'resupply') squad.ticksLeft = Math.round(S.resupplySeconds * TPS)
     if (squad.order === 'retreat' && !squad.welded) squad.ticksLeft = Math.round(CONFIG.barriers.weldSeconds * TPS)
+    if (squad.order === 'reload') squad.ticksLeft = Math.round(CONFIG.turrets.reloadSeconds * TPS)
+    if (squad.order === 'blast') squad.ticksLeft = Math.round(CONFIG.charges.setSeconds * TPS)
     if (squad.order === 'cut') squad.ticksLeft = Math.round(S.cutSeconds * TPS)
     if (squad.order === 'respond') squad.goal = null
     return
@@ -209,6 +230,32 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
 }
 
 function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
+  if (squad.order === 'reload') {
+    // Feed spare rifle magazines into the turret.
+    const turret = ctx.agents[squad.targetId]
+    const giver = alive.find((s) => s.weapon?.kind === 'rifle' && s.weapon.spare > 0)
+    if (turret?.weapon && giver?.weapon) {
+      const mags = Math.min(CONFIG.turrets.reloadMags, giver.weapon.spare)
+      giver.weapon.spare -= mags
+      turret.weapon.inMag = Math.min(CONFIG.combat.weapons.turret.magazine, turret.weapon.inMag + mags * CONFIG.combat.weapons.rifle.magazine * 2)
+    }
+    setOrder(squad, 'patrol', null)
+    return
+  }
+  if (squad.order === 'blast') {
+    // Back off and set it off: the tunnel collapses into rock for good.
+    const at = squad.goal!
+    const level = ctx.world.levels[at.levelIndex]
+    const collapsed = new Set(collapseTunnel(ctx.world, at, CONFIG.charges.radius))
+    for (const a of ctx.agents) {
+      if (!a.dead && a.levelIndex === at.levelIndex && collapsed.has(Math.floor(a.y) * level.width + Math.floor(a.x))) kill(a, ctx)
+    }
+    makeNoise(ctx.noises, 'blast', at.levelIndex, at.x, at.y, ctx.tick, alive[0].id)
+    squad.charges--
+    ctx.hive.resinTiles = countResin(ctx.world)
+    setOrder(squad, 'patrol', null)
+    return
+  }
   if (squad.order === 'retreat') {
     // Fallen back: weld the doors and board the windows of the room they're in.
     const room = roomAt(ctx.world, tileOf(alive[0]))
@@ -224,7 +271,7 @@ function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
     const stock = stockIn(ctx.supplies, roomAt(ctx.world, tileOf(alive[0])))
     for (const s of alive) {
       const w = s.weapon
-      if (w && stock) {
+      if (w && stock && w.kind !== 'flamethrower') { // flamethrower fuel isn't stocked
         const item = w.kind === 'rifle' ? 'rifleMags' : 'pistolMags'
         w.spare += take(stock, item, Math.max(0, CONFIG.combat.spareMagazines - w.spare))
         if (w.inMag === 0 && w.spare > 0 && w.reloading === 0) { w.inMag = CONFIG.combat.weapons[w.kind].magazine; w.spare-- }
@@ -267,6 +314,34 @@ function formationSpot(leader: Agent, slot: number, ctx: CombatContext): PathNod
     if (canWalk(level, at.x + dx, at.y + dy, 'human')) return { levelIndex: at.levelIndex, x: at.x + dx, y: at.y + dy }
   }
   return at
+}
+
+/** The squad whose leader is closest to a spot (another level counts as far away). */
+function nearestSquad(squads: Squad[], at: { levelIndex: number; x: number; y: number }, ctx: CombatContext): Squad | null {
+  let best: Squad | null = null, bestD = Infinity
+  for (const sq of squads) {
+    const leader = members(sq, ctx)[0]
+    if (!leader) continue
+    const d = Math.abs(leader.levelIndex - at.levelIndex) * 200 + Math.hypot(leader.x - at.x, leader.y - at.y)
+    if (d < bestD) { best = sq; bestD = d }
+  }
+  return best
+}
+
+// ---------------------------------------------------------------- turrets and charges
+
+/** A turret on the leader's level that needs ammo, if the squad has spare rifle magazines. */
+function turretToReload(ctx: CombatContext, leader: Agent): Agent | null {
+  if (!leader.weapon || leader.weapon.kind !== 'rifle' || leader.weapon.spare < 1) return null
+  return ctx.agents.find((a) => a.kind === 'turret' && a.levelIndex === leader.levelIndex && needsReload(a)) ?? null
+}
+
+/** Where to blast: a narrow tunnel near heavy fighting on Level 2 (strong danger scent). */
+function blastSite(ctx: CombatContext): PathNode | null {
+  const hot = strongest(ctx.pheromones, 'danger', ctx.world, 3, CONFIG.charges.trigger).find((s) => s.at.levelIndex === 1)
+  if (!hot) return null
+  // Stand next to the choke point, on the colony side, and blast it.
+  return chokePoint(ctx.world, hot.at, 10)
 }
 
 // ---------------------------------------------------------------- medics

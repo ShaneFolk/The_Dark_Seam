@@ -88,7 +88,7 @@ export const CONFIG = {
 
   noise: {
     /** How far each kind of noise carries, in tiles. */
-    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14, smash: 14, chew: 10 },
+    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14, smash: 14, chew: 10, blast: 30, sensor: 0 },
     /** Myrr make a skittering noise this often while moving, in seconds. */
     skitterEverySeconds: 2,
     /** Panicking humans scream this often, in seconds. */
@@ -105,6 +105,8 @@ export const CONFIG = {
     dig: 0.03,
     smash: 0.06,
     chew: 0.04,
+    blast: 0.1,
+    sensor: 0,
     /** Hearing alone never raises fear above this (enough to hide, not to flee). */
     hearingCap: 0.35,
     /** Fear lost per second when nothing scary is sensed. */
@@ -208,6 +210,8 @@ export const CONFIG = {
       fists: { range: 1.2, damage: 4, perSecond: 1, magazine: 0, reloadSeconds: 0 },
       claws: { range: 1.2, damage: 10, perSecond: 2, magazine: 0, reloadSeconds: 0 },
       spines: { range: 1.4, damage: 22, perSecond: 1.5, magazine: 0, reloadSeconds: 0 },
+      turret: { range: 10, damage: 10, perSecond: 3, magazine: 120, reloadSeconds: 0 },
+      flamethrower: { range: 3.5, damage: 18, perSecond: 2, magazine: 40, reloadSeconds: 4 },
     },
     /** Chance to hit at point blank. Falls off with distance (see hitFalloff). */
     skill: { soldier: 0.6, medic: 0.5, civilian: 0.35, myrr: 0.8 },
@@ -269,6 +273,63 @@ export const CONFIG = {
     armRange: 25,
     /** Pistol magazines a civilian takes with a pistol. */
     civilianMags: 2,
+  },
+
+  power: {
+    /** Health of each generator. 0 = broken; power is on while any generator works. */
+    generatorHp: 300,
+    /** Damage per second a Taker does to a generator. */
+    sabotageDps: 10,
+    /** Health a tech restores per second when repairing. */
+    repairPerSecond: 4,
+    /** Without power (and always on Level 3), human sight is multiplied by this. */
+    darkSightMultiplier: 0.5,
+    /** Levels with lights (Level 3 never has any). Numbers are level indexes (0 = Level 1). */
+    litLevels: [0, 1],
+    /** Chance a rested Taker goes to sabotage a generator, once the hive has lost this many Takers. */
+    sabotageChance: 0.15,
+    sabotageAfterLosses: 2,
+  },
+
+  turrets: {
+    /** Sentry turrets placed in surface corridors and in the Upper Mine's Elevator Station. */
+    surface: 4,
+    elevatorStation: 2,
+    health: 150,
+    skill: 0.7,
+    /** Squads reload a turret below this share of its magazine, spending this many spare rifle magazines. */
+    reloadBelow: 0.5,
+    reloadMags: 2,
+    reloadSeconds: 4,
+  },
+
+  flamethrower: {
+    /** Flamethrowers carried (by soldiers in the first squads). */
+    count: 1,
+    /** Myrr within this many tiles of the target are also burned. */
+    splash: 1.5,
+    /** Resin is burned away this many tiles around the target. */
+    burnRadius: 1,
+  },
+
+  charges: {
+    /** Mining charges, one each for the first squads. */
+    count: 2,
+    /** Danger scent on Level 2 that makes a squad blast the tunnel nearby. */
+    trigger: 15,
+    /** Seconds to set a charge. */
+    setSeconds: 15,
+    /** Tunnel tiles within this many tiles of the charge collapse into rock. */
+    radius: 1,
+  },
+
+  sensors: {
+    /** Motion sensors near the Upper Mine's vent shafts and ladders. */
+    count: 5,
+    /** A Myrr moving within this many tiles sets one off. */
+    range: 6,
+    /** A sensor can alert again after this many seconds. */
+    cooldownSeconds: 20,
   },
 
   barriers: {

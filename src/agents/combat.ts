@@ -7,6 +7,8 @@ import type { Agent } from './agent.ts'
 import { canSee } from './perception.ts'
 import { setMode } from './civilian.ts'
 import type { HiveContext } from './myrr.ts'
+import type { PowerState } from '../systems/power.ts'
+import { markChanged } from '../systems/resin.ts'
 
 export type WeaponKind = keyof typeof CONFIG.combat.weapons
 
@@ -33,12 +35,15 @@ export interface Shot {
   y1: number
   hit: boolean
   ranged: boolean
+  /** A flamethrower burst (drawn orange). */
+  flame?: boolean
   tick: number
 }
 
 /** Everything combat needs: the hive context plus the shot list and squads. */
 export interface CombatContext extends HiveContext {
   shots: Shot[]
+  power: PowerState
   /** Called when a soldier is hurt or killed (squad morale). */
   onSoldierHurt?: (soldier: Agent, killed: boolean) => void
   /** Called when a Myrr is hurt but not killed. */
@@ -103,9 +108,31 @@ export function tryAttack(attacker: Agent, target: Agent, ctx: CombatContext): b
     w.inMag--
     makeNoise(ctx.noises, 'gunshot', attacker.levelIndex, attacker.x, attacker.y, ctx.tick, attacker.id)
   }
-  ctx.shots.push({ levelIndex: attacker.levelIndex, x0: attacker.x, y0: attacker.y, x1: target.x, y1: target.y, hit, ranged: isRanged(w), tick: ctx.tick })
+  ctx.shots.push({ levelIndex: attacker.levelIndex, x0: attacker.x, y0: attacker.y, x1: target.x, y1: target.y, hit, ranged: isRanged(w), flame: w.kind === 'flamethrower', tick: ctx.tick })
   if (hit) damage(target, spec.damage, attacker, ctx)
+  if (w.kind === 'flamethrower') burn(attacker, target, spec.damage, ctx)
   return true
+}
+
+/** Flamethrower: scorch every other Myrr near the target, and burn away resin there. */
+function burn(attacker: Agent, target: Agent, dmg: number, ctx: CombatContext): void {
+  const F = CONFIG.flamethrower
+  for (const a of ctx.agents) {
+    if (a === target || a.dead || a.side !== 'myrr' || a.levelIndex !== target.levelIndex) continue
+    if (Math.hypot(a.x - target.x, a.y - target.y) <= F.splash) damage(a, dmg * 0.6, attacker, ctx)
+  }
+  const level = ctx.world.levels[target.levelIndex]
+  const cx = Math.floor(target.x), cy = Math.floor(target.y)
+  for (let dy = -F.burnRadius; dy <= F.burnRadius; dy++)
+    for (let dx = -F.burnRadius; dx <= F.burnRadius; dx++) {
+      const x = cx + dx, y = cy + dy
+      if (x < 0 || y < 0 || x >= level.width || y >= level.height) continue
+      const i = y * level.width + x
+      if (!level.resin[i]) continue
+      level.resin[i] = 0
+      ctx.hive.resinTiles--
+      markChanged(level, i)
+    }
 }
 
 export function damage(target: Agent, amount: number, source: Agent | null, ctx: CombatContext): void {

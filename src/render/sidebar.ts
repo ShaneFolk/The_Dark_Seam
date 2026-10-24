@@ -6,6 +6,7 @@ import type { ViewState } from './view.ts'
 import { formatClock } from '../core/clock.ts'
 import { CONFIG } from '../config.ts'
 import { totalStock } from '../systems/supplies.ts'
+import { hasPower } from '../systems/power.ts'
 
 function stockLine(sim: SimState): string {
   const t = totalStock(sim.supplies)
@@ -64,8 +65,8 @@ export class Sidebar {
     const hive = `Hive: ${takers} Takers · ${spinebacks} Spinebacks · ${broodlings} Broodlings · ${sim.hive.captives.length} captives · ${cocoons} cocoons · ${sim.hive.hatched} hatched · ${sim.hive.resinTiles} resin tiles · ${sim.hive.tunnelsDug} tunnels dug${sim.hive.dig ? ' (digging now)' : ''}`
       + `
 Colony: ${civilians} civilians · ${soldiers} soldiers · ${infected} infected walking around`
-      + `
-Supplies: ${stockLine(sim)}`
+      + `\nPower: ${hasPower(sim.power) ? 'on' : 'OFF'} (${sim.power.generators.map((g) => `${g.room.room.name} ${Math.round(g.health)}`).join(', ')}) · sensor alerts ${sim.sensorAlerts}`
+      + `\nSupplies: ${stockLine(sim)}`
       + sim.medbays.map((b) => `
 Med bay: ${b.beds.length}/${CONFIG.medbay.beds} beds`).join('')
       + sim.squads.map((s) => `

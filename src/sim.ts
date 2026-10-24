@@ -18,6 +18,9 @@ import { createPheromones, decayPheromones, type Pheromones } from './systems/ph
 import { findRooms, randomTileIn, roomTiles, type RoomRef } from './world/rooms.ts'
 import { createSupplies, type Supplies } from './systems/supplies.ts'
 import { createMedBays, updateMedBays, type MedBay } from './systems/medbay.ts'
+import { createPower, hasPower, type PowerState } from './systems/power.ts'
+import { createSensors, updateSensors, type Sensor } from './systems/sensors.ts'
+import { createTurret, turretSpots, updateTurret } from './agents/turret.ts'
 import type { RoomType } from './world/level.ts'
 import type { PathNode } from './world/pathfinding.ts'
 
@@ -35,6 +38,10 @@ export interface SimState {
   shots: Shot[]
   supplies: Supplies
   medbays: MedBay[]
+  power: PowerState
+  sensors: Sensor[]
+  /** Motion sensor alerts so far. */
+  sensorAlerts: number
 }
 
 export function createSim(seed: number): SimState {
@@ -52,12 +59,17 @@ export function createSim(seed: number): SimState {
     shots: [],
     supplies: new Map(),
     medbays: createMedBays(world),
+    power: createPower(world),
+    sensors: [],
+    sensorAlerts: 0,
   }
   sim.supplies = createSupplies(world, sim.rng)
+  sim.sensors = createSensors(world, sim.rng)
   seedHiveResin(world)
   sim.hive.resinTiles = countResin(world)
   spawnCivilians(sim)
   spawnSoldiers(sim)
+  for (const at of turretSpots(world, sim.rng)) sim.agents.push(createTurret(sim.agents.length, at))
   spawnHive(sim)
   spawnMyrrWanderers(sim)
   return sim
@@ -81,6 +93,7 @@ export function step(sim: SimState): void {
     noises: sim.noises,
     supplies: sim.supplies,
     medbays: sim.medbays,
+    power: sim.power,
     pheromones: sim.pheromones,
     hive: sim.hive,
     shots: sim.shots,
@@ -90,7 +103,8 @@ export function step(sim: SimState): void {
 
   movementHooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
   updateInfections(ctx)
-  updateMedBays(sim.medbays, sim.agents, sim.world)
+  updateMedBays(sim.medbays, sim.agents, sim.world, hasPower(sim.power))
+  sim.sensorAlerts += updateSensors(sim.sensors, sim.agents, sim.noises, sim.tick)
   updateSquads(sim.squads, ctx)
   planDigging(ctx)
 
@@ -100,6 +114,7 @@ export function step(sim: SimState): void {
     const agent = sim.agents[i]
     if (agent.dead) continue
     if (agent.weapon) tickWeapon(agent.weapon) // cooldowns and reloads, for everyone
+    if (agent.kind === 'turret') { updateTurret(agent, ctx); continue }
     if (agent.civ) {
       updateCivilian(agent, ctx)
       if (agent.soldier && !agent.dead && agent.civ.mode === 'routine') updateSoldier(agent, sim.squads, ctx)
@@ -122,7 +137,7 @@ export function step(sim: SimState): void {
 export function levelActivity(sim: SimState, levelIndex: number): { humans: number; myrr: number } {
   let humans = 0, myrr = 0
   for (const a of sim.agents) {
-    if (a.dead || a.levelIndex !== levelIndex || a.civ?.mode === 'cocooned') continue
+    if (a.dead || a.levelIndex !== levelIndex || a.civ?.mode === 'cocooned' || a.kind === 'turret') continue
     if (a.side === 'human') humans++
     else myrr++
   }
@@ -164,6 +179,7 @@ function spawnSoldiers(sim: SimState): void {
       sim.squads[squadId] = {
         id: squadId, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
         lastContactTick: 0, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
+        charges: squadId < CONFIG.charges.count ? 1 : 0,
       }
     }
     const isMedic = n % squadSize === squadSize - 1
@@ -174,7 +190,9 @@ function spawnSoldiers(sim: SimState): void {
       squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, targetId: -1,
       stabilizers: isMedic ? CONFIG.soldiers.stabilizers : 0, patientId: -1, workTicks: 0,
     }
-    agent.weapon = makeWeapon(isMedic ? 'pistol' : 'rifle', isMedic ? CONFIG.combat.skill.medic : CONFIG.combat.skill.soldier)
+    // The second soldier of the first squads carries a flamethrower instead of a rifle.
+    const flamer = !isMedic && n % squadSize === 1 && squadId < CONFIG.flamethrower.count
+    agent.weapon = makeWeapon(isMedic ? 'pistol' : flamer ? 'flamethrower' : 'rifle', isMedic ? CONFIG.combat.skill.medic : CONFIG.combat.skill.soldier)
     sim.squads[squadId].members.push(agent.id)
     sim.agents.push(agent)
   }

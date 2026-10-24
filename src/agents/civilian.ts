@@ -21,11 +21,12 @@ import { roomsWith, stockIn, take, type Supplies } from '../systems/supplies.ts'
 import { medBayFor, needsMedBay, type MedBay } from '../systems/medbay.ts'
 import { buildSeconds, putBarrier, roomOpenings, type BarrierKind } from '../systems/barriers.ts'
 import { Tile } from '../world/tiles.ts'
+import { damagedGenerators, humanSight, type Generator } from '../systems/power.ts'
 import { makeWeapon } from './combat.ts'
 
 export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier'
 /** 'treat' = heading to or staying in the med bay (hurt, or knows they're infected). */
-export type Activity = 'eat' | 'work' | 'free' | 'sleep' | 'treat'
+export type Activity = 'eat' | 'work' | 'free' | 'sleep' | 'treat' | 'repair'
 /**
  * `paralyzed` = stung, can't act until it wears off; `captured` = being carried by a Taker;
  * `captive` = held in the hive waiting for the Brood Mother; `cocooned` = injected,
@@ -149,6 +150,8 @@ export function roomFor(civ: CivilianData, activity: Activity, levelIndex: numbe
     }
     case 'treat':
       return findRooms(world, ['medbay'])[0] ?? civ.home
+    case 'repair':
+      return findRooms(world, ['generator'])[0] ?? civ.work
   }
 }
 
@@ -196,11 +199,17 @@ export function updateCivilian(agent: Agent, ctx: CivilianContext): void {
 
 function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   // Hurt, or knowingly infected: the med bay comes before the schedule.
+  // Techs drop everything to fix a damaged generator.
   const medbay = needsMedBay(agent) ? medBayFor(ctx.medbays) : null
-  const activity: Activity = medbay ? 'treat' : activityAt(civ, ctx.tick)
+  const generator = !medbay && civ.job === 'tech' ? damagedGenerators(ctx.power)[0] ?? null : null
+  const activity: Activity = medbay ? 'treat' : generator ? 'repair' : activityAt(civ, ctx.tick)
+  if (generator && Math.hypot(agent.x - (generator.at.x + 0.5), agent.y - (generator.at.y + 0.5)) <= 1.6 && agent.levelIndex === generator.at.levelIndex) {
+    repair(agent, generator)
+    return
+  }
   if (activity !== civ.activity || !civ.target) {
     civ.activity = activity
-    civ.target = medbay ?? roomFor(civ, activity, agent.levelIndex, ctx.world, ctx.rng)
+    civ.target = medbay ?? generator?.room ?? roomFor(civ, activity, agent.levelIndex, ctx.world, ctx.rng)
     agent.path = []
     agent.state = { name: 'idle', ticksLeft: 0 }
   }
@@ -213,7 +222,9 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
 
   // Not there yet: head for the target room. There already: move to another spot (unless asleep).
   const here = roomAt(ctx.world, tileOf(agent))
-  if (!sameRoom(here, civ.target) || (civ.activity !== 'sleep' && civ.activity !== 'treat')) {
+  if (generator) {
+    if (!walkTo(agent, ctx, generator.at)) rest(agent, ctx.rng, false)
+  } else if (!sameRoom(here, civ.target) || (civ.activity !== 'sleep' && civ.activity !== 'treat')) {
     if (!walkTo(agent, ctx, randomTileIn(ctx.world, civ.target!, ctx.rng))) rest(agent, ctx.rng, false)
   } else {
     rest(agent, ctx.rng, true)
@@ -280,7 +291,7 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   for (const other of ctx.agents) {
     if (other === agent || other.levelIndex !== agent.levelIndex) continue
     if (other.side === 'myrr') {
-      if (!canSee(agent, other, level)) continue
+      if (!canSee(agent, other, level, humanSight(ctx.power, agent.levelIndex))) continue
       const dist = Math.hypot(other.x - agent.x, other.y - agent.y)
       sightGain += F.sight * (1 - (0.5 * dist) / CONFIG.perception.sightRange)
       civ.threat = { levelIndex: other.levelIndex, x: other.x, y: other.y }
@@ -324,6 +335,13 @@ export function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
     agent.path = []
     agent.state = { name: 'idle', ticksLeft: 0 }
   }
+}
+
+/** Work on a damaged generator. */
+function repair(agent: Agent, gen: Generator): void {
+  agent.path = []
+  agent.state = { name: 'idle', ticksLeft: 0 }
+  gen.health = Math.min(gen.maxHealth, gen.health + CONFIG.power.repairPerSecond / TPS)
 }
 
 // ---------------------------------------------------------------- fortifying

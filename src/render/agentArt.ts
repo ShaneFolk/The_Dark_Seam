@@ -58,6 +58,21 @@ export const AGENT_ART: Record<AgentKind, AgentDraw> = {
     ctx.fillRect(cx - tile * 0.05, cy - tile * 0.2, tile * 0.1, tile * 0.4)
     ctx.fillRect(cx - tile * 0.2, cy - tile * 0.05, tile * 0.4, tile * 0.1)
   },
+  turret: (ctx, cx, cy, tile, agent) => {
+    const s = tile * 0.7
+    ctx.fillStyle = '#6b7685'
+    ctx.fillRect(cx - s / 2, cy - s / 2, s, s)
+    ctx.fillStyle = '#20252b'
+    ctx.beginPath()
+    ctx.arc(cx, cy, s * 0.28, 0, Math.PI * 2)
+    ctx.fill()
+    // Ammo bar underneath.
+    const w = agent.weapon
+    if (w) {
+      ctx.fillStyle = '#ffd24a'
+      ctx.fillRect(cx - s / 2, cy + s / 2 + 1, s * (w.inMag / 120), Math.max(1, tile * 0.08))
+    }
+  },
   spineback: (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.42, '#8f1d1d', '#ffcfb8', tile),
   broodling: (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.2, '#e6d3b0', '#6e5a3c', tile),
   taker: (ctx, cx, cy, tile, agent) => {

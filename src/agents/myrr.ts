@@ -25,7 +25,7 @@ import { isFree, setMode } from './civilian.ts'
 import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 
 export type Task =
-  | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' // Takers
+  | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
   | 'inject' // Brood Mother
   | 'grow' // Broodlings
   | 'guard' | 'respond' // Spinebacks
@@ -96,13 +96,19 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
     return
   }
 
-  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig') {
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage') {
     lookForPrey(agent, m, ctx)
   }
 
   switch (m.task) {
     case 'rest': {
       if (--m.ticksLeft > 0) return
+      // Strategic target: once humans have shown they fight back, knock out the power.
+      const working = ctx.power.generators.filter((g) => g.health > 0)
+      if (working.length && ctx.hive.losses.taker >= CONFIG.power.sabotageAfterLosses && ctx.rng.chance(CONFIG.power.sabotageChance)) {
+        const gen = ctx.rng.pick(working)
+        if (goTo(agent, ctx, gen.at)) { m.task = 'sabotage'; m.targetId = ctx.power.generators.indexOf(gen); return }
+      }
       if (ctx.hive.resinTiles < CONFIG.resin.maxTiles && ctx.rng.chance(H.resinTaskChance)) {
         const spot = resinFrontier(ctx.world, agent.levelIndex, ctx.rng)
         if (spot && goTo(agent, ctx, spot)) { m.task = 'spread'; return }
@@ -216,6 +222,22 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       ctx.hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS)
       ctx.hive.tunnelsDug++
       return rest(agent, m, ctx)
+    }
+
+    case 'sabotage': {
+      const gen = ctx.power.generators[m.targetId]
+      if (!gen || gen.health <= 0) { m.targetId = -1; return goHome(agent, m, ctx) }
+      const close = agent.levelIndex === gen.at.levelIndex && Math.hypot(agent.x - (gen.at.x + 0.5), agent.y - (gen.at.y + 0.5)) <= 1.6
+      if (!close) {
+        if (agent.state.name === 'moving' && !followPath(agent, ctx.world)) return
+        if (!close && !goTo(agent, ctx, gen.at)) { m.targetId = -1; return goHome(agent, m, ctx) }
+        return
+      }
+      agent.path = []
+      agent.state = { name: 'idle', ticksLeft: 0 }
+      if (ctx.tick % (2 * TPS) === 0) makeNoise(ctx.noises, 'smash', agent.levelIndex, agent.x, agent.y, ctx.tick, agent.id)
+      gen.health = Math.max(0, gen.health - CONFIG.power.sabotageDps / TPS)
+      return
     }
 
     case 'coat': {
@@ -417,6 +439,7 @@ function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
 export function takerHurt(agent: Agent, source: Agent | null, ctx: HiveContext): void {
   const m = agent.myrr!
   if (m.role !== 'taker' || m.task === 'carry' || m.task === 'return' || m.task === 'dig') return
+  if (m.task === 'sabotage' && agent.health > agent.maxHealth * 0.4) return // determined
   const shot = !!source?.weapon && isRanged(source.weapon)
   if (!shot && agent.health > agent.maxHealth * 0.4) return
   m.targetId = -1

@@ -8,6 +8,7 @@ import { BARRIER_ART, TILE_ART, drawResin, floorColor, type FloorKind } from './
 import { AGENT_ART } from './agentArt.ts'
 import { describeAgent } from '../agents/describe.ts'
 import { formatClock } from '../core/clock.ts'
+import { isLit } from '../systems/power.ts'
 import { describeTile } from '../world/loadWorld.ts'
 import { otherEnd } from '../world/links.ts'
 import type { Camera } from './camera.ts'
@@ -66,7 +67,13 @@ export class Renderer {
     this.drawLevel(level, ox, oy, tile)
     this.drawLinkMarkers(level, ox, oy, tile)
     if (view.showPheromones) this.drawPheromones(sim, view.levelIndex, ox, oy, tile)
+    this.drawSensors(sim, view.levelIndex, ox, oy, tile)
     this.drawAgents(sim, view.levelIndex, ox, oy, tile)
+    // Darkness: dim the whole level when it has no light.
+    if (!isLit(sim.power, view.levelIndex)) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
+      ctx.fillRect(ox, oy, level.width * tile, level.height * tile)
+    }
     this.drawRoomLabels(level, ox, oy, tile)
     const hovered = this.hoveredTile(level, camera, view, w, h)
     if (hovered) {
@@ -131,6 +138,16 @@ export class Renderer {
     if (level.barrierKind[i]) BARRIER_ART[level.barrierKind[i]]?.(ctx, x * size, y * size, size, '')
   }
 
+  /** Motion sensors: small blue dots, red for a moment after they go off. */
+  private drawSensors(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
+    const { ctx } = this
+    for (const s of sim.sensors) {
+      if (s.levelIndex !== levelIndex) continue
+      ctx.fillStyle = sim.tick - s.lastAlert < 40 ? '#ff4d4d' : '#4da6ff'
+      ctx.fillRect(ox + s.x * tile - tile * 0.15, oy + s.y * tile - tile * 0.15, tile * 0.3, tile * 0.3)
+    }
+  }
+
   /** Scent as coloured squares, brighter where stronger. */
   private drawPheromones(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
     const w = sim.world.levels[levelIndex].width
@@ -173,7 +190,7 @@ export class Renderer {
     ctx.lineWidth = Math.max(1, tile * 0.06)
     for (const s of sim.shots) {
       if (s.levelIndex !== levelIndex || !s.ranged) continue
-      ctx.strokeStyle = s.hit ? 'rgba(255, 230, 120, 0.9)' : 'rgba(255, 230, 120, 0.35)'
+      ctx.strokeStyle = s.flame ? 'rgba(255, 120, 30, 0.9)' : s.hit ? 'rgba(255, 230, 120, 0.9)' : 'rgba(255, 230, 120, 0.35)'
       ctx.beginPath()
       ctx.moveTo(ox + s.x0 * tile, oy + s.y0 * tile)
       ctx.lineTo(ox + s.x1 * tile, oy + s.y1 * tile)
