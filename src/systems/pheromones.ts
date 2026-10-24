@@ -1,26 +1,28 @@
 // Pheromones: scent maps the hive uses to share what it knows.
 //
 //   trail  laid where prey is seen or caught and along the route home; scouts follow it
-//   alarm  laid where a Myrr is hurt or killed; Spinebacks answer it
+//   alarm  laid where a Myrr is hurt or killed; Spinebacks answer it (fades fast)
+//   danger laid where Myrr are shot or killed; Takers route around it (fades slowly)
 //
-// Each kind fades on its own clock. (Danger scent comes in Phase 6, Round C.)
+// Each kind fades on its own clock.
 
 import { CONFIG } from '../config.ts'
 import type { World } from '../world/loadWorld.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 
-export type ScentKind = 'trail' | 'alarm'
+export type ScentKind = 'trail' | 'alarm' | 'danger'
 
 export type Pheromones = Record<ScentKind, Float32Array[]>
 
 const HALF_LIFE: Record<ScentKind, number> = {
   trail: CONFIG.pheromones.halfLifeSeconds,
   alarm: CONFIG.pheromones.alarmHalfLifeSeconds,
+  danger: CONFIG.pheromones.dangerHalfLifeSeconds,
 }
 
 export function createPheromones(world: World): Pheromones {
   const maps = () => world.levels.map((l) => new Float32Array(l.width * l.height))
-  return { trail: maps(), alarm: maps() }
+  return { trail: maps(), alarm: maps(), danger: maps() }
 }
 
 export function deposit(ph: Pheromones, kind: ScentKind, world: World, levelIndex: number, x: number, y: number, amount: number): void {
@@ -28,6 +30,15 @@ export function deposit(ph: Pheromones, kind: ScentKind, world: World, levelInde
   const tx = Math.floor(x), ty = Math.floor(y)
   if (tx < 0 || ty < 0 || tx >= level.width || ty >= level.height) return
   ph[kind][levelIndex][ty * level.width + tx] += amount
+}
+
+/** Deposit over a small square around (x, y), strongest in the middle. */
+export function depositSpread(ph: Pheromones, kind: ScentKind, world: World, levelIndex: number, x: number, y: number, amount: number, radius: number): void {
+  for (let dy = -radius; dy <= radius; dy++)
+    for (let dx = -radius; dx <= radius; dx++) {
+      const falloff = 1 / (1 + Math.max(Math.abs(dx), Math.abs(dy)))
+      deposit(ph, kind, world, levelIndex, x + dx, y + dy, amount * falloff)
+    }
 }
 
 export function depositTrail(ph: Pheromones, world: World, levelIndex: number, x: number, y: number, amount: number): void {

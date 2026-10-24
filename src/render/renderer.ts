@@ -134,10 +134,11 @@ export class Renderer {
   private drawPheromones(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
     const w = sim.world.levels[levelIndex].width
     const { ctx } = this
-    // Green = trail (prey), red = alarm.
+    // Green = trail (prey), red = alarm, yellow = danger.
     const layers: [Float32Array, string][] = [
       [sim.pheromones.trail[levelIndex], '90, 230, 120'],
       [sim.pheromones.alarm[levelIndex], '255, 70, 60'],
+      [sim.pheromones.danger[levelIndex], '255, 190, 40'],
     ]
     for (const [map, rgb] of layers) {
       for (let i = 0; i < map.length; i++) {

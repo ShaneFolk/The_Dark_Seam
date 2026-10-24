@@ -57,7 +57,17 @@ let buffers: SearchBuffers | null = null
  * Cheapest path from `from` to `to` for the given side, or null if there is none.
  * The path starts with the first step after `from` and ends at `to`.
  */
-export function findPath(world: World, from: PathNode, to: PathNode, side: Side): PathNode[] | null {
+/**
+ * Optional extra cost: `avoid` is a map per level (e.g. danger scent); each unit
+ * on a tile adds `avoidCost` seconds to stepping onto it. Used by Takers to steer
+ * around kill zones, which is what makes them take the long way round (flank).
+ */
+export interface PathOptions {
+  avoid?: Float32Array[]
+  avoidCost?: number
+}
+
+export function findPath(world: World, from: PathNode, to: PathNode, side: Side, opts: PathOptions = {}): PathNode[] | null {
   const { levels } = world
   const w = levels[0].width, h = levels[0].height
   const perLevel = w * h
@@ -74,6 +84,8 @@ export function findPath(world: World, from: PathNode, to: PathNode, side: Side)
   const baseSpeed = side === 'human' ? CONFIG.movement.humanSpeed : CONFIG.movement.myrrSpeed
   const maxSpeed = baseSpeed * (side === 'myrr' ? CONFIG.movement.resinSpeedMultiplier : 1)
   const minLinkSeconds = Math.min(...Object.values(CONFIG.movement.linkSeconds))
+  const avoid = opts.avoid
+  const avoidCost = opts.avoidCost ?? 0
 
   // Estimated seconds to the goal: straight-line (octile) distance at top speed,
   // plus the quickest possible link for each level to change. Never too high.
@@ -108,7 +120,8 @@ export function findPath(world: World, from: PathNode, to: PathNode, side: Side)
       if (dx && dy && (!canWalk(level, x + dx, y, side) || !canWalk(level, x, y + dy, side))) continue
       const ni = ny * w + nx
       const there = speedFactor(level, ni, side)
-      const step = dist / (baseSpeed * (here + there) / 2)
+      let step = dist / (baseSpeed * (here + there) / 2)
+      if (avoid) step += avoid[li][ni] * avoidCost
       relax(node, li * perLevel + ni, cost[node] + step, li, nx, ny)
     }
 

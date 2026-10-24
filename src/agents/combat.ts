@@ -2,7 +2,7 @@
 
 import { CONFIG } from '../config.ts'
 import { makeNoise } from '../systems/noise.ts'
-import { deposit } from '../systems/pheromones.ts'
+import { deposit, depositSpread } from '../systems/pheromones.ts'
 import type { Agent } from './agent.ts'
 import { canSee } from './perception.ts'
 import { setMode } from './civilian.ts'
@@ -120,6 +120,9 @@ export function damage(target: Agent, amount: number, source: Agent | null, ctx:
   if (target.myrr) {
     const amount = target.health <= 0 ? CONFIG.pheromones.alarmOnDeath : CONFIG.pheromones.alarmOnHurt
     deposit(ctx.pheromones, 'alarm', ctx.world, target.levelIndex, target.x, target.y, amount)
+    // Danger marks the spot as a place Myrr get hurt, for the hive to avoid later.
+    const danger = target.health <= 0 ? CONFIG.pheromones.dangerOnDeath : CONFIG.pheromones.dangerOnHurt
+    depositSpread(ctx.pheromones, 'danger', ctx.world, target.levelIndex, target.x, target.y, danger, CONFIG.pheromones.dangerSpread)
   }
   if (target.health <= 0) kill(target, ctx)
   else if (target.myrr) ctx.onMyrrHurt?.(target, source)
