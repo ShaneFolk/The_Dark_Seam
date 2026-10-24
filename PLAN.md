@@ -213,9 +213,9 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Resin spread
 
 ### Phase 5 — The Lifecycle
-- [ ] Sting + paralysis
-- [ ] Injection, cocoons, incubation timer
-- [ ] Broodlings hatch and grow by hive needs
+- [x] Sting + paralysis
+- [x] Injection, cocoons, incubation timer
+- [x] Broodlings hatch and grow by hive needs
 
 ### Phase 6 — Combat
 - [ ] Health, weapons, skill (civilian vs. soldier), ammo
