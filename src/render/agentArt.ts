@@ -23,15 +23,32 @@ export const CIVILIAN_MODE_COLORS: Record<Mode, string> = {
   hide: '#8fa3b8',
   flee: '#ffb347',
   panic: '#ff5ce1',
+  paralyzed: '#e8f6ff',
   captured: '#f2f2f2',
   captive: '#b18bd1',
+  cocooned: '#b18bd1',
+  dead: '#000000',
 }
 
 export const AGENT_ART: Record<AgentKind, AgentDraw> = {
   civilian: (ctx, cx, cy, tile, agent) => {
     const mode = agent.civ?.mode ?? 'routine'
+    if (mode === 'dead') return
+    if (mode === 'cocooned') {
+      // An upright purple oval stuck to the hive wall.
+      ctx.beginPath()
+      ctx.ellipse(cx, cy, tile * 0.32, tile * 0.48, 0, 0, Math.PI * 2)
+      ctx.fillStyle = '#7d5a9e'
+      ctx.fill()
+      ctx.lineWidth = Math.max(1, tile * 0.08)
+      ctx.strokeStyle = '#2a1838'
+      ctx.stroke()
+      return
+    }
     dot(ctx, cx, cy, tile * 0.32, CIVILIAN_MODE_COLORS[mode], '#0b2540', tile)
   },
+  spineback: (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.42, '#8f1d1d', '#ffcfb8', tile),
+  broodling: (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.2, '#e6d3b0', '#6e5a3c', tile),
   taker: (ctx, cx, cy, tile, agent) => {
     dot(ctx, cx, cy, tile * 0.36, '#e0533d', '#3a0d06', tile)
     // A white ring while carrying someone.

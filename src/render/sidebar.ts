@@ -43,7 +43,13 @@ export class Sidebar {
   update(sim: SimState, view: ViewState): void {
     const time = formatClock(sim.tick)
     if (this.clock.textContent !== time) this.clock.textContent = time
-    const hive = `Hive: ${sim.hive.captives.length} captives · ${sim.hive.resinTiles} resin tiles`
+    let takers = 0, spinebacks = 0, broodlings = 0
+    for (const a of sim.agents) {
+      if (a.kind === 'taker') takers++
+      else if (a.kind === 'spineback') spinebacks++
+      else if (a.kind === 'broodling') broodlings++
+    }
+    const hive = `Hive: ${takers} Takers · ${spinebacks} Spinebacks · ${broodlings} Broodlings · ${sim.hive.captives.length} captives · ${sim.hive.cocoons.length} cocoons · ${sim.hive.hatched} hatched · ${sim.hive.resinTiles} resin tiles`
     if (this.hiveInfo.textContent !== hive) this.hiveInfo.textContent = hive
     const counts = sim.world.levels.map((_, i) => levelActivity(sim, i))
     const key = `${view.levelIndex}|${counts.map((c) => `${c.humans},${c.myrr}`).join('|')}`

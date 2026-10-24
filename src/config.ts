@@ -38,6 +38,12 @@ export const CONFIG = {
     startHour: 6,
   },
 
+  health: {
+    human: 100,
+    /** Health regained per second while calm (routine). */
+    regenPerSecond: 0.2,
+  },
+
   civilians: {
     count: 50,
     /** Hour each shift's day starts. Each civilian is on one shift. */
@@ -113,6 +119,8 @@ export const CONFIG = {
 
   hive: {
     takers: 6,
+    /** Spinebacks at the start. They guard the Brood Mother (combat comes in Phase 6). */
+    spinebacks: 2,
     /** How far Myrr see, in tiles (same blockers as for humans). */
     sightRange: 10,
     /** A human counts as "alone" with no other free human within this many tiles. */
@@ -120,7 +128,12 @@ export const CONFIG = {
     /** Takers back off from a human with this many or more others nearby. */
     groupSize: 2,
     /** Seconds of contact needed to grab a lone human. */
-    grabSeconds: 0.75,
+    /** Damage per second a Taker's claws do to a human it is in contact with. */
+    clawDamagePerSecond: 20,
+    /** A human at or below this health can be stung. */
+    stingHealth: 40,
+    /** How long a sting paralyses, in seconds (if nobody carries them off). */
+    paralysisSeconds: 60,
     /** Within this many tiles of its target a Taker pounces, moving faster. */
     pounceRange: 3,
     pounceMultiplier: 1.3,
@@ -144,6 +157,21 @@ export const CONFIG = {
     repathSeconds: 1,
     /** Chance a rested Taker spreads resin instead of scouting. */
     resinTaskChance: 0.3,
+  },
+
+  lifecycle: {
+    /** Seconds the Brood Mother needs to inject one captive. */
+    injectSeconds: 6,
+    /** Seconds from injection until the Broodling bursts out (about 8 colony hours). */
+    incubationSeconds: 240,
+    /** Seconds a Broodling grows in the hive before becoming a Taker or Spineback. */
+    growSeconds: 120,
+    /** The hive aims for this share of Spinebacks among its fighters and workers. */
+    spinebackShare: 0.3,
+    /** Each recent Spineback loss raises that share by this much (Phase 6 adds losses). */
+    lossBias: 0.1,
+    /** Spinebacks stay within this many tiles of the Brood Mother. */
+    guardRadius: 6,
   },
 
   pheromones: {

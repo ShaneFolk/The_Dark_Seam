@@ -5,7 +5,7 @@ import type { CivilianData } from './civilian.ts'
 import type { MyrrData } from './myrr.ts'
 
 /** What an agent looks like. The renderer maps each kind to a drawing. */
-export type AgentKind = 'civilian' | 'taker' | 'brood-mother' | 'wanderer-myrr'
+export type AgentKind = 'civilian' | 'taker' | 'spineback' | 'broodling' | 'brood-mother' | 'wanderer-myrr'
 
 export type AgentState =
   | { name: 'idle'; ticksLeft: number }
@@ -26,6 +26,8 @@ export interface Agent {
   speed: number
   /** Normal walking speed; `speed` changes when running. */
   baseSpeed: number
+  health: number
+  maxHealth: number
   /** Remaining steps of the current path (first = next step). */
   path: PathNode[]
   state: AgentState
@@ -35,7 +37,7 @@ export interface Agent {
   myrr?: MyrrData
 }
 
-export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNode, speed: number): Agent {
+export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNode, speed: number, health = 100): Agent {
   return {
     id,
     kind,
@@ -45,6 +47,8 @@ export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNod
     y: at.y + 0.5,
     speed,
     baseSpeed: speed,
+    health,
+    maxHealth: health,
     path: [],
     state: { name: 'idle', ticksLeft: 0 },
   }

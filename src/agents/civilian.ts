@@ -19,8 +19,12 @@ import { canHear, canSee } from './perception.ts'
 
 export type Job = keyof typeof CONFIG.civilians.jobs
 export type Activity = 'eat' | 'work' | 'free' | 'sleep'
-/** `captured` = being carried by a Taker; `captive` = held in the hive. */
-export type Mode = 'routine' | 'flee' | 'hide' | 'panic' | 'captured' | 'captive'
+/**
+ * `paralyzed` = stung, can't act until it wears off; `captured` = being carried by a Taker;
+ * `captive` = held in the hive waiting for the Brood Mother; `cocooned` = injected,
+ * incubating; `dead` = a Broodling burst out.
+ */
+export type Mode = 'routine' | 'flee' | 'hide' | 'panic' | 'paralyzed' | 'captured' | 'captive' | 'cocooned' | 'dead'
 
 export interface CivilianData {
   job: Job
@@ -42,6 +46,8 @@ export interface CivilianData {
   lastSeenTick: number
   /** Next tick a panicking civilian screams. */
   nextScreamTick: number
+  /** Tick a sting wears off (only matters if nobody carries them off). */
+  paralyzedUntilTick: number
 }
 
 /** What the world looks like to a civilian this tick. */
@@ -77,6 +83,7 @@ export function createCivilianData(world: World, rng: Rng): CivilianData | null 
     threat: null,
     lastSeenTick: -1e9,
     nextScreamTick: 0,
+    paralyzedUntilTick: 0,
   }
 }
 
@@ -118,7 +125,17 @@ export function roomFor(civ: CivilianData, activity: Activity, levelIndex: numbe
 
 export function updateCivilian(agent: Agent, ctx: CivilianContext): void {
   const civ = agent.civ!
-  if (civ.mode === 'captured' || civ.mode === 'captive') return // the hive moves them now
+  if (civ.mode === 'paralyzed') {
+    if (ctx.tick < civ.paralyzedUntilTick) return
+    // The sting wore off and nobody took them: terrified, they get away and hide.
+    civ.fear = Math.max(civ.fear, F.flee)
+    setMode(agent, civ, 'hide')
+    return
+  }
+  if (!isFree(agent)) return // carried, held or cocooned: the hive moves them now
+  if (civ.mode === 'routine' && agent.health < agent.maxHealth) {
+    agent.health = Math.min(agent.maxHealth, agent.health + CONFIG.health.regenPerSecond / TPS)
+  }
   // Senses run every few ticks, staggered by id so not everyone thinks on the same tick.
   if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) sense(agent, civ, ctx)
 
@@ -248,7 +265,7 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   if (next !== civ.mode) setMode(agent, civ, next)
 }
 
-function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
+export function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
   civ.mode = mode
   civ.target = null
   agent.speed = mode === 'flee' || mode === 'panic' ? agent.baseSpeed * CONFIG.civilians.runMultiplier : agent.baseSpeed
@@ -261,8 +278,9 @@ function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
 // ---------------------------------------------------------------- helpers
 
 /** A human who isn't captured or held by the hive. */
+const NOT_FREE: readonly Mode[] = ['paralyzed', 'captured', 'captive', 'cocooned', 'dead']
 export function isFree(agent: Agent): boolean {
-  return agent.side === 'human' && agent.civ?.mode !== 'captured' && agent.civ?.mode !== 'captive'
+  return agent.side === 'human' && !!agent.civ && !NOT_FREE.includes(agent.civ.mode)
 }
 
 function walkTo(agent: Agent, ctx: CivilianContext, to: PathNode): boolean {

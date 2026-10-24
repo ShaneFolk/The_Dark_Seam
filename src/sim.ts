@@ -8,6 +8,7 @@ import { createAgent, type Agent } from './agents/agent.ts'
 import { updateWanderer } from './agents/wander.ts'
 import { activityAt, createCivilianData, roomFor, updateCivilian, type CivilianContext } from './agents/civilian.ts'
 import { createMyrrData, updateTaker, type HiveContext, type HiveState } from './agents/myrr.ts'
+import { updateBroodling, updateCocoons, updateMother, updateSpineback } from './agents/lifecycle.ts'
 import { countResin, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
 import { createPheromones, decayPheromones, type Pheromones } from './systems/pheromones.ts'
@@ -35,7 +36,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], resinTiles: 0 },
+    hive: { motherId: -1, captives: [], cocoons: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0 },
   }
   seedHiveResin(world)
   sim.hive.resinTiles = countResin(world)
@@ -57,12 +58,20 @@ export function step(sim: SimState): void {
   const civCtx: CivilianContext = { world: sim.world, rng: sim.rng, tick: sim.tick, agents: sim.agents, noises: sim.noises }
   const hiveCtx: HiveContext = { ...civCtx, pheromones: sim.pheromones, hive: sim.hive }
 
-  for (const agent of sim.agents) {
+  updateCocoons(hiveCtx)
+  // Only agents that existed at the start of the tick act (new Broodlings wait a tick).
+  const count = sim.agents.length
+  for (let i = 0; i < count; i++) {
+    const agent = sim.agents[i]
     if (agent.civ) {
       updateCivilian(agent, civCtx)
       continue
     }
-    if (agent.myrr?.role === 'taker') updateTaker(agent, hiveCtx)
+    const role = agent.myrr?.role
+    if (role === 'taker') updateTaker(agent, hiveCtx)
+    else if (role === 'mother') updateMother(agent, hiveCtx)
+    else if (role === 'broodling') updateBroodling(agent, hiveCtx)
+    else if (role === 'spineback') updateSpineback(agent, hiveCtx)
     else if (agent.kind === 'wanderer-myrr') updateWanderer(agent, sim.world, sim.rng)
     // Moving Myrr skitter now and then.
     if (agent.side === 'myrr' && agent.state.name === 'moving' && (sim.tick + agent.id) % SKITTER_TICKS === 0) {
@@ -76,6 +85,7 @@ export function levelActivity(sim: SimState, levelIndex: number): { humans: numb
   let humans = 0, myrr = 0
   for (const a of sim.agents) {
     if (a.levelIndex !== levelIndex) continue
+    if (a.civ?.mode === 'dead' || a.civ?.mode === 'cocooned') continue
     if (a.side === 'human') humans++
     else myrr++
   }
@@ -116,6 +126,12 @@ function spawnHive(sim: SimState): void {
     taker.myrr = createMyrrData('taker')
     taker.myrr.ticksLeft = rng.int(1, 10 * TPS) // stagger the first trips
     sim.agents.push(taker)
+  }
+  for (let n = 0; n < CONFIG.hive.spinebacks; n++) {
+    const guard = createAgent(sim.agents.length, 'spineback', 'myrr', rng.pick(tiles), CONFIG.movement.myrrSpeed)
+    guard.myrr = createMyrrData('spineback')
+    guard.myrr.task = 'guard'
+    sim.agents.push(guard)
   }
 }
 

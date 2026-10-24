@@ -18,12 +18,16 @@ import type { Noise } from '../systems/noise.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
 import { canSee } from './perception.ts'
-import { isFree } from './civilian.ts'
+import { isFree, setMode } from './civilian.ts'
 
-export type Task = 'rest' | 'scout' | 'return' | 'hunt' | 'grab' | 'carry' | 'spread' | 'coat'
+export type Task =
+  | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' // Takers
+  | 'inject' // Brood Mother
+  | 'grow' // Broodlings
+  | 'guard' // Spinebacks
 
 export interface MyrrData {
-  role: 'taker' | 'mother'
+  role: 'taker' | 'mother' | 'broodling' | 'spineback'
   task: Task
   /** Ticks left in timed tasks (rest, grab, coat). */
   ticksLeft: number
@@ -46,8 +50,14 @@ export interface MyrrData {
 
 export interface HiveState {
   motherId: number
-  /** Humans held in the hive. */
+  /** Humans held in the hive, waiting to be injected (oldest first). */
   captives: number[]
+  /** Injected humans and when their Broodling hatches. */
+  cocoons: { agentId: number; hatchTick: number }[]
+  /** Broodlings hatched so far. */
+  hatched: number
+  /** Recent losses, used to decide what Broodlings grow into (Phase 6 fills these). */
+  losses: { taker: number; spineback: number }
   /** Tiles covered in resin, all levels. */
   resinTiles: number
 }
@@ -80,7 +90,7 @@ export function updateTaker(agent: Agent, ctx: HiveContext): void {
     return
   }
 
-  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'grab') {
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack') {
     lookForPrey(agent, m, ctx)
   }
 
@@ -124,8 +134,7 @@ export function updateTaker(agent: Agent, ctx: HiveContext): void {
       const close = target.levelIndex === agent.levelIndex && Math.hypot(target.x - agent.x, target.y - agent.y) <= H.pounceRange
       agent.speed = agent.baseSpeed * (close ? H.pounceMultiplier : 1)
       if (target.levelIndex === agent.levelIndex && Math.hypot(target.x - agent.x, target.y - agent.y) <= 1.1) {
-        m.task = 'grab'
-        m.ticksLeft = Math.round(H.grabSeconds * TPS)
+        m.task = 'attack'
         agent.path = []
         agent.state = { name: 'idle', ticksLeft: 0 }
         return
@@ -138,15 +147,23 @@ export function updateTaker(agent: Agent, ctx: HiveContext): void {
       return
     }
 
-    case 'grab': {
+    case 'attack': {
+      // Claw at the human until they are weak enough to sting.
       const target = ctx.agents[m.targetId]
       if (!target || !isFree(target) || target.levelIndex !== agent.levelIndex || Math.hypot(target.x - agent.x, target.y - agent.y) > 1.6) {
         m.task = 'hunt'
         m.repathTick = ctx.tick
         return
       }
-      if (--m.ticksLeft > 0) return
-      capture(agent, m, target, ctx)
+      target.health -= H.clawDamagePerSecond / TPS
+      const civ = target.civ!
+      civ.fear = Math.max(civ.fear, CONFIG.fear.panic)
+      civ.threat = { levelIndex: agent.levelIndex, x: agent.x, y: agent.y }
+      civ.lastSeenTick = ctx.tick
+      if (target.health <= H.stingHealth) {
+        sting(target, ctx)
+        capture(agent, m, target, ctx)
+      }
       return
     }
 
@@ -218,6 +235,15 @@ function companions(human: Agent, ctx: HiveContext): number {
     if (Math.hypot(other.x - human.x, other.y - human.y) <= H.loneRadius) n++
   }
   return n
+}
+
+/** Paralyse a weakened human. */
+export function sting(target: Agent, ctx: HiveContext): void {
+  const civ = target.civ!
+  setMode(target, civ, 'paralyzed')
+  civ.paralyzedUntilTick = ctx.tick + Math.round(H.paralysisSeconds * TPS)
+  target.path = []
+  target.state = { name: 'idle', ticksLeft: 1e9 }
 }
 
 function capture(agent: Agent, m: MyrrData, target: Agent, ctx: HiveContext): void {
