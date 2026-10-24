@@ -21,6 +21,31 @@ export const CONFIG = {
     maxRoomTiles: 700,
   },
 
+  movement: {
+    /** Walking speed in tiles per second. */
+    humanSpeed: 2.5,
+    myrrSpeed: 3.2,
+    /** Myrr move this many times faster on resin. */
+    resinSpeedMultiplier: 1.6,
+    /** Seconds to travel a link between levels. */
+    linkSeconds: { elevator: 8, ladder: 4, chute: 3, vent: 3 },
+  },
+
+  /** Test wanderers for Phase 2. Replaced by real units in later phases. */
+  wanderers: {
+    humans: 30,
+    myrr: 12,
+    /** Chance a new destination is on another level (exercises the links). */
+    otherLevelChance: 0.35,
+    /** Rest between walks, in seconds (min, max). */
+    pauseSeconds: [1, 5] as [number, number],
+  },
+
+  resin: {
+    /** Resin covers this many tiles around the hive core at the start. */
+    startRadius: 14,
+  },
+
   render: {
     /** Tile size in pixels at zoom 1. */
     tileSize: 16,
