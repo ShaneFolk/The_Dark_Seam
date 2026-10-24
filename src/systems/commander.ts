@@ -6,6 +6,8 @@
 //                  Mother (they cut cocoons free and fight whatever they meet on the way)
 //   reinforcements soldiers down to 60%: a fresh squad lands at the Landing Pad after a delay
 //   burn resin     after a squad is ambushed: squads burn resin ahead of them (unless lives are at stake)
+//   the Commander  is on the map (Command room, with a command squad); if killed or taken,
+//                  a slower, more cautious second-in-command takes over
 //   evacuation     few civilians left: a ship comes to the Landing Pad; whoever is on it leaves
 
 import { CONFIG } from '../config.ts'
@@ -41,6 +43,9 @@ export interface CommanderState {
   startCivilians: number
   /** After a squad is ambushed: squads burn resin ahead of them before advancing. */
   burnResin: boolean
+  /** The Commander on the map (-1 if none), and whether the second-in-command has taken over. */
+  commanderId: number
+  second: boolean
 }
 
 export function createCommander(agents: Agent[]): CommanderState {
@@ -49,6 +54,8 @@ export function createCommander(agents: Agent[]): CommanderState {
     reinforcementsLeft: CONFIG.commander.reinforcements.calls, reinforcementsDue: null,
     evacuation: 'none', shipLands: 0, shipLeaves: 0,
     burnResin: false,
+    commanderId: agents.find((a) => a.kind === 'commander')?.id ?? -1,
+    second: false,
     startSoldiers: agents.filter((a) => a.soldier).length,
     startCivilians: agents.filter((a) => a.civ && !a.soldier).length,
   }
@@ -71,7 +78,10 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
   }
   updateShip(cmd, ctx)
   keepLocks(cmd, ctx)
-  if (ctx.tick % Math.round(C.intervalSeconds * TPS) !== 0) return
+  checkCommander(cmd, squads, ctx)
+  // The second-in-command takes longer to make up their mind.
+  const every = Math.round(C.intervalSeconds * (cmd.second ? C.second.slowerBy : 1) * TPS)
+  if (ctx.tick % every !== 0) return
 
   const soldiers = ctx.agents.filter((a) => !a.dead && a.soldier && isFree(a)).length
   const civilians = ctx.agents.filter((a) => !a.dead && a.civ && !a.soldier && isFree(a)).length
@@ -111,8 +121,9 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
   const hiveSize = ctx.agents.filter((a) => !a.dead && a.side === 'myrr').length
   const assaulting = squads.filter((s) => s.mission === 'assault')
   if (cmd.hiveKnown && cmd.evacuation === 'none' && !assaulting.length && (cocoons >= C.assault.minCocoons || hiveSize >= C.assault.hiveSize || hiveSize <= C.assault.finishHiveAtOrBelow)) {
-    const ready = squads.filter((s) => !s.mission && s.morale >= C.assault.minMorale && members(s, ctx).length >= C.assault.minMembers)
-    const sent = ready.slice(0, C.assault.squads)
+    const minMorale = cmd.second ? C.second.assaultMinMorale : C.assault.minMorale
+    const ready = squads.filter((s) => !s.mission && s.guardId < 0 && s.morale >= minMorale && members(s, ctx).length >= C.assault.minMembers)
+    const sent = ready.slice(0, cmd.second ? C.second.assaultSquads : C.assault.squads)
     for (const s of sent) { s.mission = 'assault'; s.missionGoal = null }
     if (sent.length) logEvent(ctx, 'command', `Squad${sent.length > 1 ? 's' : ''} ${sent.map((s) => s.id + 1).join(' and ')} sent to assault the hive (${cocoons} cocooned)`)
   }
@@ -131,6 +142,18 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
     for (const s of squads) { s.mission = 'escort'; s.missionGoal = null }
     logEvent(ctx, 'command', `Evacuation ordered: a ship reaches the Landing Pad in ${Math.round(C.evacuation.shipDelaySeconds / 60)} minutes`)
   }
+}
+
+/** Is the Commander still in charge? Killed or taken: the second-in-command takes over. */
+function checkCommander(cmd: CommanderState, squads: Squad[], ctx: CivilianContext): void {
+  if (cmd.second || cmd.commanderId < 0) return
+  const boss = ctx.agents[cmd.commanderId]
+  const lost = boss.dead || ['captured', 'captive', 'cocooned', 'dead'].includes(boss.civ?.mode ?? 'dead')
+  if (!lost) return
+  cmd.second = true
+  cmd.reinforcementsLeft = Math.max(0, cmd.reinforcementsLeft - 1)
+  for (const s of squads) s.morale = Math.max(0, s.morale - C.second.moraleHit)
+  logEvent(ctx, 'command', `The Commander has been ${boss.dead ? 'killed' : 'taken'}! The second-in-command takes over`)
 }
 
 /** Has a human seen a Myrr on Level 1 recently? */

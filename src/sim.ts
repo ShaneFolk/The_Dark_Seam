@@ -87,6 +87,7 @@ export function createSim(seed: number): SimState {
   sim.hive.resinTiles = countResin(world)
   spawnCivilians(sim)
   spawnSoldiers(sim)
+  spawnCommander(sim)
   spawnHive(sim)
   spawnMyrrWanderers(sim)
   sim.commander = createCommander(sim.agents)
@@ -215,6 +216,21 @@ function spawnSoldiers(sim: SimState): void {
   }
 }
 
+/** The Commander, in the Command room, with a command squad to guard them. */
+function spawnCommander(sim: SimState): void {
+  const { world, rng } = sim
+  const room = findRooms(world, ['command'], 0)[0]
+  const civ = room && createCivilianData(world, rng, 'commander')
+  if (!room || !civ) return
+  const boss = createAgent(sim.agents.length, 'commander', 'human', randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
+  boss.civ = civ
+  civ.activity = 'work'
+  boss.weapon = makeWeapon('pistol', CONFIG.combat.skill.soldier)
+  sim.agents.push(boss)
+  addSquad(sim, room, CONFIG.commander.guardSquadSize, [{ level: 0, types: ['command'] }])
+  sim.squads[sim.squads.length - 1].guardId = boss.id
+}
+
 /** Patrol beats: the rooms each squad walks between. */
 const BEATS: { level: number; types: RoomType[] }[][] = [
   [{ level: 0, types: ['command', 'mess', 'supply', 'quarters', 'medbay'] }],
@@ -232,7 +248,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
     charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
     mission: null, missionGoal: null, missionReached: false,
-    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false,
+    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1,
   })
   for (let n = 0; n < size; n++) {
     const isMedic = n === size - 1

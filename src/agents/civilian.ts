@@ -27,7 +27,7 @@ import { who } from './describe.ts'
 import { damagedGenerators, humanSight, type Generator } from '../systems/power.ts'
 import { makeWeapon } from './combat.ts'
 
-export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier'
+export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier' | 'commander'
 /** 'treat' = heading to or staying in the med bay (hurt, or knows they're infected). */
 export type Activity = 'eat' | 'work' | 'free' | 'sleep' | 'treat' | 'repair' | 'shelter' | 'evacuate'
 /**
@@ -92,7 +92,9 @@ const F = CONFIG.fear
 
 export function createCivilianData(world: World, rng: Rng, forceJob?: Job): CivilianData | null {
   const job = forceJob ?? pickJob(rng)
-  const jobInfo = job === 'soldier' ? { level: 1, roomTypes: ['security'] as const } : CONFIG.civilians.jobs[job]
+  const jobInfo = job === 'soldier' ? { level: 1, roomTypes: ['security'] as const }
+    : job === 'commander' ? { level: 1, roomTypes: ['command'] as const }
+    : CONFIG.civilians.jobs[job]
   const homes = findRooms(world, ['quarters'], 0)
   const works = findRooms(world, jobInfo.roomTypes, jobInfo.level - 1).filter((r) => r.room.type !== 'hive')
   if (!homes.length || !works.length) return null
@@ -213,7 +215,9 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   // Commander's orders: head for the evacuation ship, or shelter at home during an alarm.
   const cmd = ctx.commander
   const evac = cmd.evacuation === 'called' || cmd.evacuation === 'landed' ? landingPad(ctx) : null
-  const activity: Activity = medbay ? 'treat' : generator ? 'repair' : evac ? 'evacuate' : cmd.alarm ? 'shelter' : activityAt(civ, ctx.tick)
+  // The Commander stays at their post in the Command room (until the evacuation).
+  const activity: Activity = medbay ? 'treat' : generator ? 'repair' : evac ? 'evacuate'
+    : civ.job === 'commander' ? 'work' : cmd.alarm ? 'shelter' : activityAt(civ, ctx.tick)
   if (generator && Math.hypot(agent.x - (generator.at.x + 0.5), agent.y - (generator.at.y + 0.5)) <= 1.6 && agent.levelIndex === generator.at.levelIndex) {
     repair(agent, generator)
     return

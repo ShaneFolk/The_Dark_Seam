@@ -13,6 +13,7 @@
 //   reload    a turret is low: feed it spare rifle magazines
 //   fetchTurret / deployTurret   carry a packed turret from the armory to a defence point
 //   assault / escort   the Commander's missions: storm the Hive Core / guard the evacuation
+//   guard     the command squad stays with the Commander (and only fights near them)
 //   patrol    otherwise walk the squad's route
 //
 // After an ambush the Commander has squads burn resin ahead of them (grenades, or
@@ -58,7 +59,7 @@ export interface SoldierData {
   workTicks: number
 }
 
-export type Order = 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
+export type Order = 'guard' | 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
 
 export interface Squad {
   id: number
@@ -92,6 +93,8 @@ export interface Squad {
   burnAt: PathNode | null
   /** The Commander told it to skip burning to save someone (logged once per decision). */
   riskTaken: boolean
+  /** Command squad: the agent it guards (the Commander), or -1. */
+  guardId: number
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -161,6 +164,8 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       setOrder(squad, 'retreat', roomGoal(ctx, ['security'], leader))
     } else if (squad.order === 'resupply' || lowAmmo) {
       if (squad.order !== 'resupply') setOrder(squad, 'resupply', restockAt ? randomTileIn(ctx.world, restockAt, ctx.rng) : roomGoal(ctx, ['armory'], leader))
+    } else if (squad.guardId >= 0) {
+      guardCommander(squad, leader, myrrSeen, ctx)
     } else if (squad.mission === 'assault' && ctx.hive.escapeTo && ctx.agents[ctx.hive.motherId] && !ctx.agents[ctx.hive.motherId].dead) {
       // The Brood Mother is getting away: catching her comes first (they still shoot on the move).
       setOrder(squad, 'assault', tileOf(ctx.agents[ctx.hive.motherId]))
@@ -199,6 +204,32 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       setOrder(squad, 'patrol', null)
     }
   }
+}
+
+/**
+ * The command squad: stay with the Commander, fight Myrr that come near them,
+ * and chase down anything carrying them off. Once the Commander is lost for good
+ * the squad becomes an ordinary one.
+ */
+function guardCommander(squad: Squad, leader: Agent, myrrSeen: Agent | null, ctx: CombatContext): void {
+  const boss = ctx.agents[squad.guardId]
+  const carrier = ctx.agents.find((a) => !a.dead && a.myrr?.task === 'carry' && a.myrr.targetId === boss.id)
+  if (carrier) {
+    setOrder(squad, 'rescue', tileOf(carrier))
+    squad.targetId = carrier.id
+    return
+  }
+  if (boss.dead || ['captive', 'cocooned', 'dead', 'evacuated'].includes(boss.civ?.mode ?? 'dead')) {
+    squad.guardId = -1
+    setOrder(squad, 'patrol', null)
+    return
+  }
+  const range = CONFIG.commander.guardRange
+  if (myrrSeen && myrrSeen.levelIndex === boss.levelIndex && dist(myrrSeen, boss) <= range) {
+    setOrder(squad, 'respond', tileOf(myrrSeen))
+    return
+  }
+  if (squad.order !== 'guard' || leader.levelIndex !== boss.levelIndex || dist(leader, boss) > 3) setOrder(squad, 'guard', tileOf(boss))
 }
 
 /** Where a mission sends the squad: the Hive Core, or the Landing Pad. */

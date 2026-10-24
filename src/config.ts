@@ -247,8 +247,12 @@ export const CONFIG = {
     /** The Brood Mother flees when below this share of health, or when humans are in the hive with fewer Spinebacks than this. */
     fleeBelowHealth: 0.5,
     fleeWhenGuardsBelow: 1,
+    /** ...but unguarded she only flees once below this share of health (she fights first). */
+    fleeUnguardedBelowHealth: 0.75,
     /** How fast she moves when fleeing, in tiles per second. */
     motherFleeSpeed: 2.2,
+    /** At zero health she would flee at only this share of that speed (scales with her health). */
+    woundedFleeShare: 0.5,
     /** She is rooted in her chamber. To move at all (to fight or to flee) she must first uproot, in seconds. */
     uprootSeconds: 20,
     /** Seconds to root herself again once back home. */
@@ -427,6 +431,13 @@ export const CONFIG = {
   commander: {
     /** The Commander reviews the situation this often, in seconds. */
     intervalSeconds: 5,
+    /** The command squad (extra, on top of soldiers.count) stays with the Commander and fights Myrr within guardRange tiles of them. */
+    guardSquadSize: 3,
+    guardRange: 10,
+    /** Once humans have fought back, a resting Myrr goes looking for the Commander with this chance. */
+    huntChance: 0.1,
+    /** If the Commander is killed or taken, the second-in-command takes over: slower decisions, more cautious assaults, a morale blow. */
+    second: { slowerBy: 3, assaultMinMorale: 0.85, assaultSquads: 1, moraleHit: 0.3 },
     /** The alarm (and any lockdown) clears after this long with no Myrr seen, in seconds. */
     alarmClearSeconds: 300,
     /** Health of a locked powered door (Myrr must break it; humans open it). */

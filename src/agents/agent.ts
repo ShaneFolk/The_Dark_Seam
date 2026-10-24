@@ -7,7 +7,7 @@ import type { WeaponState } from './combat.ts'
 import type { SoldierData } from './soldier.ts'
 
 /** What an agent looks like. The renderer maps each kind to a drawing. */
-export type AgentKind = 'civilian' | 'soldier' | 'medic' | 'turret' | 'taker' | 'spineback' | 'broodling' | 'brood-mother' | 'wanderer-myrr'
+export type AgentKind = 'civilian' | 'soldier' | 'medic' | 'turret' | 'taker' | 'spineback' | 'broodling' | 'brood-mother' | 'wanderer-myrr' | 'commander'
 
 export type AgentState =
   | { name: 'idle'; ticksLeft: number }

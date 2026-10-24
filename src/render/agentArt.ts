@@ -88,5 +88,10 @@ export const AGENT_ART: Record<AgentKind, AgentDraw> = {
     }
   },
   'brood-mother': (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.9, '#e0559f', '#ffd76a', tile),
+  commander: (ctx, cx, cy, tile, agent) => {
+    const mode = agent.civ?.mode ?? 'routine'
+    if (mode === 'dead' || mode === 'evacuated') return
+    dot(ctx, cx, cy, tile * 0.38, mode === 'routine' ? '#ffd54f' : CIVILIAN_MODE_COLORS[mode], '#4a3500', tile)
+  },
   'wanderer-myrr': (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.36, '#e0533d', '#3a0d06', tile),
 }

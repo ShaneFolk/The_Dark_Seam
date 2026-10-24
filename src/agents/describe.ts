@@ -4,6 +4,7 @@ import type { Agent } from './agent.ts'
 
 /** A short name: "a miner", "a medic", "Taker #12". */
 export function who(agent: Agent): string {
+  if (agent.kind === 'commander') return 'The Commander'
   if (agent.soldier) return agent.soldier.role === 'medic' ? 'A medic' : 'A soldier'
   if (agent.civ) return 'A ' + agent.civ.job
   if (agent.kind === 'brood-mother') return 'The Brood Mother'

@@ -59,7 +59,9 @@ export function updateMother(mother: Agent, ctx: HiveContext & CombatContext): v
   }
   if (m.rooted && m.task === 'uproot') return uproot(mother, ctx)
   if (hive.escapeTo) {
-    mother.baseSpeed = mother.speed = L.motherFleeSpeed
+    // Badly wounded, she drags herself along: down to woundedFleeShare of her flee speed.
+    const fit = mother.health / mother.maxHealth
+    mother.baseSpeed = mother.speed = L.motherFleeSpeed * (L.woundedFleeShare + (1 - L.woundedFleeShare) * fit)
     return flee(mother, ctx)
   }
   if (!m.rooted) return roam(mother, ctx)
@@ -215,7 +217,8 @@ function badlyThreatened(mother: Agent, ctx: HiveContext): boolean {
   const intruders = ctx.agents.filter((a) => !a.dead && isFree(a) && a.levelIndex === mother.levelIndex &&
     Math.hypot(a.x - mother.x, a.y - mother.y) <= L.guardRadius + 4).length
   const guards = ctx.agents.filter((a) => !a.dead && a.kind === 'spineback').length
-  return intruders >= 2 && guards < L.fleeWhenGuardsBelow
+  // Unguarded, she still fights until she has taken some real damage.
+  return intruders >= 2 && guards < L.fleeWhenGuardsBelow && mother.health < mother.maxHealth * L.fleeUnguardedBelowHealth
 }
 
 /** The reachable Level 3 tile farthest from the hive core: the deep tunnels. */

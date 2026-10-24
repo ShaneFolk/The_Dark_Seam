@@ -11,6 +11,7 @@ import { hasPower } from '../systems/power.ts'
 function commanderLine(sim: SimState): string {
   const c = sim.commander
   const parts: string[] = []
+  if (c.second) parts.push('SECOND-IN-COMMAND (the Commander is lost)')
   parts.push(c.alarm ? 'ALARM' : 'no alarm')
   if (c.lockdown) parts.push(c.locked ? 'lockdown' : 'lockdown (no power)')
   const assault = sim.squads.filter((s) => s.mission === 'assault').map((s) => s.id + 1)

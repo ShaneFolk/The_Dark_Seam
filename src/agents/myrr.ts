@@ -121,6 +121,8 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
   switch (m.task) {
     case 'rest': {
       if (--m.ticksLeft > 0) return
+      // Once humans have fought back, go looking for the Commander now and then.
+      if (huntCommander(agent, m, ctx)) return
       if (m.role === 'spineback') {
         // Raiders head back to guard duty when the Brood Mother is short of guards.
         const guards = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && (a.myrr.task === 'guard' || a.myrr.task === 'respond')).length
@@ -327,6 +329,17 @@ export function planDigging(ctx: HiveContext): void {
 }
 
 // ---------------------------------------------------------------- hunting
+
+/** Head for the Commander's position (they'll be guarded: expect a swarm). */
+function huntCommander(agent: Agent, m: MyrrData, ctx: HiveContext): boolean {
+  const losses = ctx.hive.losses.taker + ctx.hive.losses.spineback
+  if (losses < CONFIG.power.sabotageAfterLosses || !ctx.rng.chance(CONFIG.commander.huntChance)) return false
+  const boss = ctx.agents.find((a) => a.kind === 'commander' && !a.dead && isFree(a))
+  if (!boss || !goTo(agent, ctx, tileOf(boss))) return false
+  m.task = 'scout'
+  m.trips = H.tripsBeforeReturn - 1 // one look, then home
+  return true
+}
 
 /** Spot free humans; lay scent where they are; hunt the closest one who is alone. */
 function lookForPrey(agent: Agent, m: MyrrData, ctx: HiveContext): void {

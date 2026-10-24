@@ -250,7 +250,7 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Burn the resin: after a squad is ambushed, the Commander has squads burn resin ahead (incendiary grenades, or flamethrower fuel), unless someone is close to hatching (the Commander takes the risk)
 - [x] Spinebacks also capture: raiders hunt and carry people (soldiers too) home; they only kill when they must (defending the Brood Mother, or badly hurt)
 - [x] Swarms: a Myrr that finds a group calls others with a screech; they gather and rush in together
-- [ ] The Commander on the map: in the Command room with a command squad; if killed or taken, a second-in-command takes over (slower, more cautious, one fewer reinforcement call)
+- [x] The Commander on the map: in the Command room with a command squad; if killed or taken, a second-in-command takes over (slower, more cautious, one fewer reinforcement call)
 - [ ] Utility-AI scoring for smarter decisions
 - [ ] Balance passes
 
