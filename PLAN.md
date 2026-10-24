@@ -251,6 +251,8 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Spinebacks also capture: raiders hunt and carry people (soldiers too) home; they only kill when they must (defending the Brood Mother, or badly hurt)
 - [x] Swarms: a Myrr that finds a group calls others with a screech; they gather and rush in together
 - [x] The Commander on the map: in the Command room with a command squad; if killed or taken, a second-in-command takes over (slower, more cautious, one fewer reinforcement call)
+- [x] Deep Chamber and burrowing: badly threatened, the Brood Mother retreats to a hidden resin-coated Deep Chamber (Level 3, north-east) and roots again; followed in there, she burrows into the rock for 30 s (Escape unless killed)
+- [x] Myrr heal: 1 health/s while holding still on resin; the rooted Brood Mother heals 3/s
 - [ ] Utility-AI scoring for smarter decisions
 - [ ] Balance passes
 

@@ -30,7 +30,7 @@ import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
   | 'swarm' // Takers and raiding Spinebacks gathering for a swarm
-  | 'inject' | 'uproot' | 'root' // Brood Mother (she also uses 'rest', 'hunt' and 'return')
+  | 'inject' | 'uproot' | 'root' | 'burrow' // Brood Mother (she also uses 'rest', 'hunt' and 'return')
   | 'grow' // Broodlings
   | 'guard' | 'respond' // Spinebacks
 
@@ -71,8 +71,11 @@ export interface HiveState {
   /** The Brood Mother is fleeing to this spot (escape ending if she gets there). */
   escapeTo: PathNode | null
   escaped: boolean
-  /** The Brood Mother's spot in the middle of her chamber. */
+  /** The Brood Mother's spot in the middle of her chamber (the Deep Chamber once she has retreated). */
   motherHome: PathNode | null
+  /** Her fallback: the middle of the Deep Chamber, and whether she has retreated there. */
+  deepHome: PathNode | null
+  retreated: boolean
   /** The swarm gathering right now, if any, and when the next may be called. */
   swarm: Swarm | null
   nextSwarmTick: number

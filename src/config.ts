@@ -119,6 +119,13 @@ export const CONFIG = {
     cooldownSeconds: 30,
   },
 
+  myrrHealing: {
+    /** Health a Myrr regains per second while holding still on resin. */
+    onResinPerSecond: 1,
+    /** Health the Brood Mother regains per second while rooted (resin or not). */
+    motherRootedPerSecond: 3,
+  },
+
   camouflage: {
     /** Humans spot a hidden Myrr (holding still on resin) only within this many tiles. */
     sightRange: 2.5,
@@ -244,13 +251,15 @@ export const CONFIG = {
     minGuards: 1,
     /** Answering Spinebacks go back to guarding after this long without a human in sight, in seconds. */
     alarmGiveUpSeconds: 15,
-    /** The Brood Mother flees when below this share of health, or when humans are in the hive with fewer Spinebacks than this. */
+    /** The Brood Mother retreats (to the Deep Chamber, then by burrowing) when below this share of health, or when humans are in the hive with fewer Spinebacks than this. */
     fleeBelowHealth: 0.5,
     fleeWhenGuardsBelow: 1,
     /** ...but unguarded she only flees once below this share of health (she fights first). */
     fleeUnguardedBelowHealth: 0.75,
     /** How fast she moves when fleeing, in tiles per second. */
     motherFleeSpeed: 2.2,
+    /** Driven out of her Deep Chamber, she burrows into the deep rock: the Escape ending unless she's killed within this many seconds. */
+    burrowSeconds: 30,
     /** At zero health she would flee at only this share of that speed (scales with her health). */
     woundedFleeShare: 0.5,
     /** She is rooted in her chamber. To move at all (to fight or to flee) she must first uproot, in seconds. */

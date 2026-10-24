@@ -17,7 +17,7 @@ import { updateSwarm } from './agents/swarm.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
-import { countResin, seedHiveResin } from './systems/resin.ts'
+import { countResin, healMyrr, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
 import { createPheromones, decayPheromones, type Pheromones } from './systems/pheromones.ts'
 import { findRooms, randomTileIn, roomTiles, type RoomRef } from './world/rooms.ts'
@@ -67,7 +67,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, swarm: null, nextSwarmTick: 0 },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0 },
     squads: [],
     shots: [],
     supplies: new Map(),
@@ -161,7 +161,10 @@ export function step(sim: SimState): void {
     else if (role === 'spineback') updateSpineback(agent, ctx)
     else if (agent.kind === 'wanderer-myrr') updateWanderer(agent, sim.world, sim.rng)
     // Moving Myrr skitter now and then.
-    if (agent.side === 'myrr') updateCamouflage(agent, sim.world.levels[agent.levelIndex])
+    if (agent.side === 'myrr') {
+      updateCamouflage(agent, sim.world.levels[agent.levelIndex])
+      healMyrr(agent, sim.world.levels[agent.levelIndex])
+    }
     if (agent.side === 'myrr' && isMoving(agent) && (sim.tick + agent.id) % SKITTER_TICKS === 0) {
       makeNoise(sim.noises, 'skitter', agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
     }
@@ -281,6 +284,16 @@ function spawnHive(sim: SimState): void {
   mother.weapon = makeWeapon('maw', CONFIG.combat.skill.myrr)
   sim.hive.motherId = mother.id
   sim.hive.motherHome = centre
+  // Her fallback chamber, already coated in resin.
+  const deep = findRooms(world, ['other'], hive.levelIndex).find((r) => r.room.name === 'Deep Chamber')
+  if (deep) {
+    const deepTiles = roomTiles(world, deep)
+    sim.hive.deepHome = deepTiles.reduce((best, t) =>
+      Math.hypot(t.x - deep.room.centerX, t.y - deep.room.centerY) < Math.hypot(best.x - deep.room.centerX, best.y - deep.room.centerY) ? t : best)
+    const level = world.levels[deep.levelIndex]
+    for (const t of deepTiles) level.resin[t.y * level.width + t.x] = 1
+    sim.hive.resinTiles = countResin(world)
+  }
   sim.agents.push(mother)
 
   for (let n = 0; n < CONFIG.hive.takers; n++) {

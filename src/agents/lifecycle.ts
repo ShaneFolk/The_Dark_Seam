@@ -23,7 +23,6 @@ import { logEvent } from '../core/events.ts'
 import { who } from './describe.ts'
 import { kill } from './combat.ts'
 import { isHidden } from '../systems/camouflage.ts'
-import { canWalk } from '../world/pathfinding.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const L = CONFIG.lifecycle
@@ -37,7 +36,11 @@ const RAID_TASKS = new Set(['rest', 'scout', 'return', 'hunt', 'attack', 'carry'
  * The Brood Mother is rooted in her chamber, injecting captives one at a time.
  * She bites anyone who comes within reach. Intruders in the hive core make her
  * uproot (slow) and hunt them; when the hive core is quiet again she goes home
- * and roots herself again. Badly threatened, she uproots and flees the hive.
+ * and roots herself again.
+ *
+ * Badly threatened in the Hive Core, she uproots and retreats to her hidden Deep
+ * Chamber (her guards pull back with her) and roots there. Threatened again there,
+ * she burrows into the deep rock: if nobody kills her first, she escapes.
  */
 export function updateMother(mother: Agent, ctx: HiveContext & CombatContext): void {
   const m = mother.myrr!
@@ -46,16 +49,25 @@ export function updateMother(mother: Agent, ctx: HiveContext & CombatContext): v
 
   bite(mother, ctx)
 
-  if (!hive.escapeTo && check && badlyThreatened(mother, ctx)) {
-    hive.escapeTo = escapeSpot(mother, ctx)
-    if (hive.escapeTo) {
+  if (!hive.escapeTo && m.task !== 'burrow' && check && badlyThreatened(mother, ctx)) {
+    if (!hive.retreated && hive.deepHome) {
+      // First time: pull back to the Deep Chamber.
+      hive.escapeTo = hive.deepHome
       logEvent(ctx, 'hive', m.rooted
-        ? 'The Brood Mother is tearing herself free to flee into the deep tunnels'
-        : 'The Brood Mother is fleeing into the deep tunnels with her escort')
+        ? 'The Brood Mother is tearing herself free to retreat to her Deep Chamber'
+        : 'The Brood Mother is retreating to her Deep Chamber with her guards')
       if (m.rooted && m.task !== 'uproot') startUproot(m)
-      // Already loose (hunting): drop the hunt and run.
+      // Already loose (hunting): drop the hunt and go.
       if (!m.rooted) { mother.path = []; mother.state = { name: 'idle', ticksLeft: 0 } }
+    } else if (intruder(mother, ctx)) {
+      // Already in the Deep Chamber and they followed her in: dig away.
+      startBurrow(mother, ctx)
     }
+  }
+  if (m.task === 'burrow') {
+    // Digging herself down into the deep rock: kill her before she's gone.
+    if (--m.ticksLeft <= 0) hive.escaped = true
+    return
   }
   if (m.rooted && m.task === 'uproot') return uproot(mother, ctx)
   if (hive.escapeTo) {
@@ -97,6 +109,18 @@ function addBroodling(at: PathNode, ctx: HiveContext): void {
   brood.myrr.task = 'grow'
   brood.myrr.ticksLeft = Math.round(L.growSeconds * TPS)
   ctx.agents.push(brood)
+}
+
+/** Last resort: burrow into the deep rock (the Escape ending if she finishes). */
+function startBurrow(mother: Agent, ctx: HiveContext): void {
+  const m = mother.myrr!
+  m.task = 'burrow'
+  m.targetId = -1
+  m.ticksLeft = Math.round(L.burrowSeconds * TPS)
+  mother.path = []
+  mother.state = { name: 'idle', ticksLeft: 0 }
+  ctx.hive.escapeTo = null
+  logEvent(ctx, 'hive', 'The Brood Mother is burrowing into the deep rock to escape!')
 }
 
 function startUproot(m: MyrrData): void {
@@ -167,7 +191,9 @@ function roam(mother: Agent, ctx: HiveContext): void {
 
 /** Nearest free human (or turret) inside the hive core, if any. */
 function intruder(mother: Agent, ctx: HiveContext): Agent | null {
-  const core = findRooms(ctx.world, ['hive'])[0]
+  // Her room: the Hive Core, or the Deep Chamber once she has retreated there.
+  const home = ctx.hive.motherHome
+  const core = (home && roomAt(ctx.world, home)) || findRooms(ctx.world, ['hive'])[0]
   if (!core) return null
   let best: Agent | null = null, bestD = Infinity
   for (const a of ctx.agents) {
@@ -222,28 +248,30 @@ function badlyThreatened(mother: Agent, ctx: HiveContext): boolean {
 }
 
 /** The reachable Level 3 tile farthest from the hive core: the deep tunnels. */
-function escapeSpot(mother: Agent, ctx: HiveContext): PathNode | null {
-  const level = ctx.world.levels[mother.levelIndex]
-  let best: PathNode | null = null, bestD = 0
-  for (let n = 0; n < 400; n++) {
-    const x = ctx.rng.int(1, level.width - 2), y = ctx.rng.int(1, level.height - 2)
-    if (!canWalk(level, x, y, 'human')) continue
-    const d = Math.hypot(x - mother.x, y - mother.y)
-    if (d > bestD) { best = { levelIndex: mother.levelIndex, x, y }; bestD = d }
-  }
-  return best
-}
-
+/** Retreating to the Deep Chamber; once there she roots herself again. */
 function flee(mother: Agent, ctx: HiveContext): void {
   const to = ctx.hive.escapeTo!
   if (mother.state.name === 'moving' || mother.state.name === 'crossing') {
-    if (followPath(mother, ctx.world)) ctx.hive.escaped = true
+    if (followPath(mother, ctx.world)) arriveDeep(mother, ctx)
     return
   }
   // She is far too big for vent ducts or chutes: open tunnels only (the routes humans can use).
   const path = findPath(ctx.world, tileOf(mother), to, 'human')
   if (path?.length) { mother.path = path; mother.state = { name: 'moving' } }
-  else ctx.hive.escaped = true // nowhere further to go: she's out of reach
+  else startBurrow(mother, ctx) // cut off: dig in where she is
+}
+
+function arriveDeep(mother: Agent, ctx: HiveContext): void {
+  const hive = ctx.hive
+  hive.escapeTo = null
+  hive.retreated = true
+  hive.motherHome = hive.deepHome
+  const m = mother.myrr!
+  m.task = 'root'
+  m.ticksLeft = Math.round(L.rerootSeconds * TPS)
+  mother.path = []
+  mother.state = { name: 'idle', ticksLeft: 0 }
+  logEvent(ctx, 'hive', 'The Brood Mother has reached her Deep Chamber')
 }
 
 /** With the Brood Mother dead: Broodlings die at once; the rest weaken until they die. */

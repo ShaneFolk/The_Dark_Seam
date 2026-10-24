@@ -5,6 +5,7 @@ import { CONFIG } from '../config.ts'
 import type { Rng } from '../core/rng.ts'
 import type { World } from '../world/loadWorld.ts'
 import type { Level } from '../world/level.ts'
+import type { Agent } from '../agents/agent.ts'
 import { canWalk, type PathNode } from '../world/pathfinding.ts'
 
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const
@@ -87,4 +88,17 @@ export function markChanged(level: Level, i: number): void {
     level.changes.splice(0, drop)
     level.changesTrimmed += drop
   }
+}
+
+/**
+ * Myrr heal while holding still on resin. The rooted Brood Mother heals faster,
+ * resin or not, so a hive left alone between assaults recovers.
+ */
+export function healMyrr(agent: Agent, level: Level): void {
+  if (agent.dead || agent.health >= agent.maxHealth) return
+  const H = CONFIG.myrrHealing
+  let rate = 0
+  if (agent.myrr?.rooted) rate = H.motherRootedPerSecond
+  else if (agent.stillTicks > 0 && level.resin[Math.floor(agent.y) * level.width + Math.floor(agent.x)]) rate = H.onResinPerSecond
+  if (rate) agent.health = Math.min(agent.maxHealth, agent.health + rate / CONFIG.sim.ticksPerSecond)
 }
