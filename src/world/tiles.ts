@@ -1,18 +1,22 @@
-// Tile types and their rules.
+// Tile types and their rules. Map characters are listed in PLAN.md (Map format).
 
 export const Tile = {
-  Floor: 0,
-  Wall: 1,
-  Door: 2,
-  /** Open doorway: plain floor that marks the edge of a room. */
-  Threshold: 3,
-  /** Vent duct inside a level. Only the Myrr fit through. */
-  Vent: 4,
-  // Level link endpoints (which link is defined in data/maps/links.ts)
-  Elevator: 5,
-  Ladder: 6,
-  Chute: 7,
-  VentShaft: 8,
+  Rock: 0,
+  BuildingWall: 1,
+  /** Indoor floor or mine tunnel floor. */
+  Floor: 2,
+  /** Open outdoor ground (surface). */
+  Ground: 3,
+  Boulder: 4,
+  Door: 5,
+  Window: 6,
+  /** Open doorway: walkable, marks the edge of a room. */
+  Doorway: 7,
+  Elevator: 8,
+  Ladder: 9,
+  Chute: 10,
+  /** Vent: a shaft to the next level when paired, otherwise a duct inside the level. Myrr only. */
+  Vent: 11,
 } as const
 
 export type Tile = (typeof Tile)[keyof typeof Tile]
@@ -25,27 +29,37 @@ export interface TileInfo {
 }
 
 export const TILE_INFO: Record<Tile, TileInfo> = {
+  [Tile.Rock]: { name: 'Rock', humanWalkable: false, myrrWalkable: false, blocksSight: true },
+  [Tile.BuildingWall]: { name: 'Building wall', humanWalkable: false, myrrWalkable: false, blocksSight: true },
   [Tile.Floor]: { name: 'Floor', humanWalkable: true, myrrWalkable: true, blocksSight: false },
-  [Tile.Wall]: { name: 'Wall', humanWalkable: false, myrrWalkable: false, blocksSight: true },
+  [Tile.Ground]: { name: 'Ground', humanWalkable: true, myrrWalkable: true, blocksSight: false },
+  [Tile.Boulder]: { name: 'Boulder', humanWalkable: false, myrrWalkable: false, blocksSight: false },
   [Tile.Door]: { name: 'Door', humanWalkable: true, myrrWalkable: true, blocksSight: true },
-  [Tile.Threshold]: { name: 'Doorway', humanWalkable: true, myrrWalkable: true, blocksSight: false },
-  [Tile.Vent]: { name: 'Vent duct', humanWalkable: false, myrrWalkable: true, blocksSight: true },
+  [Tile.Window]: { name: 'Window', humanWalkable: false, myrrWalkable: false, blocksSight: false },
+  [Tile.Doorway]: { name: 'Doorway', humanWalkable: true, myrrWalkable: true, blocksSight: false },
   [Tile.Elevator]: { name: 'Elevator', humanWalkable: true, myrrWalkable: true, blocksSight: false },
   [Tile.Ladder]: { name: 'Ladder', humanWalkable: true, myrrWalkable: true, blocksSight: false },
   [Tile.Chute]: { name: 'Ore chute', humanWalkable: true, myrrWalkable: true, blocksSight: false },
-  [Tile.VentShaft]: { name: 'Vent shaft', humanWalkable: false, myrrWalkable: true, blocksSight: true },
+  [Tile.Vent]: { name: 'Vent', humanWalkable: false, myrrWalkable: true, blocksSight: true },
 }
 
-/** Map characters that are fixed tiles. Letters (rooms, links) are handled by the loader. */
+/** Map characters for fixed tiles. Room letters are handled by the loader. */
 export const CHAR_TO_TILE: Record<string, Tile> = {
-  '#': Tile.Wall,
+  '#': Tile.Rock,
+  'X': Tile.BuildingWall,
   '.': Tile.Floor,
-  '+': Tile.Door,
-  ':': Tile.Threshold,
-  '~': Tile.Vent,
+  ',': Tile.Ground,
+  'o': Tile.Boulder,
+  'D': Tile.Door,
+  'W': Tile.Window,
+  ':': Tile.Doorway,
+  'E': Tile.Elevator,
+  'L': Tile.Ladder,
+  'C': Tile.Chute,
+  'V': Tile.Vent,
 }
 
-/** Tiles that bound a room when flood-filling from its marker. */
-export function isRoomEdge(t: Tile): boolean {
-  return t === Tile.Wall || t === Tile.Door || t === Tile.Threshold || t === Tile.Vent
+/** Tiles that belong to a room when flood-filling from its marker. Everything else bounds the room. */
+export function isRoomInterior(t: Tile): boolean {
+  return t === Tile.Floor || t === Tile.Elevator || t === Tile.Ladder || t === Tile.Chute
 }

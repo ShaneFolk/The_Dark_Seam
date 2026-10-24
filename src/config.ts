@@ -12,11 +12,11 @@ export const CONFIG = {
   },
 
   world: {
-    /** Every level uses this grid size, in tiles. (Current maps are the first draft; they move to this size in the redesign.) */
+    /** Every level uses this grid size, in tiles.  */
     levelWidth: 160,
     levelHeight: 100,
     /** A room bigger than this is reported as a map mistake (usually a missing door). */
-    maxRoomTiles: 400,
+    maxRoomTiles: 700,
   },
 
   render: {

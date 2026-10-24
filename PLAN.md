@@ -60,12 +60,22 @@ Levels are hand-built as text files in `src/data/maps/` (one per level), one cha
 | `D` | Door | `G` | Generator |
 | `W` | Window | `S` | Supply room / locker |
 | `E` | Elevator | `H` | Hive core |
+| `:` | Open doorway (room edge, no door) | `K` | Command |
+| | | `Q` | Quarters |
+| | | `F` | Mess hall |
+| | | `T` | Workshop |
+| | | `P` | Security |
+| | | `R` | Any other room or named area |
 
 Resin, barricades, boarded windows and welds are **not** map characters: they change during a run and live in the sim state.
 
-*To settle when the loader is rewritten:*
-- **Link pairing:** since all levels are the same size, an `E`/`L`/`C`/`V` endpoint could connect to the same kind of tile at the same position on the level above or below. A `V` with no partner would be an in-level vent duct.
-- **Room letters:** `A`/`M`/`G`/`S`/`H` mark room types. Quarters, mess hall, command and workshops need letters too, and multiple rooms of one type (e.g. two generators) need names.
+**Rules**
+- **Link pairing:** a link tile (`E`, `L`, `C`, `V`) connects to the same tile at the same position on the level directly above or below. Shafts stack, so one elevator tile on Level 2 goes both up and down. An `E`/`L`/`C` with no partner is a map error.
+- **Vents:** a paired `V` is a shaft between levels. An unpaired `V` is a duct inside the level (Levels 2–3 only). On Level 1 every `V` must be outdoors; the loader rejects one inside a building.
+- **Rooms:** one room letter goes somewhere inside each room; the rest of its floor is `.`. The room is everything reachable from the letter without crossing a wall, door, window, doorway or open ground. Names come from a per-letter list in the map file, in reading order; unnamed rooms get "Generator 2" style names.
+- **Outdoor areas** (landing pad, yards) are rooms of paved floor surrounded by open ground.
+- Chute tops on the surface sit outdoors (ore yard), so chutes are not a way into buildings. The elevator and ladders land inside the Mine Head.
+- **Boulders:** `o` on the map are fixed. Extra seeded boulders per run come with Run variety.
 
 ### Run variety
 Maps stay hand-built. Each run varies through the **seeded RNG**:

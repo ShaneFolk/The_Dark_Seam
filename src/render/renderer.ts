@@ -2,8 +2,9 @@
 
 import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
-import type { Level, RoomType } from '../world/level.ts'
-import { Tile } from '../world/tiles.ts'
+import type { Level } from '../world/level.ts'
+import type { Tile } from '../world/tiles.ts'
+import { TILE_ART, floorColor, type FloorKind } from './tileArt.ts'
 import { describeTile } from '../world/loadWorld.ts'
 import { otherEnd } from '../world/links.ts'
 import type { Camera } from './camera.ts'
@@ -14,32 +15,9 @@ const COLORS = {
   text: '#c9d1d9',
   panel: 'rgba(0, 0, 0, 0.6)',
   roomLabel: 'rgba(230, 237, 243, 0.75)',
-  linkLabel: '#0b0d10',
+  linkLabel: '#f0f3f6',
   hover: 'rgba(255, 255, 255, 0.35)',
 }
-
-const TILE_COLORS: Record<Tile, string> = {
-  [Tile.Floor]: '#2c323b',
-  [Tile.Wall]: '#12161b',
-  [Tile.Door]: '#c08a2e',
-  [Tile.Threshold]: '#3a414c',
-  [Tile.Vent]: '#4b2f5e',
-  [Tile.Elevator]: '#38b2c9',
-  [Tile.Ladder]: '#d08a3c',
-  [Tile.Chute]: '#8a6a45',
-  [Tile.VentShaft]: '#9b59c4',
-}
-
-/** Floor tint per room type, so rooms read at a glance. Unlisted types use the default. */
-const ROOM_FLOOR: Partial<Record<RoomType, string>> = {
-  command: '#2f3b52',
-  medbay: '#284544',
-  armory: '#4a2e31',
-  generator: '#47422a',
-  hive: '#3d2948',
-  security: '#363650',
-}
-const DEFAULT_ROOM_FLOOR = '#353c47'
 
 export class Renderer {
   private canvas: HTMLCanvasElement
@@ -47,6 +25,8 @@ export class Renderer {
   private fps = 0
   private framesThisSecond = 0
   private fpsTimer = performance.now()
+  /** Each level's tiles drawn once at zoom 1. Redrawn only when invalidated. */
+  private levelCache = new Map<number, HTMLCanvasElement>()
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -78,7 +58,7 @@ export class Renderer {
     const [ox, oy] = camera.worldToScreen(0, 0, w, h)
     const tile = base * camera.zoom
 
-    this.drawTiles(level, ox, oy, tile, w, h)
+    this.drawLevel(level, ox, oy, tile)
     this.drawLinkMarkers(level, ox, oy, tile)
     this.drawRoomLabels(level, ox, oy, tile)
     const hovered = this.hoveredTile(level, camera, view, w, h)
@@ -99,29 +79,39 @@ export class Renderer {
     return { x, y }
   }
 
-  private drawTiles(level: Level, ox: number, oy: number, tile: number, w: number, h: number): void {
-    const { ctx } = this
-    // Only draw the tiles that are on screen.
-    const x0 = Math.max(0, Math.floor(-ox / tile))
-    const y0 = Math.max(0, Math.floor(-oy / tile))
-    const x1 = Math.min(level.width - 1, Math.floor((w - ox) / tile))
-    const y1 = Math.min(level.height - 1, Math.floor((h - oy) / tile))
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const i = y * level.width + x
-        ctx.fillStyle = this.tileColor(level, i)
-        // Slightly oversized so neighbouring tiles leave no gaps when scaled.
-        ctx.fillRect(ox + x * tile, oy + y * tile, tile + 0.5, tile + 0.5)
-      }
-    }
+  /** Forget a level's cached image, e.g. after a door or resin changes (later phases). */
+  invalidate(levelId: number): void {
+    this.levelCache.delete(levelId)
   }
 
-  private tileColor(level: Level, i: number): string {
-    const t = level.tiles[i] as Tile
-    if (t !== Tile.Floor) return TILE_COLORS[t]
-    const room = level.roomOf[i]
-    if (room < 0) return TILE_COLORS[Tile.Floor]
-    return ROOM_FLOOR[level.rooms[room].type] ?? DEFAULT_ROOM_FLOOR
+  private drawLevel(level: Level, ox: number, oy: number, tile: number): void {
+    let cache = this.levelCache.get(level.id)
+    if (!cache) {
+      cache = this.paintLevel(level)
+      this.levelCache.set(level.id, cache)
+    }
+    this.ctx.imageSmoothingEnabled = false
+    this.ctx.drawImage(cache, ox, oy, level.width * tile, level.height * tile)
+  }
+
+  /** Draw every tile of a level once, at zoom 1, into an off-screen canvas. */
+  private paintLevel(level: Level): HTMLCanvasElement {
+    const size = CONFIG.render.tileSize
+    const canvas = document.createElement('canvas')
+    canvas.width = level.width * size
+    canvas.height = level.height * size
+    const ctx = canvas.getContext('2d')!
+    for (let y = 0; y < level.height; y++) {
+      for (let x = 0; x < level.width; x++) {
+        const i = y * level.width + x
+        const room = level.roomOf[i]
+        const kind: FloorKind = room >= 0
+          ? { room: level.rooms[room].type, outdoor: level.rooms[room].outdoor }
+          : level.natural[i] ? 'natural' : 'built'
+        TILE_ART[level.tiles[i] as Tile](ctx, x * size, y * size, size, floorColor(kind))
+      }
+    }
+    return canvas
   }
 
   /** Up/down arrows on link tiles, once tiles are big enough to read. */
@@ -132,10 +122,12 @@ export class Renderer {
     ctx.font = `bold ${Math.round(tile * 0.7)}px sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    for (const [i, link] of level.linksAt) {
+    for (const [i, links] of level.linksAt) {
       const x = i % level.width
       const y = (i - x) / level.width
-      const arrow = otherEnd(link, level.id).level < level.id ? '▲' : '▼'
+      const up = links.some((l) => otherEnd(l, level.id).level < level.id)
+      const down = links.some((l) => otherEnd(l, level.id).level > level.id)
+      const arrow = up && down ? '⇅' : up ? '▲' : '▼'
       ctx.fillText(arrow, ox + (x + 0.5) * tile, oy + (y + 0.5) * tile)
     }
     ctx.textAlign = 'left'
