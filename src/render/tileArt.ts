@@ -11,7 +11,7 @@ const PALETTE = {
   rock: '#221c17',
   wall: '#5b6573',
   floorSurface: '#2f353e',
-  floorMine: '#3a342c',
+  floorMine: '#4a4134',
   ground: '#4b4436',
   paved: '#5c5a55',
   boulder: '#7c756b',

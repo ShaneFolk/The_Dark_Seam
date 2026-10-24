@@ -177,9 +177,11 @@ function joinLevels(levels: Level[], errors: string[]): Link[] {
 
   // Every elevator, ladder and chute tile needs a partner. Unpaired vents are
   // ducts inside the level, allowed below the surface only.
+  // Only checked once both neighbouring levels are loaded (a level may still be being drawn).
   for (const level of levels) {
-    const hasNeighbour = byId.has(level.id - 1) || byId.has(level.id + 1)
-    if (!hasNeighbour) continue // loading a single level on its own
+    const above = level.id - 1, below = level.id + 1
+    const neighboursLoaded = (above < 1 || byId.has(above)) && (below > CONFIG.world.levelCount || byId.has(below))
+    if (!neighboursLoaded) continue
     for (let i = 0; i < level.tiles.length; i++) {
       const kind = linkKindOf(level.tiles[i] as Tile)
       if (!kind || level.linksAt.has(i)) continue

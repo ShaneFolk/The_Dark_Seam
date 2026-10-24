@@ -12,6 +12,8 @@ export const CONFIG = {
   },
 
   world: {
+    /** Number of levels, top to bottom. */
+    levelCount: 3,
     /** Every level uses this grid size, in tiles.  */
     levelWidth: 160,
     levelHeight: 100,
