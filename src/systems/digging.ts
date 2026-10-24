@@ -72,3 +72,44 @@ export function digTile(world: World, at: PathNode): void {
   level.natural[i] = 1
   markChanged(level, i)
 }
+
+/**
+ * A mining charge: tunnel floor within `radius` of (x, y) collapses into rock for
+ * good. Anyone standing there is killed by the caller. Returns the collapsed tiles.
+ */
+export function collapseTunnel(world: World, at: PathNode, radius: number): number[] {
+  const level = world.levels[at.levelIndex]
+  const out: number[] = []
+  for (let dy = -radius; dy <= radius; dy++)
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = at.x + dx, y = at.y + dy
+      if (x < 1 || y < 1 || x >= level.width - 1 || y >= level.height - 1) continue
+      const i = y * level.width + x
+      // Only natural tunnel floor (not rooms, links or built corridors).
+      if (level.tiles[i] !== Tile.Floor || !level.natural[i] || level.roomOf[i] >= 0) continue
+      level.tiles[i] = Tile.Rock
+      level.resin[i] = 0
+      markChanged(level, i)
+      out.push(i)
+    }
+  return out
+}
+
+/** A narrow tunnel tile (two or fewer open neighbours) near (x, y): a good place for a charge. */
+export function chokePoint(world: World, at: PathNode, searchRadius: number): PathNode | null {
+  const level = world.levels[at.levelIndex]
+  let best: PathNode | null = null, bestD = Infinity
+  for (let dy = -searchRadius; dy <= searchRadius; dy++)
+    for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+      const x = at.x + dx, y = at.y + dy
+      if (x < 2 || y < 2 || x >= level.width - 2 || y >= level.height - 2) continue
+      const i = y * level.width + x
+      if (level.tiles[i] !== Tile.Floor || !level.natural[i] || level.roomOf[i] >= 0) continue
+      let open = 0
+      for (const [ox, oy] of DIRS) if (canWalk(level, x + ox, y + oy, 'human')) open++
+      if (open > 2) continue
+      const d = Math.hypot(dx, dy)
+      if (d < bestD) { best = { levelIndex: at.levelIndex, x, y }; bestD = d }
+    }
+  return best
+}
