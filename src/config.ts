@@ -9,6 +9,8 @@ export const CONFIG = {
     maxTicksPerFrame: 10,
     /** Seed used when none is given in the URL (?seed=123). */
     defaultSeed: 12345,
+    /** Speed buttons (times normal speed). Space pauses; + and - step through these. */
+    speeds: [1, 2, 4, 8],
   },
 
   world: {

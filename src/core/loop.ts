@@ -10,6 +10,8 @@ export interface LoopCallbacks {
   update: () => void
   /** Draw the current state. Gets the real time since the last frame. */
   render: (frameMs: number) => void
+  /** How fast the sim runs: 1 = normal, 2 = twice as fast, 0 = paused. */
+  speed: () => number
 }
 
 export function startLoop(
@@ -17,7 +19,6 @@ export function startLoop(
   maxTicksPerFrame: number,
   callbacks: LoopCallbacks,
 ): void {
-  const msPerTick = 1000 / ticksPerSecond
   let lastTime = performance.now()
   let accumulator = 0
 
@@ -26,15 +27,21 @@ export function startLoop(
     accumulator += frameMs
     lastTime = now
 
+    // Faster speeds just run more ticks per real second; paused runs none.
+    const speed = callbacks.speed()
+    const msPerTick = 1000 / (ticksPerSecond * Math.max(speed, 1e-9))
+    const maxTicks = Math.ceil(maxTicksPerFrame * Math.max(speed, 1))
+    if (speed <= 0) accumulator = 0
+
     let ticks = 0
-    while (accumulator >= msPerTick && ticks < maxTicksPerFrame) {
+    while (accumulator >= msPerTick && ticks < maxTicks) {
       callbacks.update()
       accumulator -= msPerTick
       ticks++
     }
     // If we fell far behind (e.g. tab was hidden), drop the backlog
     // instead of trying to catch up all at once.
-    if (ticks === maxTicksPerFrame) accumulator = 0
+    if (ticks === maxTicks) accumulator = 0
 
     callbacks.render(frameMs)
     requestAnimationFrame(frame)

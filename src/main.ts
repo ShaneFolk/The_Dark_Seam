@@ -41,10 +41,11 @@ const selectLevel = (levelIndex: number) => { view.levelIndex = levelIndex }
 const input = new Input(canvas, view, selectLevel)
 const sidebarRoot = document.querySelector<HTMLElement>('#sidebar')
 if (!sidebarRoot) throw new Error('Missing #sidebar')
-const sidebar = new Sidebar(sidebarRoot, sim, selectLevel)
+const sidebar = new Sidebar(sidebarRoot, sim, view, selectLevel)
 
 startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
   update: () => step(sim),
+  speed: () => (view.paused ? 0 : view.speed),
   render: (frameMs) => {
     input.update(view, frameMs)
     renderer.render(sim, view)

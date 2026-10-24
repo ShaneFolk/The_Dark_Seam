@@ -1,7 +1,7 @@
 // Mouse and keyboard controls for the camera and level switching.
 
 import { CONFIG } from '../config.ts'
-import { currentCamera, type ViewState } from './view.ts'
+import { currentCamera, stepSpeed, type ViewState } from './view.ts'
 
 const PAN_KEYS: Record<string, [number, number]> = {
   KeyW: [0, -1], ArrowUp: [0, -1],
@@ -50,7 +50,10 @@ export class Input {
     }, { passive: false })
 
     window.addEventListener('keydown', (e) => {
-      if (e.code in PAN_KEYS) e.preventDefault()
+      if (e.code in PAN_KEYS || e.code === 'Space') e.preventDefault()
+      if (e.code === 'Space') view.paused = !view.paused
+      if (e.key === '+' || e.key === '=') stepSpeed(view, 1)
+      if (e.key === '-' || e.key === '_') stepSpeed(view, -1)
       this.keysDown.add(e.code)
       if (e.code === 'KeyP') view.showPheromones = !view.showPheromones
       const digit = Number(e.key)

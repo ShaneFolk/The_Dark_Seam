@@ -35,8 +35,9 @@ export class Sidebar {
   private log: HTMLOListElement
   private logCount = -1
   private lastShown = ''
+  private speedButtons: { btn: HTMLButtonElement; speed: number }[] = []
 
-  constructor(root: HTMLElement, sim: SimState, onSelect: (levelIndex: number) => void) {
+  constructor(root: HTMLElement, sim: SimState, view: ViewState, onSelect: (levelIndex: number) => void) {
     const title = document.createElement('h1')
     title.textContent = 'Carrow Deep'
     root.appendChild(title)
@@ -44,6 +45,22 @@ export class Sidebar {
     this.clock = document.createElement('p')
     this.clock.className = 'clock'
     root.appendChild(this.clock)
+
+    // Speed bar: pause, then one button per speed.
+    const bar = document.createElement('div')
+    bar.className = 'speed-bar'
+    for (const speed of [0, ...CONFIG.sim.speeds]) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.textContent = speed === 0 ? 'Pause' : speed + '×'
+      btn.addEventListener('click', () => {
+        if (speed === 0) view.paused = !view.paused
+        else { view.speed = speed; view.paused = false }
+      })
+      bar.appendChild(btn)
+      this.speedButtons.push({ btn, speed })
+    }
+    root.appendChild(bar)
 
     sim.world.levels.forEach((level, i) => {
       const btn = document.createElement('button')
@@ -68,13 +85,14 @@ export class Sidebar {
 
     const help = document.createElement('p')
     help.className = 'help'
-    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>P to show hive scent (green trail, red alarm, yellow danger)'
+    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>Space to pause, + / - to change speed<br>P to show hive scent (green trail, red alarm, yellow danger)'
     root.appendChild(help)
   }
 
   update(sim: SimState, view: ViewState): void {
-    const time = formatClock(sim.tick)
+    const time = formatClock(sim.tick) + (view.paused ? ' · paused' : view.speed !== 1 ? ` · ${view.speed}×` : '')
     if (this.clock.textContent !== time) this.clock.textContent = time
+    for (const { btn, speed } of this.speedButtons) btn.classList.toggle('active', speed === 0 ? view.paused : !view.paused && speed === view.speed)
     let takers = 0, spinebacks = 0, broodlings = 0, civilians = 0, soldiers = 0, cocoons = 0, infected = 0
     for (const a of sim.agents) {
       if (a.dead) continue
