@@ -5,7 +5,8 @@
 //
 // The infection belongs to the person: if soldiers cut them free, it keeps
 // ticking wherever they go until a medic stabilizes them or the med bay cures them.
-// Spinebacks guard the Brood Mother and kill humans who come near the hive.
+// Spinebacks guard the Brood Mother, kill humans who come near the hive, and
+// answer alarm scent wherever it goes up.
 
 import { CONFIG } from '../config.ts'
 import { findPath } from '../world/pathfinding.ts'
@@ -16,6 +17,7 @@ import { isFree, setMode } from './civilian.ts'
 import { followPath } from './movement.ts'
 import { createMyrrData, type HiveContext } from './myrr.ts'
 import { makeWeapon, nearestVisible, tryAttack, type CombatContext } from './combat.ts'
+import { strongest } from '../systems/pheromones.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const L = CONFIG.lifecycle
@@ -50,7 +52,7 @@ function cocoon(captive: Agent, ctx: HiveContext): void {
   const spot = cocoonSpot(ctx)
   const civ = captive.civ!
   setMode(captive, civ, 'cocooned')
-  civ.infection = { hatchTick: ctx.tick + Math.round(L.incubationSeconds * TPS), pausedTicksLeft: null }
+  civ.infection = { hatchTick: ctx.tick + Math.round(L.incubationSeconds * TPS), stabilizedUntilTick: 0 }
   captive.state = { name: 'idle', ticksLeft: 1e9 }
   captive.levelIndex = spot.levelIndex
   captive.x = spot.x + 0.5
@@ -75,7 +77,7 @@ export function updateInfections(ctx: HiveContext): void {
   for (let i = 0; i < count; i++) {
     const host = ctx.agents[i]
     const inf = host.civ?.infection
-    if (!inf || host.dead || inf.pausedTicksLeft !== null || inf.hatchTick > ctx.tick) continue
+    if (!inf || host.dead || inf.hatchTick > ctx.tick) continue
     host.civ!.infection = null
     host.civ!.mode = 'dead'
     host.civ!.deathCause = 'hatched'
@@ -133,18 +135,24 @@ export function whatTheHiveNeeds(ctx: HiveContext): 'taker' | 'spineback' {
 
 // ---------------------------------------------------------------- Spinebacks
 
-/** Guard the Brood Mother; attack any human who comes near; then return. */
+/**
+ * Guard the Brood Mother and attack any human who comes near. When alarm scent
+ * goes up somewhere, all but `minGuards` Spinebacks go there to fight, then return.
+ */
 export function updateSpineback(agent: Agent, ctx: CombatContext): void {
   const m = agent.myrr!
   const mother = ctx.agents[ctx.hive.motherId]
   const chaseRange = L.guardRadius + 10
+  const responding = m.task === 'respond'
 
-  // Look for intruders every few ticks.
   if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) {
-    const intruder = nearestVisible(agent, ctx, CONFIG.hive.sightRange, (a) =>
-      a.side === 'human' && isFree(a) && !!mother && a.levelIndex === mother.levelIndex &&
-      Math.hypot(a.x - mother.x, a.y - mother.y) <= chaseRange)
-    m.targetId = intruder ? intruder.id : -1
+    // Guards only chase intruders near the Brood Mother; responders fight anyone they see.
+    const foe = nearestVisible(agent, ctx, CONFIG.hive.sightRange, (a) =>
+      a.side === 'human' && isFree(a) && (responding || (!!mother && a.levelIndex === mother.levelIndex &&
+      Math.hypot(a.x - mother.x, a.y - mother.y) <= chaseRange)))
+    m.targetId = foe ? foe.id : -1
+    if (foe) m.lastSeenTick = ctx.tick
+    if (!responding && !foe) answerAlarm(agent, ctx)
   }
 
   const target = m.targetId >= 0 ? ctx.agents[m.targetId] : null
@@ -164,8 +172,30 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
     followPath(agent, ctx.world)
     return
   }
+  if (responding) {
+    // At the alarm and nobody to fight for a while: go back to guarding.
+    if (ctx.tick - m.lastSeenTick > L.alarmGiveUpSeconds * TPS) m.task = 'guard'
+    else return
+  }
   const far = mother && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > L.guardRadius)
   if (far || ctx.rng.chance(1 / (6 * TPS))) guardSpot(agent, ctx)
+}
+
+/** Go to the strongest alarm, if it's loud enough and enough guards stay behind. */
+function answerAlarm(agent: Agent, ctx: CombatContext): void {
+  const alarm = strongest(ctx.pheromones, 'alarm', ctx.world, 8, CONFIG.pheromones.alarmRespond).find(({ at }) =>
+    (at.levelIndex === agent.levelIndex || at.levelIndex === agent.levelIndex - 1) &&
+    Math.hypot(at.x - agent.x, at.y - agent.y) <= CONFIG.pheromones.alarmRange)
+  if (!alarm) return
+  const guards = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && a.myrr.task === 'guard').length
+  if (guards <= L.minGuards) return
+  const path = findPath(ctx.world, tileOf(agent), alarm.at, 'myrr')
+  if (!path?.length) return
+  const m = agent.myrr!
+  m.task = 'respond'
+  m.lastSeenTick = ctx.tick // give up after alarmGiveUpSeconds with nobody found
+  agent.path = path
+  agent.state = { name: 'moving' }
 }
 
 function guardSpot(agent: Agent, ctx: HiveContext): void {

@@ -154,7 +154,10 @@ function spawnSoldiers(sim: SimState): void {
     const civ = createCivilianData(world, rng, 'soldier')!
     const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', randomTileIn(world, security, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
-    agent.soldier = { squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, targetId: -1 }
+    agent.soldier = {
+      squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, targetId: -1,
+      stabilizers: isMedic ? CONFIG.soldiers.stabilizers : 0, patientId: -1, workTicks: 0,
+    }
     agent.weapon = makeWeapon(isMedic ? 'pistol' : 'rifle', isMedic ? CONFIG.combat.skill.medic : CONFIG.combat.skill.soldier)
     sim.squads[squadId].members.push(agent.id)
     sim.agents.push(agent)

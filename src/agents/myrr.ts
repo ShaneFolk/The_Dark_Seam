@@ -26,7 +26,7 @@ export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' // Takers
   | 'inject' // Brood Mother
   | 'grow' // Broodlings
-  | 'guard' // Spinebacks
+  | 'guard' | 'respond' // Spinebacks
 
 export interface MyrrData {
   role: 'taker' | 'mother' | 'broodling' | 'spineback'

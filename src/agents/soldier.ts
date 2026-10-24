@@ -11,7 +11,8 @@
 //   patrol    otherwise walk the squad's route
 //
 // The leader walks to the squad's goal; the others keep close to the leader.
-// Every soldier shoots the nearest Myrr in reach on their own.
+// Every soldier shoots the nearest Myrr in reach on their own. Medics also wake
+// paralysed people and stabilize infected ones when it's safe.
 
 import { CONFIG } from '../config.ts'
 import type { PathNode } from '../world/pathfinding.ts'
@@ -30,6 +31,10 @@ export interface SoldierData {
   repathTick: number
   /** Myrr this soldier is shooting at, or -1. */
   targetId: number
+  /** Medics only: stabilizers left, current patient (-1 = none) and ticks left on the job. */
+  stabilizers: number
+  patientId: number
+  workTicks: number
 }
 
 export type Order = 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat'
@@ -139,6 +144,7 @@ export function updateSoldier(agent: Agent, squads: Squad[], ctx: CombatContext)
   }
   const alive = members(squad, ctx)
   const leader = alive[0]
+  if (agent.soldier!.role === 'medic' && treatPatients(agent, ctx)) return
   if (agent === leader) leadSquad(agent, squad, alive, ctx)
   else follow(agent, leader, alive.indexOf(agent), ctx)
 }
@@ -196,7 +202,10 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
 
 function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
   if (squad.order === 'resupply') {
-    for (const s of alive) if (s.weapon) refill(s.weapon)
+    for (const s of alive) {
+      if (s.weapon) refill(s.weapon)
+      if (s.soldier!.role === 'medic') s.soldier!.stabilizers = S.stabilizers
+    }
     setOrder(squad, 'patrol', null)
   } else if (squad.order === 'cut') {
     const person = ctx.agents[squad.targetId]
@@ -233,6 +242,66 @@ function formationSpot(leader: Agent, slot: number, ctx: CombatContext): PathNod
     if (canWalk(level, at.x + dx, at.y + dy, 'human')) return { levelIndex: at.levelIndex, x: at.x + dx, y: at.y + dy }
   }
   return at
+}
+
+// ---------------------------------------------------------------- medics
+
+/**
+ * Medic work: wake paralysed people and stabilize infected ones nearby, unless a
+ * Myrr is too close. Returns true while busy (the medic doesn't follow the squad).
+ */
+function treatPatients(agent: Agent, ctx: CombatContext): boolean {
+  const s = agent.soldier!
+  if (s.patientId < 0) {
+    if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks !== 0) return false
+    if (nearestVisible(agent, ctx, S.unsafeRange, (a) => a.side === 'myrr')) return false
+    const patient = nearestVisible(agent, ctx, S.patientRange, (a) => !!needsCare(a, s, ctx))
+    if (!patient) return false
+    s.patientId = patient.id
+    s.workTicks = Math.round((needsCare(patient, s, ctx) === 'wake' ? S.wakeSeconds : S.stabilizeSeconds) * TPS)
+  }
+
+  const patient = ctx.agents[s.patientId]
+  const care = patient && needsCare(patient, s, ctx)
+  if (!care || nearestVisible(agent, ctx, S.unsafeRange, (a) => a.side === 'myrr')) {
+    s.patientId = -1
+    return false
+  }
+
+  if (patient.levelIndex === agent.levelIndex && dist(agent, patient) <= 1.5) {
+    agent.path = []
+    agent.state = { name: 'idle', ticksLeft: 0 }
+    if (--s.workTicks > 0) return true
+    const civ = patient.civ!
+    if (care === 'wake') {
+      civ.paralyzedUntilTick = ctx.tick // wakes up on its own next tick
+    } else if (civ.infection) {
+      // Pause the larva: push the hatch time back by the pause.
+      const pause = Math.round(S.stabilizerPauseSeconds * TPS)
+      civ.infection.stabilizedUntilTick = ctx.tick + pause
+      civ.infection.hatchTick += pause
+      s.stabilizers--
+    }
+    s.patientId = -1
+    return false
+  }
+
+  if (ctx.tick >= s.repathTick || agent.state.name !== 'moving') {
+    s.repathTick = ctx.tick + TPS
+    walkTo(agent, tileOf(patient), ctx)
+  }
+  followPath(agent, ctx.world)
+  return true
+}
+
+/** What a person needs from a medic, if anything. */
+function needsCare(a: Agent, medic: SoldierData, ctx: CombatContext): 'wake' | 'stabilize' | null {
+  const civ = a.civ
+  if (!civ || a.dead || a.side !== 'human') return null
+  if (civ.mode === 'paralyzed') return 'wake'
+  if (civ.infection && ctx.tick >= civ.infection.stabilizedUntilTick && medic.stabilizers > 0 &&
+      civ.mode !== 'cocooned' && civ.mode !== 'captured' && civ.mode !== 'captive') return 'stabilize'
+  return null
 }
 
 // ---------------------------------------------------------------- helpers

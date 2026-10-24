@@ -50,9 +50,10 @@ export interface CivilianData {
   paralyzedUntilTick: number
   /**
    * Injected with a larva: hatches at hatchTick wherever they are. A medic's
-   * stabilizer pauses it (pausedTicksLeft set). Null if not infected.
+   * stabilizer pauses it until stabilizedUntilTick (and pushes hatchTick back by the
+   * same amount). Null if not infected.
    */
-  infection: { hatchTick: number; pausedTicksLeft: number | null } | null
+  infection: { hatchTick: number; stabilizedUntilTick: number } | null
   /** Cut free from a cocoon by soldiers. */
   rescued: boolean
   /** How they died, if they did. */

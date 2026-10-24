@@ -174,9 +174,13 @@ export const CONFIG = {
     /** The hive aims for this share of Spinebacks among its fighters and workers. */
     spinebackShare: 0.3,
     /** Each recent Spineback loss raises that share by this much (Phase 6 adds losses). */
-    lossBias: 0.1,
+    lossBias: 0.05,
     /** Spinebacks stay within this many tiles of the Brood Mother. */
     guardRadius: 6,
+    /** Spinebacks that always stay with the Brood Mother when others answer an alarm. */
+    minGuards: 1,
+    /** Answering Spinebacks go back to guarding after this long without a human in sight, in seconds. */
+    alarmGiveUpSeconds: 15,
   },
 
   combat: {
@@ -211,6 +215,15 @@ export const CONFIG = {
     resupplySeconds: 6,
     /** Seconds to cut a cocoon open. */
     cutSeconds: 5,
+    /** Medics: stabilizers carried (refilled at the armory for now), and how long each job takes. */
+    stabilizers: 3,
+    wakeSeconds: 3,
+    stabilizeSeconds: 4,
+    /** A stabilizer pauses the larva this long, in seconds (about 16 colony hours). */
+    stabilizerPauseSeconds: 480,
+    /** Medics look for patients this far away, in tiles, and won't go if a Myrr is this close. */
+    patientRange: 12,
+    unsafeRange: 6,
     /** A response is dropped when no Myrr has been seen for this long, in seconds. */
     respondGiveUpSeconds: 20,
     /** Morale (0 to 1): changes per event or per second. */
@@ -233,6 +246,14 @@ export const CONFIG = {
     capture: 8,
     /** Scent halves this often, in seconds. */
     halfLifeSeconds: 180,
+    /** Alarm scent: laid when a Myrr is hurt or killed; fades fast. */
+    alarmOnHurt: 4,
+    alarmOnDeath: 10,
+    alarmHalfLifeSeconds: 30,
+    /** Spinebacks answer alarm at least this strong. */
+    alarmRespond: 1.5,
+    /** Spinebacks only answer alarms within this many tiles, on their level or the one above. */
+    alarmRange: 45,
     /** Scent weaker than this is ignored by scouts. */
     minFollow: 0.5,
   },
