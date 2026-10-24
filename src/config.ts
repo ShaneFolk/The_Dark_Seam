@@ -88,7 +88,7 @@ export const CONFIG = {
 
   noise: {
     /** How far each kind of noise carries, in tiles. */
-    radius: { skitter: 5, scream: 12, gunshot: 16 },
+    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14 },
     /** Myrr make a skittering noise this often while moving, in seconds. */
     skitterEverySeconds: 2,
     /** Panicking humans scream this often, in seconds. */
@@ -102,6 +102,7 @@ export const CONFIG = {
     scream: 0.08,
     skitter: 0.05,
     gunshot: 0.04,
+    dig: 0.03,
     /** Hearing alone never raises fear above this (enough to hide, not to flee). */
     hearingCap: 0.35,
     /** Fear lost per second when nothing scary is sensed. */
@@ -162,6 +163,17 @@ export const CONFIG = {
     repathSeconds: 1,
     /** Chance a rested Taker spreads resin instead of scouting. */
     resinTaskChance: 0.3,
+    /** Digging (Levels 2 and 3 only): starts where danger scent reaches this strength... */
+    digTriggerDanger: 15,
+    /** ...at most once per this many seconds. */
+    digCooldownSeconds: 180,
+    /** Seconds to dig through one rock tile, and the longest tunnel the hive will try. */
+    digSecondsPerTile: 15,
+    maxDigLength: 5,
+    /** A tunnel is only worth digging if it saves at least this many tiles of walking. */
+    minDigSavings: 25,
+    /** How far from the danger spot to look for a place to dig, in tiles. */
+    digSearchRadius: 15,
   },
 
   lifecycle: {
@@ -254,6 +266,13 @@ export const CONFIG = {
     alarmRespond: 1.5,
     /** Spinebacks only answer alarms within this many tiles, on their level or the one above. */
     alarmRange: 45,
+    /** Danger scent: laid where a Myrr is shot or killed (spread over a small area); fades slowly. */
+    dangerOnHurt: 2,
+    dangerOnDeath: 12,
+    dangerSpread: 2,
+    dangerHalfLifeSeconds: 600,
+    /** Each unit of danger makes a tile cost this many extra seconds in a Taker's route planning. */
+    dangerCost: 1.5,
     /** Scent weaker than this is ignored by scouts. */
     minFollow: 0.5,
   },

@@ -6,7 +6,7 @@
 //   retreat   morale broke: fall back to Security until it recovers
 //   resupply  low on ammo: restock at the Armory
 //   rescue    a Taker is carrying someone: chase it and shoot it
-//   respond   Myrr in sight, or screams / gunfire heard: go there and fight
+//   respond   Myrr in sight, or screams / gunfire / digging heard: go there and fight
 //   cut       a cocoon in sight: cut the person free
 //   patrol    otherwise walk the squad's route
 //
@@ -89,7 +89,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
         }
       }
     }
-    const heard = ctx.noises.find((n) => (n.kind === 'scream' || n.kind === 'gunshot') && n.sourceId >= 0 &&
+    const heard = ctx.noises.find((n) => (n.kind === 'scream' || n.kind === 'gunshot' || n.kind === 'dig') && n.sourceId >= 0 &&
       !squad.members.includes(n.sourceId) && alive.some((s) => canHear(s, n, ctx.world.levels[s.levelIndex])))
 
     // Morale drifts: down while outnumbered, back up when it's quiet.

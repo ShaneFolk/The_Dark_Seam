@@ -7,7 +7,7 @@ import { createWorld, type World } from './world/world.ts'
 import { createAgent, type Agent } from './agents/agent.ts'
 import { updateWanderer } from './agents/wander.ts'
 import { activityAt, createCivilianData, roomFor, updateCivilian, type CivilianContext } from './agents/civilian.ts'
-import { createMyrrData, takerHurt, updateTaker, type HiveState } from './agents/myrr.ts'
+import { createMyrrData, planDigging, takerHurt, updateTaker, type HiveState } from './agents/myrr.ts'
 import { updateBroodling, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
 import { makeWeapon, pruneShots, tickWeapon, type CombatContext, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
@@ -42,7 +42,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0 },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0 },
     squads: [],
     shots: [],
   }
@@ -77,6 +77,7 @@ export function step(sim: SimState): void {
 
   updateInfections(ctx)
   updateSquads(sim.squads, ctx)
+  planDigging(ctx)
 
   // Only agents that existed at the start of the tick act (new Broodlings wait a tick).
   const count = sim.agents.length

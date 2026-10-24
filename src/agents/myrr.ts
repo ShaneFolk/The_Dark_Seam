@@ -15,6 +15,8 @@ import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
 import { findRooms, roomTiles } from '../world/rooms.ts'
 import { depositTrail, strongestTrail, type Pheromones } from '../systems/pheromones.ts'
 import { coatResin, resinFrontier } from '../systems/resin.ts'
+import { digTile, findDigSite, type DigJob } from '../systems/digging.ts'
+import { makeNoise } from '../systems/noise.ts'
 import type { Noise } from '../systems/noise.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
@@ -23,7 +25,7 @@ import { isFree, setMode } from './civilian.ts'
 import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 
 export type Task =
-  | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' // Takers
+  | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' // Takers
   | 'inject' // Brood Mother
   | 'grow' // Broodlings
   | 'guard' | 'respond' // Spinebacks
@@ -60,6 +62,10 @@ export interface HiveState {
   losses: { taker: number; spineback: number }
   /** Tiles covered in resin, all levels. */
   resinTiles: number
+  /** Tunnel being dug, if any (one at a time), and when the next may start. */
+  dig: DigJob | null
+  nextDigTick: number
+  tunnelsDug: number
 }
 
 export interface HiveContext {
@@ -90,7 +96,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
     return
   }
 
-  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack') {
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig') {
     lookForPrey(agent, m, ctx)
   }
 
@@ -190,12 +196,67 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       return
     }
 
+    case 'dig': {
+      const job = ctx.hive.dig
+      if (!job || job.takerId !== agent.id) return rest(agent, m, ctx)
+      if (agent.state.name === 'moving' && !followPath(agent, ctx.world)) return
+      // At the rock face: dig, loudly.
+      if (ctx.tick % (2 * TPS) === 0) makeNoise(ctx.noises, 'dig', agent.levelIndex, agent.x, agent.y, ctx.tick, agent.id)
+      if (--job.ticksLeft > 0) return
+      const tile = job.tiles[job.done]
+      digTile(ctx.world, tile)
+      agent.levelIndex = tile.levelIndex
+      agent.x = tile.x + 0.5
+      agent.y = tile.y + 0.5
+      if (++job.done < job.tiles.length) {
+        job.ticksLeft = Math.round(H.digSecondsPerTile * TPS)
+        return
+      }
+      ctx.hive.dig = null
+      ctx.hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS)
+      ctx.hive.tunnelsDug++
+      return rest(agent, m, ctx)
+    }
+
     case 'coat': {
       if (--m.ticksLeft > 0) return
       const room = CONFIG.resin.maxTiles - ctx.hive.resinTiles
       ctx.hive.resinTiles += coatResin(ctx.world, tileOf(agent), room)
       return rest(agent, m, ctx, 0.3)
     }
+  }
+}
+
+// ---------------------------------------------------------------- digging
+
+/**
+ * Every few seconds: drop a dig whose digger died, or start a new one if danger
+ * is high and the cooldown is over, giving it to the nearest Taker that's free.
+ */
+export function planDigging(ctx: HiveContext): void {
+  if (ctx.tick % (5 * TPS) !== 0) return
+  const { hive } = ctx
+  if (hive.dig) {
+    const digger = ctx.agents[hive.dig.takerId]
+    if (!digger || digger.dead || digger.myrr?.task !== 'dig') {
+      hive.dig = null
+      hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS * 0.5)
+    }
+    return
+  }
+  if (ctx.tick < hive.nextDigTick) return
+  const site = findDigSite(ctx.world, ctx.pheromones, ctx.rng)
+  if (!site) { hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS * 0.25); return }
+
+  const free = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'taker' && ['rest', 'scout', 'return', 'spread'].includes(a.myrr.task))
+  free.sort((a, b) => (a.levelIndex !== site.levelIndex ? 1000 : 0) - (b.levelIndex !== site.levelIndex ? 1000 : 0) +
+    Math.hypot(a.x - site.start.x, a.y - site.start.y) - Math.hypot(b.x - site.start.x, b.y - site.start.y))
+  for (const taker of free) {
+    if (!goTo(taker, ctx, site.start)) continue
+    hive.dig = { ...site, takerId: taker.id, done: 0, ticksLeft: Math.round(H.digSecondsPerTile * TPS) }
+    taker.myrr!.task = 'dig'
+    taker.myrr!.targetId = -1
+    return
   }
 }
 
@@ -332,6 +393,9 @@ function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
     // Stronger scent is more likely to be picked.
     let roll = ctx.rng.next() * spots.reduce((s, p) => s + p.strength, 0)
     for (const spot of spots) {
+      const level = ctx.world.levels[spot.at.levelIndex]
+      const danger = ctx.pheromones.danger[spot.at.levelIndex][spot.at.y * level.width + spot.at.x]
+      if (danger > spot.strength) continue // prey there, but too many Myrr have died there
       if ((roll -= spot.strength) <= 0 && goTo(agent, ctx, spot.at)) return
     }
   }
@@ -352,7 +416,7 @@ function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
  */
 export function takerHurt(agent: Agent, source: Agent | null, ctx: HiveContext): void {
   const m = agent.myrr!
-  if (m.role !== 'taker' || m.task === 'carry' || m.task === 'return') return
+  if (m.role !== 'taker' || m.task === 'carry' || m.task === 'return' || m.task === 'dig') return
   const shot = !!source?.weapon && isRanged(source.weapon)
   if (!shot && agent.health > agent.maxHealth * 0.4) return
   m.targetId = -1
@@ -374,7 +438,8 @@ function rest(agent: Agent, m: MyrrData, ctx: HiveContext, scale = 1): void {
 }
 
 function goTo(agent: Agent, ctx: HiveContext, to: PathNode): boolean {
-  const path = findPath(ctx.world, tileOf(agent), to, 'myrr')
+  // Takers steer around danger scent (places Myrr have been shot or killed).
+  const path = findPath(ctx.world, tileOf(agent), to, 'myrr', { avoid: ctx.pheromones.danger, avoidCost: CONFIG.pheromones.dangerCost })
   if (!path || !path.length) return false
   agent.path = path
   agent.state = { name: 'moving' }

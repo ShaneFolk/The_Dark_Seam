@@ -36,7 +36,7 @@ export class Sidebar {
 
     const help = document.createElement('p')
     help.className = 'help'
-    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>P to show hive scent (green trail, red alarm)'
+    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>P to show hive scent (green trail, red alarm, yellow danger)'
     root.appendChild(help)
   }
 
@@ -54,7 +54,7 @@ export class Sidebar {
       else if (a.kind === 'spineback') spinebacks++
       else if (a.kind === 'broodling') broodlings++
     }
-    const hive = `Hive: ${takers} Takers · ${spinebacks} Spinebacks · ${broodlings} Broodlings · ${sim.hive.captives.length} captives · ${cocoons} cocoons · ${sim.hive.hatched} hatched · ${sim.hive.resinTiles} resin tiles`
+    const hive = `Hive: ${takers} Takers · ${spinebacks} Spinebacks · ${broodlings} Broodlings · ${sim.hive.captives.length} captives · ${cocoons} cocoons · ${sim.hive.hatched} hatched · ${sim.hive.resinTiles} resin tiles · ${sim.hive.tunnelsDug} tunnels dug${sim.hive.dig ? ' (digging now)' : ''}`
       + `
 Colony: ${civilians} civilians · ${soldiers} soldiers · ${infected} infected walking around`
       + sim.squads.map((s) => `
