@@ -207,10 +207,10 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Flee, hide, panic
 
 ### Phase 4 — Hive v1
-- [ ] Brood Mother in the hive core
-- [ ] Takers: scout, hunt, capture, carry
-- [ ] Trail pheromones
-- [ ] Resin spread
+- [x] Brood Mother in the hive core
+- [x] Takers: scout, hunt, capture, carry
+- [x] Trail pheromones
+- [x] Resin spread
 
 ### Phase 5 — The Lifecycle
 - [ ] Sting + paralysis
