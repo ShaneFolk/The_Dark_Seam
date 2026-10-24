@@ -17,7 +17,7 @@ import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
 import { canHear, canSee } from './perception.ts'
 
-export type Job = keyof typeof CONFIG.civilians.jobs
+export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier'
 export type Activity = 'eat' | 'work' | 'free' | 'sleep'
 /**
  * `paralyzed` = stung, can't act until it wears off; `captured` = being carried by a Taker;
@@ -48,6 +48,15 @@ export interface CivilianData {
   nextScreamTick: number
   /** Tick a sting wears off (only matters if nobody carries them off). */
   paralyzedUntilTick: number
+  /**
+   * Injected with a larva: hatches at hatchTick wherever they are. A medic's
+   * stabilizer pauses it (pausedTicksLeft set). Null if not infected.
+   */
+  infection: { hatchTick: number; pausedTicksLeft: number | null } | null
+  /** Cut free from a cocoon by soldiers. */
+  rescued: boolean
+  /** How they died, if they did. */
+  deathCause: 'hatched' | 'killed' | null
 }
 
 /** What the world looks like to a civilian this tick. */
@@ -64,9 +73,9 @@ const F = CONFIG.fear
 
 // ---------------------------------------------------------------- creation
 
-export function createCivilianData(world: World, rng: Rng): CivilianData | null {
-  const job = pickJob(rng)
-  const jobInfo = CONFIG.civilians.jobs[job]
+export function createCivilianData(world: World, rng: Rng, forceJob?: Job): CivilianData | null {
+  const job = forceJob ?? pickJob(rng)
+  const jobInfo = job === 'soldier' ? { level: 1, roomTypes: ['security'] as const } : CONFIG.civilians.jobs[job]
   const homes = findRooms(world, ['quarters'], 0)
   const works = findRooms(world, jobInfo.roomTypes, jobInfo.level - 1).filter((r) => r.room.type !== 'hive')
   if (!homes.length || !works.length) return null
@@ -84,11 +93,15 @@ export function createCivilianData(world: World, rng: Rng): CivilianData | null 
     lastSeenTick: -1e9,
     nextScreamTick: 0,
     paralyzedUntilTick: 0,
+    infection: null,
+    rescued: false,
+    deathCause: null,
   }
 }
 
 function pickJob(rng: Rng): Job {
   const jobs = Object.entries(CONFIG.civilians.jobs) as [Job, { weight: number }][]
+
   let roll = rng.next() * jobs.reduce((s, [, j]) => s + j.weight, 0)
   for (const [name, j] of jobs) if ((roll -= j.weight) <= 0) return name
   return jobs[0][0]
@@ -128,11 +141,19 @@ export function updateCivilian(agent: Agent, ctx: CivilianContext): void {
   if (civ.mode === 'paralyzed') {
     if (ctx.tick < civ.paralyzedUntilTick) return
     // The sting wore off and nobody took them: terrified, they get away and hide.
+    if (agent.soldier) { setMode(agent, civ, 'routine'); return }
     civ.fear = Math.max(civ.fear, F.flee)
     setMode(agent, civ, 'hide')
     return
   }
   if (!isFree(agent)) return // carried, held or cocooned: the hive moves them now
+  if (agent.heldBy >= 0) {
+    // In a Taker's claws: can't move, only fight back (done in the Taker's attack).
+    const holder = ctx.agents[agent.heldBy]
+    if (holder && !holder.dead && holder.myrr?.task === 'attack' && holder.myrr.targetId === agent.id) return
+    agent.heldBy = -1
+  }
+  if (agent.soldier) return // soldiers are run by their squad (soldier.ts)
   if (civ.mode === 'routine' && agent.health < agent.maxHealth) {
     agent.health = Math.min(agent.maxHealth, agent.health + CONFIG.health.regenPerSecond / TPS)
   }

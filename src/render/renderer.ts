@@ -147,11 +147,30 @@ export class Renderer {
   private drawAgents(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
     const { ctx } = this
     for (const agent of sim.agents) {
-      if (agent.levelIndex !== levelIndex) continue
+      if (agent.dead || agent.levelIndex !== levelIndex) continue
       ctx.globalAlpha = agent.state.name === 'crossing' ? 0.4 : 1
-      AGENT_ART[agent.kind](ctx, ox + agent.x * tile, oy + agent.y * tile, tile, agent)
+      const cx = ox + agent.x * tile, cy = oy + agent.y * tile
+      AGENT_ART[agent.kind](ctx, cx, cy, tile, agent)
+      // Health bar over anyone hurt, once zoomed in enough to read it.
+      if (agent.health < agent.maxHealth && tile >= CONFIG.render.linkLabelMinTilePx && agent.civ?.mode !== 'cocooned') {
+        const w = tile * 0.8, h = Math.max(2, tile * 0.1)
+        ctx.fillStyle = '#300'
+        ctx.fillRect(cx - w / 2, cy - tile * 0.6, w, h)
+        ctx.fillStyle = agent.side === 'human' ? '#6fdc6f' : '#ff7a5c'
+        ctx.fillRect(cx - w / 2, cy - tile * 0.6, w * Math.max(0, agent.health / agent.maxHealth), h)
+      }
     }
     ctx.globalAlpha = 1
+    // Tracers for recent shots and swings.
+    ctx.lineWidth = Math.max(1, tile * 0.06)
+    for (const s of sim.shots) {
+      if (s.levelIndex !== levelIndex || !s.ranged) continue
+      ctx.strokeStyle = s.hit ? 'rgba(255, 230, 120, 0.9)' : 'rgba(255, 230, 120, 0.35)'
+      ctx.beginPath()
+      ctx.moveTo(ox + s.x0 * tile, oy + s.y0 * tile)
+      ctx.lineTo(ox + s.x1 * tile, oy + s.y1 * tile)
+      ctx.stroke()
+    }
   }
 
   /** Up/down arrows on link tiles, once tiles are big enough to read. */

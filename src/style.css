@@ -110,3 +110,7 @@ body {
   font: 600 14px/1 monospace;
   color: #c9d1d9;
 }
+
+.help {
+  white-space: pre-line;
+}

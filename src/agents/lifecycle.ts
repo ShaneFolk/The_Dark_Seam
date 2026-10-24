@@ -1,18 +1,21 @@
-// The hive's life cycle (Phase 5):
+// The hive's life cycle:
 //
-//   captive ─▶ Brood Mother injects ─▶ cocoon (incubating) ─▶ Broodling bursts out
+//   captive ─▶ Brood Mother injects ─▶ cocooned (infected) ─▶ Broodling bursts out
 //   Broodling grows in the hive ─▶ becomes a Taker or a Spineback, by what the hive needs.
 //
-// Spinebacks guard the Brood Mother for now; they learn to fight in Phase 6.
+// The infection belongs to the person: if soldiers cut them free, it keeps
+// ticking wherever they go until a medic stabilizes them or the med bay cures them.
+// Spinebacks guard the Brood Mother and kill humans who come near the hive.
 
 import { CONFIG } from '../config.ts'
 import { findPath } from '../world/pathfinding.ts'
 import { cornerTiles, findRooms, randomTileIn, roomTiles } from '../world/rooms.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 import { createAgent, tileOf, type Agent } from './agent.ts'
-import { setMode } from './civilian.ts'
+import { isFree, setMode } from './civilian.ts'
 import { followPath } from './movement.ts'
 import { createMyrrData, type HiveContext } from './myrr.ts'
+import { makeWeapon, nearestVisible, tryAttack, type CombatContext } from './combat.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const L = CONFIG.lifecycle
@@ -42,49 +45,48 @@ export function updateMother(mother: Agent, ctx: HiveContext): void {
   m.ticksLeft = Math.round(L.injectSeconds * TPS)
 }
 
-/** Wrap an injected human in a cocoon near the edge of the hive core. */
+/** Infect and wrap a captive in a cocoon near the edge of the hive core. */
 function cocoon(captive: Agent, ctx: HiveContext): void {
   const spot = cocoonSpot(ctx)
-  setMode(captive, captive.civ!, 'cocooned')
+  const civ = captive.civ!
+  setMode(captive, civ, 'cocooned')
+  civ.infection = { hatchTick: ctx.tick + Math.round(L.incubationSeconds * TPS), pausedTicksLeft: null }
   captive.state = { name: 'idle', ticksLeft: 1e9 }
   captive.levelIndex = spot.levelIndex
   captive.x = spot.x + 0.5
   captive.y = spot.y + 0.5
-  ctx.hive.cocoons.push({ agentId: captive.id, hatchTick: ctx.tick + Math.round(L.incubationSeconds * TPS) })
 }
 
 /** A free corner tile of the hive core (cocoons line its walls). */
 function cocoonSpot(ctx: HiveContext): PathNode {
   const hive = findRooms(ctx.world, ['hive'])[0]
   const taken = new Set(
-    ctx.hive.cocoons.map(({ agentId }) => {
-      const a = ctx.agents[agentId]
-      return `${Math.floor(a.x)},${Math.floor(a.y)}`
-    }),
+    ctx.agents.filter((a) => a.civ?.mode === 'cocooned').map((a) => `${Math.floor(a.x)},${Math.floor(a.y)}`),
   )
   const free = cornerTiles(ctx.world, hive).filter((t) => !taken.has(`${t.x},${t.y}`))
   return free.length ? ctx.rng.pick(free) : randomTileIn(ctx.world, hive, ctx.rng)
 }
 
-// ---------------------------------------------------------------- cocoons
+// ---------------------------------------------------------------- infections
 
-/** Hatch cocoons whose time is up. New Broodlings are added to `agents`. */
-export function updateCocoons(ctx: HiveContext): void {
-  const { hive } = ctx
-  const due = hive.cocoons.filter((c) => c.hatchTick <= ctx.tick)
-  if (!due.length) return
-  hive.cocoons = hive.cocoons.filter((c) => c.hatchTick > ctx.tick)
-  for (const { agentId } of due) {
-    const host = ctx.agents[agentId]
-    if (!host?.civ || host.civ.mode !== 'cocooned') continue // rescued or cured (later phases)
-    host.civ.mode = 'dead'
+/** Hatch infections whose time is up, wherever the host is. */
+export function updateInfections(ctx: HiveContext): void {
+  const count = ctx.agents.length
+  for (let i = 0; i < count; i++) {
+    const host = ctx.agents[i]
+    const inf = host.civ?.infection
+    if (!inf || host.dead || inf.pausedTicksLeft !== null || inf.hatchTick > ctx.tick) continue
+    host.civ!.infection = null
+    host.civ!.mode = 'dead'
+    host.civ!.deathCause = 'hatched'
+    host.dead = true
     host.health = 0
-    const brood = createAgent(ctx.agents.length, 'broodling', 'myrr', tileOf(host), CONFIG.movement.myrrSpeed * 0.5, 30)
+    const brood = createAgent(ctx.agents.length, 'broodling', 'myrr', tileOf(host), CONFIG.movement.myrrSpeed * 0.5, CONFIG.health.broodling)
     brood.myrr = createMyrrData('broodling')
     brood.myrr.task = 'grow'
     brood.myrr.ticksLeft = Math.round(L.growSeconds * TPS)
     ctx.agents.push(brood)
-    hive.hatched++
+    ctx.hive.hatched++
   }
 }
 
@@ -105,7 +107,8 @@ function growUp(agent: Agent, ctx: HiveContext): void {
   const role = whatTheHiveNeeds(ctx)
   agent.kind = role
   agent.baseSpeed = agent.speed = CONFIG.movement.myrrSpeed
-  agent.health = agent.maxHealth = 100
+  agent.health = agent.maxHealth = role === 'taker' ? CONFIG.health.taker : CONFIG.health.spineback
+  agent.weapon = makeWeapon(role === 'taker' ? 'claws' : 'spines', CONFIG.combat.skill.myrr)
   agent.myrr = createMyrrData(role)
   agent.myrr.task = role === 'taker' ? 'rest' : 'guard'
   agent.path = []
@@ -114,11 +117,12 @@ function growUp(agent: Agent, ctx: HiveContext): void {
 
 /**
  * Spineback if the hive has fewer than its target share of them (raised by
- * recent Spineback losses), otherwise Taker.
+ * Spineback losses), otherwise Taker.
  */
 export function whatTheHiveNeeds(ctx: HiveContext): 'taker' | 'spineback' {
   let takers = 0, spinebacks = 0
   for (const a of ctx.agents) {
+    if (a.dead) continue
     if (a.kind === 'taker') takers++
     else if (a.kind === 'spineback') spinebacks++
   }
@@ -129,13 +133,37 @@ export function whatTheHiveNeeds(ctx: HiveContext): 'taker' | 'spineback' {
 
 // ---------------------------------------------------------------- Spinebacks
 
-/** Stay close to the Brood Mother, shifting position now and then. */
-export function updateSpineback(agent: Agent, ctx: HiveContext): void {
+/** Guard the Brood Mother; attack any human who comes near; then return. */
+export function updateSpineback(agent: Agent, ctx: CombatContext): void {
+  const m = agent.myrr!
+  const mother = ctx.agents[ctx.hive.motherId]
+  const chaseRange = L.guardRadius + 10
+
+  // Look for intruders every few ticks.
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) {
+    const intruder = nearestVisible(agent, ctx, CONFIG.hive.sightRange, (a) =>
+      a.side === 'human' && isFree(a) && !!mother && a.levelIndex === mother.levelIndex &&
+      Math.hypot(a.x - mother.x, a.y - mother.y) <= chaseRange)
+    m.targetId = intruder ? intruder.id : -1
+  }
+
+  const target = m.targetId >= 0 ? ctx.agents[m.targetId] : null
+  if (target && !target.dead && isFree(target)) {
+    if (tryAttack(agent, target, ctx)) return
+    if (ctx.tick >= m.repathTick) {
+      m.repathTick = ctx.tick + TPS
+      const path = findPath(ctx.world, tileOf(agent), tileOf(target), 'myrr')
+      if (path?.length) { agent.path = path; agent.state = { name: 'moving' } }
+    }
+    if (agent.state.name === 'moving' || agent.state.name === 'crossing') followPath(agent, ctx.world)
+    return
+  }
+  m.targetId = -1
+
   if (agent.state.name === 'moving' || agent.state.name === 'crossing') {
     followPath(agent, ctx.world)
     return
   }
-  const mother = ctx.agents[ctx.hive.motherId]
   const far = mother && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > L.guardRadius)
   if (far || ctx.rng.chance(1 / (6 * TPS))) guardSpot(agent, ctx)
 }

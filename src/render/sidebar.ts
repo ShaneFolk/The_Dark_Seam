@@ -43,13 +43,22 @@ export class Sidebar {
   update(sim: SimState, view: ViewState): void {
     const time = formatClock(sim.tick)
     if (this.clock.textContent !== time) this.clock.textContent = time
-    let takers = 0, spinebacks = 0, broodlings = 0
+    let takers = 0, spinebacks = 0, broodlings = 0, civilians = 0, soldiers = 0, cocoons = 0, infected = 0
     for (const a of sim.agents) {
+      if (a.dead) continue
+      if (a.civ?.mode === 'cocooned') cocoons++
+      else if (a.civ?.infection) infected++
+      if (a.soldier) soldiers++
+      else if (a.civ && a.civ.mode !== 'cocooned') civilians++
       if (a.kind === 'taker') takers++
       else if (a.kind === 'spineback') spinebacks++
       else if (a.kind === 'broodling') broodlings++
     }
-    const hive = `Hive: ${takers} Takers · ${spinebacks} Spinebacks · ${broodlings} Broodlings · ${sim.hive.captives.length} captives · ${sim.hive.cocoons.length} cocoons · ${sim.hive.hatched} hatched · ${sim.hive.resinTiles} resin tiles`
+    const hive = `Hive: ${takers} Takers · ${spinebacks} Spinebacks · ${broodlings} Broodlings · ${sim.hive.captives.length} captives · ${cocoons} cocoons · ${sim.hive.hatched} hatched · ${sim.hive.resinTiles} resin tiles`
+      + `
+Colony: ${civilians} civilians · ${soldiers} soldiers · ${infected} infected walking around`
+      + sim.squads.map((s) => `
+Squad ${s.id + 1}: ${s.order} · morale ${Math.round(s.morale * 100)}%`).join('')
     if (this.hiveInfo.textContent !== hive) this.hiveInfo.textContent = hive
     const counts = sim.world.levels.map((_, i) => levelActivity(sim, i))
     const key = `${view.levelIndex}|${counts.map((c) => `${c.humans},${c.myrr}`).join('|')}`

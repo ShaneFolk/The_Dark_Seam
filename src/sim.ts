@@ -7,12 +7,15 @@ import { createWorld, type World } from './world/world.ts'
 import { createAgent, type Agent } from './agents/agent.ts'
 import { updateWanderer } from './agents/wander.ts'
 import { activityAt, createCivilianData, roomFor, updateCivilian, type CivilianContext } from './agents/civilian.ts'
-import { createMyrrData, updateTaker, type HiveContext, type HiveState } from './agents/myrr.ts'
-import { updateBroodling, updateCocoons, updateMother, updateSpineback } from './agents/lifecycle.ts'
+import { createMyrrData, takerHurt, updateTaker, type HiveState } from './agents/myrr.ts'
+import { updateBroodling, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
+import { makeWeapon, pruneShots, tickWeapon, type CombatContext, type Shot } from './agents/combat.ts'
+import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
 import { countResin, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
 import { createPheromones, decayPheromones, type Pheromones } from './systems/pheromones.ts'
-import { findRooms, randomTileIn, roomTiles } from './world/rooms.ts'
+import { findRooms, randomTileIn, roomTiles, type RoomRef } from './world/rooms.ts'
+import type { RoomType } from './world/level.ts'
 import type { PathNode } from './world/pathfinding.ts'
 
 export interface SimState {
@@ -24,6 +27,9 @@ export interface SimState {
   noises: Noise[]
   pheromones: Pheromones
   hive: HiveState
+  squads: Squad[]
+  /** Recent shots and swings, for tracers. */
+  shots: Shot[]
 }
 
 export function createSim(seed: number): SimState {
@@ -36,11 +42,14 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], cocoons: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0 },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0 },
+    squads: [],
+    shots: [],
   }
   seedHiveResin(world)
   sim.hive.resinTiles = countResin(world)
   spawnCivilians(sim)
+  spawnSoldiers(sim)
   spawnHive(sim)
   spawnMyrrWanderers(sim)
   return sim
@@ -53,25 +62,38 @@ const SKITTER_TICKS = Math.round(CONFIG.noise.skitterEverySeconds * TPS)
 export function step(sim: SimState): void {
   sim.tick++
   pruneNoises(sim.noises, sim.tick)
+  pruneShots(sim.shots, sim.tick)
   if (sim.tick % TPS === 0) decayPheromones(sim.pheromones)
 
   const civCtx: CivilianContext = { world: sim.world, rng: sim.rng, tick: sim.tick, agents: sim.agents, noises: sim.noises }
-  const hiveCtx: HiveContext = { ...civCtx, pheromones: sim.pheromones, hive: sim.hive }
+  const ctx: CombatContext = {
+    ...civCtx,
+    pheromones: sim.pheromones,
+    hive: sim.hive,
+    shots: sim.shots,
+    onSoldierHurt: (soldier, killed) => soldierHurt(sim.squads, soldier, killed),
+    onMyrrHurt: (myrr, source) => takerHurt(myrr, source, ctx),
+  }
 
-  updateCocoons(hiveCtx)
+  updateInfections(ctx)
+  updateSquads(sim.squads, ctx)
+
   // Only agents that existed at the start of the tick act (new Broodlings wait a tick).
   const count = sim.agents.length
   for (let i = 0; i < count; i++) {
     const agent = sim.agents[i]
+    if (agent.dead) continue
+    if (agent.weapon) tickWeapon(agent.weapon) // cooldowns and reloads, for everyone
     if (agent.civ) {
       updateCivilian(agent, civCtx)
+      if (agent.soldier && !agent.dead && agent.civ.mode === 'routine') updateSoldier(agent, sim.squads, ctx)
       continue
     }
     const role = agent.myrr?.role
-    if (role === 'taker') updateTaker(agent, hiveCtx)
-    else if (role === 'mother') updateMother(agent, hiveCtx)
-    else if (role === 'broodling') updateBroodling(agent, hiveCtx)
-    else if (role === 'spineback') updateSpineback(agent, hiveCtx)
+    if (role === 'taker') updateTaker(agent, ctx)
+    else if (role === 'mother') updateMother(agent, ctx)
+    else if (role === 'broodling') updateBroodling(agent, ctx)
+    else if (role === 'spineback') updateSpineback(agent, ctx)
     else if (agent.kind === 'wanderer-myrr') updateWanderer(agent, sim.world, sim.rng)
     // Moving Myrr skitter now and then.
     if (agent.side === 'myrr' && agent.state.name === 'moving' && (sim.tick + agent.id) % SKITTER_TICKS === 0) {
@@ -80,12 +102,11 @@ export function step(sim: SimState): void {
   }
 }
 
-/** Activity counts per level for the sidebar. */
+/** Activity counts per level for the sidebar (living, not cocooned). */
 export function levelActivity(sim: SimState, levelIndex: number): { humans: number; myrr: number } {
   let humans = 0, myrr = 0
   for (const a of sim.agents) {
-    if (a.levelIndex !== levelIndex) continue
-    if (a.civ?.mode === 'dead' || a.civ?.mode === 'cocooned') continue
+    if (a.dead || a.levelIndex !== levelIndex || a.civ?.mode === 'cocooned') continue
     if (a.side === 'human') humans++
     else myrr++
   }
@@ -101,13 +122,46 @@ function spawnCivilians(sim: SimState): void {
     civ.activity = activityAt(civ, 0)
     civ.target = roomFor(civ, civ.activity, civ.home.levelIndex, world, rng)
     const at = randomTileIn(world, civ.target, rng)
-    const agent = createAgent(sim.agents.length, 'civilian', 'human', at, CONFIG.movement.humanSpeed)
+    const agent = createAgent(sim.agents.length, 'civilian', 'human', at, CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
+    agent.weapon = makeWeapon('fists', CONFIG.combat.skill.civilian)
     sim.agents.push(agent)
   }
 }
 
-/** The Brood Mother at the centre of the hive core, Takers resting around her. */
+/** Squads start in Security. Each patrols its own beat; the last member is the medic. */
+function spawnSoldiers(sim: SimState): void {
+  const { world, rng } = sim
+  const security = findRooms(world, ['security'])[0]
+  if (!security) return
+  const beats: { level: number; types: RoomType[] }[][] = [
+    [{ level: 0, types: ['command', 'mess', 'supply', 'quarters', 'medbay'] }],
+    [{ level: 1, types: ['workshop', 'other', 'supply', 'mess'] }],
+    [{ level: 0, types: ['other', 'workshop', 'generator'] }, { level: 1, types: ['other'] }],
+  ]
+  const squadSize = CONFIG.soldiers.squadSize
+  for (let n = 0; n < CONFIG.soldiers.count; n++) {
+    const squadId = Math.floor(n / squadSize)
+    if (!sim.squads[squadId]) {
+      const beat = beats[squadId % beats.length]
+      const patrol: RoomRef[] = beat.flatMap((b) => findRooms(world, b.types, b.level).filter((r) => !r.room.outdoor))
+      sim.squads[squadId] = {
+        id: squadId, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
+        lastContactTick: 0, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0,
+      }
+    }
+    const isMedic = n % squadSize === squadSize - 1
+    const civ = createCivilianData(world, rng, 'soldier')!
+    const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', randomTileIn(world, security, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
+    agent.civ = civ
+    agent.soldier = { squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, targetId: -1 }
+    agent.weapon = makeWeapon(isMedic ? 'pistol' : 'rifle', isMedic ? CONFIG.combat.skill.medic : CONFIG.combat.skill.soldier)
+    sim.squads[squadId].members.push(agent.id)
+    sim.agents.push(agent)
+  }
+}
+
+/** The Brood Mother at the centre of the hive core, Takers and Spinebacks around her. */
 function spawnHive(sim: SimState): void {
   const { world, rng } = sim
   const hive = findRooms(world, ['hive'])[0]
@@ -116,21 +170,23 @@ function spawnHive(sim: SimState): void {
   const centre = tiles.reduce((best, t) =>
     Math.hypot(t.x - hive.room.centerX, t.y - hive.room.centerY) < Math.hypot(best.x - hive.room.centerX, best.y - hive.room.centerY) ? t : best,
   )
-  const mother = createAgent(sim.agents.length, 'brood-mother', 'myrr', centre, 0)
+  const mother = createAgent(sim.agents.length, 'brood-mother', 'myrr', centre, 0, CONFIG.health.broodMother)
   mother.myrr = createMyrrData('mother')
   sim.hive.motherId = mother.id
   sim.agents.push(mother)
 
   for (let n = 0; n < CONFIG.hive.takers; n++) {
-    const taker = createAgent(sim.agents.length, 'taker', 'myrr', rng.pick(tiles), CONFIG.movement.myrrSpeed)
+    const taker = createAgent(sim.agents.length, 'taker', 'myrr', rng.pick(tiles), CONFIG.movement.myrrSpeed, CONFIG.health.taker)
     taker.myrr = createMyrrData('taker')
     taker.myrr.ticksLeft = rng.int(1, 10 * TPS) // stagger the first trips
+    taker.weapon = makeWeapon('claws', CONFIG.combat.skill.myrr)
     sim.agents.push(taker)
   }
   for (let n = 0; n < CONFIG.hive.spinebacks; n++) {
-    const guard = createAgent(sim.agents.length, 'spineback', 'myrr', rng.pick(tiles), CONFIG.movement.myrrSpeed)
+    const guard = createAgent(sim.agents.length, 'spineback', 'myrr', rng.pick(tiles), CONFIG.movement.myrrSpeed, CONFIG.health.spineback)
     guard.myrr = createMyrrData('spineback')
     guard.myrr.task = 'guard'
+    guard.weapon = makeWeapon('spines', CONFIG.combat.skill.myrr)
     sim.agents.push(guard)
   }
 }

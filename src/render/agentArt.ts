@@ -47,6 +47,17 @@ export const AGENT_ART: Record<AgentKind, AgentDraw> = {
     }
     dot(ctx, cx, cy, tile * 0.32, CIVILIAN_MODE_COLORS[mode], '#0b2540', tile)
   },
+  soldier: (ctx, cx, cy, tile, agent) => {
+    const mode = agent.civ?.mode ?? 'routine'
+    dot(ctx, cx, cy, tile * 0.34, mode === 'routine' ? '#4caf50' : CIVILIAN_MODE_COLORS[mode], '#0d2b0f', tile)
+  },
+  medic: (ctx, cx, cy, tile, agent) => {
+    const mode = agent.civ?.mode ?? 'routine'
+    dot(ctx, cx, cy, tile * 0.34, mode === 'routine' ? '#e8f5e9' : CIVILIAN_MODE_COLORS[mode], '#0d2b0f', tile)
+    ctx.fillStyle = '#2e7d32'
+    ctx.fillRect(cx - tile * 0.05, cy - tile * 0.2, tile * 0.1, tile * 0.4)
+    ctx.fillRect(cx - tile * 0.2, cy - tile * 0.05, tile * 0.4, tile * 0.1)
+  },
   spineback: (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.42, '#8f1d1d', '#ffcfb8', tile),
   broodling: (ctx, cx, cy, tile) => dot(ctx, cx, cy, tile * 0.2, '#e6d3b0', '#6e5a3c', tile),
   taker: (ctx, cx, cy, tile, agent) => {

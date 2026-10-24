@@ -1,11 +1,12 @@
 // The hive's units. Phase 4: the Brood Mother (stays in the hive core) and
 // Takers, which run this state machine:
 //
-//   rest ─▶ scout ──lone human seen──▶ hunt ─▶ grab ─▶ carry ─▶ (deliver) ─▶ rest
+//   rest ─▶ scout ──lone human seen──▶ hunt ─▶ attack (claw, sting) ─▶ carry ─▶ (deliver) ─▶ rest
 //     │       └─ trips without prey ─▶ return ─▶ rest
 //     └─▶ spread resin ─▶ coat ─▶ rest
 //
-// Takers only go after people who are alone; a group makes them back off.
+// Takers only go after people who are alone; a group makes them back off,
+// and armed humans or getting hurt send them home.
 
 import { CONFIG } from '../config.ts'
 import type { Rng } from '../core/rng.ts'
@@ -19,6 +20,7 @@ import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
 import { canSee } from './perception.ts'
 import { isFree, setMode } from './civilian.ts'
+import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 
 export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' // Takers
@@ -52,8 +54,6 @@ export interface HiveState {
   motherId: number
   /** Humans held in the hive, waiting to be injected (oldest first). */
   captives: number[]
-  /** Injected humans and when their Broodling hatches. */
-  cocoons: { agentId: number; hatchTick: number }[]
   /** Broodlings hatched so far. */
   hatched: number
   /** Recent losses, used to decide what Broodlings grow into (Phase 6 fills these). */
@@ -81,7 +81,7 @@ export function createMyrrData(role: MyrrData['role']): MyrrData {
 
 // ---------------------------------------------------------------- update
 
-export function updateTaker(agent: Agent, ctx: HiveContext): void {
+export function updateTaker(agent: Agent, ctx: CombatContext): void {
   const m = agent.myrr!
 
   if (agent.state.name === 'crossing') {
@@ -135,6 +135,10 @@ export function updateTaker(agent: Agent, ctx: HiveContext): void {
       agent.speed = agent.baseSpeed * (close ? H.pounceMultiplier : 1)
       if (target.levelIndex === agent.levelIndex && Math.hypot(target.x - agent.x, target.y - agent.y) <= 1.1) {
         m.task = 'attack'
+        // Grab hold: the human can't run, only fight back.
+        target.heldBy = agent.id
+        target.path = []
+        if (target.state.name !== 'crossing') target.state = { name: 'idle', ticksLeft: 0 }
         agent.path = []
         agent.state = { name: 'idle', ticksLeft: 0 }
         return
@@ -155,12 +159,15 @@ export function updateTaker(agent: Agent, ctx: HiveContext): void {
         m.repathTick = ctx.tick
         return
       }
-      target.health -= H.clawDamagePerSecond / TPS
+      tryAttack(agent, target, ctx)
+      // The human fights back with whatever they have (fists for most civilians).
+      tryAttack(target, agent, ctx)
+      if (agent.dead) return
       const civ = target.civ!
       civ.fear = Math.max(civ.fear, CONFIG.fear.panic)
       civ.threat = { levelIndex: agent.levelIndex, x: agent.x, y: agent.y }
       civ.lastSeenTick = ctx.tick
-      if (target.health <= H.stingHealth) {
+      if (!target.dead && target.health <= H.stingHealth) {
         sting(target, ctx)
         capture(agent, m, target, ctx)
       }
@@ -203,9 +210,16 @@ function lookForPrey(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   const scentPerLook = CONFIG.pheromones.sighting * (CONFIG.perception.intervalTicks / TPS)
 
   for (const human of ctx.agents) {
-    if (!isFree(human) || human.levelIndex !== agent.levelIndex) continue
+    if (human.dead || !isFree(human) || human.levelIndex !== agent.levelIndex) continue
     const dist = Math.hypot(human.x - agent.x, human.y - agent.y)
     if (dist > range || !canSee(agent, human, level, range)) continue
+    // Armed humans: Takers are weak in a straight fight, so they go home.
+    if (human.weapon && isRanged(human.weapon)) {
+      // Not worth it here: wipe out the prey scent around this spot so scouts look elsewhere.
+      weakenScent(ctx, tileOf(agent), 8, 0.05)
+      if (m.task !== 'return' && m.task !== 'rest') goHome(agent, m, ctx)
+      return
+    }
     depositTrail(ctx.pheromones, ctx.world, human.levelIndex, human.x, human.y, scentPerLook)
     if (m.task === 'hunt' && human.id === m.targetId) m.lastSeenTick = ctx.tick
     if (companions(human, ctx) >= H.groupSize) continue // too many of them
@@ -332,6 +346,20 @@ function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   goHome(agent, m, ctx)
 }
 
+/**
+ * A Taker that is shot, or badly hurt, drops what it's doing (unless carrying
+ * prey) and runs home. A punch from its prey doesn't scare it off.
+ */
+export function takerHurt(agent: Agent, source: Agent | null, ctx: HiveContext): void {
+  const m = agent.myrr!
+  if (m.role !== 'taker' || m.task === 'carry' || m.task === 'return') return
+  const shot = !!source?.weapon && isRanged(source.weapon)
+  if (!shot && agent.health > agent.maxHealth * 0.4) return
+  m.targetId = -1
+  agent.speed = agent.baseSpeed
+  goHome(agent, m, ctx)
+}
+
 function goHome(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   m.task = 'return'
   if (!goTo(agent, ctx, nearMother(ctx))) rest(agent, m, ctx)
@@ -363,14 +391,14 @@ function nearMother(ctx: HiveContext): PathNode {
   return ctx.rng.pick(tiles.length ? tiles : roomTiles(ctx.world, hive))
 }
 
-/** A scout that found nothing halves the scent around it. */
-function weakenScent(ctx: HiveContext, at: PathNode): void {
+/** Scale down the scent around a spot (a scout that found nothing halves it). */
+function weakenScent(ctx: HiveContext, at: PathNode, radius = 2, keep = 0.5): void {
   const map = ctx.pheromones.trail[at.levelIndex]
   const level = ctx.world.levels[at.levelIndex]
-  for (let dy = -2; dy <= 2; dy++)
-    for (let dx = -2; dx <= 2; dx++) {
+  for (let dy = -radius; dy <= radius; dy++)
+    for (let dx = -radius; dx <= radius; dx++) {
       const x = at.x + dx, y = at.y + dy
-      if (x >= 0 && y >= 0 && x < level.width && y < level.height) map[y * level.width + x] *= 0.5
+      if (x >= 0 && y >= 0 && x < level.width && y < level.height) map[y * level.width + x] *= keep
     }
 }
 
