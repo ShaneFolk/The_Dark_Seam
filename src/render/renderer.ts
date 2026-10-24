@@ -4,7 +4,8 @@ import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
 import type { Level } from '../world/level.ts'
 import type { Tile } from '../world/tiles.ts'
-import { TILE_ART, floorColor, type FloorKind } from './tileArt.ts'
+import { TILE_ART, drawResin, floorColor, type FloorKind } from './tileArt.ts'
+import { AGENT_ART } from './agentArt.ts'
 import { describeTile } from '../world/loadWorld.ts'
 import { otherEnd } from '../world/links.ts'
 import type { Camera } from './camera.ts'
@@ -60,6 +61,7 @@ export class Renderer {
 
     this.drawLevel(level, ox, oy, tile)
     this.drawLinkMarkers(level, ox, oy, tile)
+    this.drawAgents(sim, view.levelIndex, ox, oy, tile)
     this.drawRoomLabels(level, ox, oy, tile)
     const hovered = this.hoveredTile(level, camera, view, w, h)
     if (hovered) {
@@ -109,9 +111,21 @@ export class Renderer {
           ? { room: level.rooms[room].type, outdoor: level.rooms[room].outdoor }
           : level.natural[i] ? 'natural' : 'built'
         TILE_ART[level.tiles[i] as Tile](ctx, x * size, y * size, size, floorColor(kind))
+        if (level.resin[i]) drawResin(ctx, x * size, y * size, size, '')
       }
     }
     return canvas
+  }
+
+  /** Agents on the shown level. Those riding a link are drawn faded at the link. */
+  private drawAgents(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
+    const { ctx } = this
+    for (const agent of sim.agents) {
+      if (agent.levelIndex !== levelIndex) continue
+      ctx.globalAlpha = agent.state.name === 'crossing' ? 0.4 : 1
+      AGENT_ART[agent.kind](ctx, ox + agent.x * tile, oy + agent.y * tile, tile)
+    }
+    ctx.globalAlpha = 1
   }
 
   /** Up/down arrows on link tiles, once tiles are big enough to read. */

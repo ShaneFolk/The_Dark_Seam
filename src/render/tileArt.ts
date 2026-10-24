@@ -80,6 +80,12 @@ export const TILE_ART: Record<Tile, TileDraw> = {
   },
 }
 
+/** Resin layer drawn over a tile. */
+export const drawResin: TileDraw = (ctx, x, y, s) => {
+  ctx.fillStyle = 'rgba(120, 70, 170, 0.55)'
+  ctx.fillRect(x, y, s + 0.5, s + 0.5)
+}
+
 /** Floor colour by room type, so rooms read at a glance. */
 const ROOM_FLOOR: Partial<Record<RoomType, string>> = {
   command: '#2f3b52',
