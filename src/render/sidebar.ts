@@ -17,6 +17,8 @@ export class Sidebar {
   private buttons: HTMLButtonElement[] = []
   private clock: HTMLElement
   private hiveInfo: HTMLElement
+  private log: HTMLOListElement
+  private logCount = -1
   private lastShown = ''
 
   constructor(root: HTMLElement, sim: SimState, onSelect: (levelIndex: number) => void) {
@@ -41,6 +43,13 @@ export class Sidebar {
     this.hiveInfo = document.createElement('p')
     this.hiveInfo.className = 'help'
     root.appendChild(this.hiveInfo)
+
+    const logTitle = document.createElement('h2')
+    logTitle.textContent = 'Event log'
+    root.appendChild(logTitle)
+    this.log = document.createElement('ol')
+    this.log.className = 'event-log'
+    root.appendChild(this.log)
 
     const help = document.createElement('p')
     help.className = 'help'
@@ -72,6 +81,16 @@ Med bay: ${b.beds.length}/${CONFIG.medbay.beds} beds`).join('')
       + sim.squads.map((s) => `
 Squad ${s.id + 1}: ${s.order} · morale ${Math.round(s.morale * 100)}%`).join('')
     if (this.hiveInfo.textContent !== hive) this.hiveInfo.textContent = hive
+    // Latest events, newest first.
+    if (sim.events.length !== this.logCount) {
+      this.logCount = sim.events.length
+      this.log.replaceChildren(...sim.events.slice(-10).reverse().map((ev) => {
+        const li = document.createElement('li')
+        li.textContent = `${formatClock(ev.tick).replace('Day ', 'D')} ${ev.text}`
+        li.className = 'ev-' + ev.kind
+        return li
+      }))
+    }
     const counts = sim.world.levels.map((_, i) => levelActivity(sim, i))
     const key = `${view.levelIndex}|${counts.map((c) => `${c.humans},${c.myrr}`).join('|')}`
     if (key === this.lastShown) return

@@ -9,7 +9,9 @@ import { updateWanderer } from './agents/wander.ts'
 import { movementHooks } from './agents/movement.ts'
 import { activityAt, createCivilianData, roomFor, updateCivilian, type CivilianContext } from './agents/civilian.ts'
 import { createMyrrData, planDigging, takerHurt, updateTaker, type HiveState } from './agents/myrr.ts'
-import { updateBroodling, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
+import { updateBroodling, updateCollapse, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
+import { createStats, logEvent, type GameEvent, type RunStats } from './core/events.ts'
+import { checkEnding, type Ending } from './systems/endings.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
 import { countResin, seedHiveResin } from './systems/resin.ts'
@@ -42,6 +44,13 @@ export interface SimState {
   sensors: Sensor[]
   /** Motion sensor alerts so far. */
   sensorAlerts: number
+  /** Key moments of the run, oldest first. */
+  events: GameEvent[]
+  stats: RunStats
+  /** Set when the run has ended; the sim stops. */
+  ending: Ending | null
+  /** Was the colony powered last tick (to log power going off and on). */
+  hadPower: boolean
 }
 
 export function createSim(seed: number): SimState {
@@ -54,7 +63,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0 },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false },
     squads: [],
     shots: [],
     supplies: new Map(),
@@ -62,6 +71,10 @@ export function createSim(seed: number): SimState {
     power: createPower(world),
     sensors: [],
     sensorAlerts: 0,
+    events: [],
+    stats: createStats(),
+    ending: null,
+    hadPower: true,
   }
   sim.supplies = createSupplies(world, sim.rng)
   sim.sensors = createSensors(world, sim.rng)
@@ -79,6 +92,7 @@ const SKITTER_TICKS = Math.round(CONFIG.noise.skitterEverySeconds * TPS)
 
 /** Advance the simulation by exactly one fixed tick. Agents update in id order. */
 export function step(sim: SimState): void {
+  if (sim.ending) return // the run is over
   sim.tick++
   pruneNoises(sim.noises, sim.tick)
   pruneShots(sim.shots, sim.tick)
@@ -91,6 +105,8 @@ export function step(sim: SimState): void {
     agents: sim.agents,
     noises: sim.noises,
     supplies: sim.supplies,
+    events: sim.events,
+    stats: sim.stats,
     medbays: sim.medbays,
     power: sim.power,
     pheromones: sim.pheromones,
@@ -102,7 +118,11 @@ export function step(sim: SimState): void {
 
   movementHooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
   updateInfections(ctx)
-  updateMedBays(sim.medbays, sim.agents, sim.world, hasPower(sim.power))
+  updateMedBays(sim.medbays, sim.agents, sim.world, hasPower(sim.power), ctx)
+  updateCollapse(ctx)
+  const powered = hasPower(sim.power)
+  if (powered !== sim.hadPower) logEvent(ctx, 'power', powered ? 'Power restored' : 'Power is out: both generators are down')
+  sim.hadPower = powered
   sim.sensorAlerts += updateSensors(sim.sensors, sim.agents, sim.noises, sim.tick)
   updateSquads(sim.squads, ctx)
   planDigging(ctx)
@@ -130,6 +150,16 @@ export function step(sim: SimState): void {
       makeNoise(sim.noises, 'skitter', agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
     }
   }
+  checkForEnding(sim)
+}
+
+/** Once a second: has the run ended? */
+function checkForEnding(sim: SimState): void {
+  if (sim.tick % TPS !== 0) return
+  const ending = checkEnding(sim.agents, sim.hive, sim.stats, sim.tick, false)
+  if (!ending) return
+  sim.ending = ending
+  logEvent({ events: sim.events, stats: sim.stats, tick: sim.tick }, 'ending', 'The run ended: ' + ending.kind)
 }
 
 /** Activity counts per level for the sidebar (living, not cocooned). */

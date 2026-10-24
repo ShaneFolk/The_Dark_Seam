@@ -18,16 +18,30 @@ import { followPath } from './movement.ts'
 import { createMyrrData, type HiveContext } from './myrr.ts'
 import { makeWeapon, nearestVisible, tryAttack, type CombatContext } from './combat.ts'
 import { strongest } from '../systems/pheromones.ts'
+import { logEvent } from '../core/events.ts'
+import { who } from './describe.ts'
+import { kill } from './combat.ts'
+import { canWalk } from '../world/pathfinding.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const L = CONFIG.lifecycle
 
 // ---------------------------------------------------------------- Brood Mother
 
-/** Inject waiting captives one at a time. */
+/** Inject waiting captives one at a time; flee the hive if it's badly threatened. */
 export function updateMother(mother: Agent, ctx: HiveContext): void {
   const m = mother.myrr!
   const { hive } = ctx
+
+  if (hive.escapeTo) return flee(mother, ctx)
+  if (ctx.tick % CONFIG.perception.intervalTicks === 0 && badlyThreatened(mother, ctx)) {
+    hive.escapeTo = escapeSpot(mother, ctx)
+    if (hive.escapeTo) {
+      mother.baseSpeed = mother.speed = L.motherFleeSpeed
+      logEvent(ctx, 'hive', 'The Brood Mother is fleeing into the deep tunnels with her escort')
+      return
+    }
+  }
 
   if (m.task === 'inject') {
     if (--m.ticksLeft > 0) return
@@ -57,6 +71,7 @@ function cocoon(captive: Agent, ctx: HiveContext): void {
   captive.levelIndex = spot.levelIndex
   captive.x = spot.x + 0.5
   captive.y = spot.y + 0.5
+  logEvent(ctx, 'injected', `${who(captive)} was injected and cocooned in the hive`)
 }
 
 /** A free corner tile of the hive core (cocoons line its walls). */
@@ -67,6 +82,51 @@ function cocoonSpot(ctx: HiveContext): PathNode {
   )
   const free = cornerTiles(ctx.world, hive).filter((t) => !taken.has(`${t.x},${t.y}`))
   return free.length ? ctx.rng.pick(free) : randomTileIn(ctx.world, hive, ctx.rng)
+}
+
+/** Humans in the hive core and few guards left, or the Brood Mother badly hurt. */
+function badlyThreatened(mother: Agent, ctx: HiveContext): boolean {
+  if (mother.health < mother.maxHealth * L.fleeBelowHealth) return true
+  // Free humans only: captives and cocoons lying in the hive don't count.
+  const intruders = ctx.agents.filter((a) => !a.dead && isFree(a) && a.levelIndex === mother.levelIndex &&
+    Math.hypot(a.x - mother.x, a.y - mother.y) <= L.guardRadius + 4).length
+  const guards = ctx.agents.filter((a) => !a.dead && a.kind === 'spineback').length
+  return intruders >= 2 && guards < L.fleeWhenGuardsBelow
+}
+
+/** The reachable Level 3 tile farthest from the hive core: the deep tunnels. */
+function escapeSpot(mother: Agent, ctx: HiveContext): PathNode | null {
+  const level = ctx.world.levels[mother.levelIndex]
+  let best: PathNode | null = null, bestD = 0
+  for (let n = 0; n < 400; n++) {
+    const x = ctx.rng.int(1, level.width - 2), y = ctx.rng.int(1, level.height - 2)
+    if (!canWalk(level, x, y, 'myrr')) continue
+    const d = Math.hypot(x - mother.x, y - mother.y)
+    if (d > bestD) { best = { levelIndex: mother.levelIndex, x, y }; bestD = d }
+  }
+  return best
+}
+
+function flee(mother: Agent, ctx: HiveContext): void {
+  const to = ctx.hive.escapeTo!
+  if (mother.state.name === 'moving' || mother.state.name === 'crossing') {
+    if (followPath(mother, ctx.world)) ctx.hive.escaped = true
+    return
+  }
+  const path = findPath(ctx.world, tileOf(mother), to, 'myrr')
+  if (path?.length) { mother.path = path; mother.state = { name: 'moving' } }
+  else ctx.hive.escaped = true // nowhere further to go: she's out of reach
+}
+
+/** With the Brood Mother dead: Broodlings die at once; the rest weaken until they die. */
+export function updateCollapse(ctx: CombatContext): void {
+  if (!ctx.hive.collapsing) return
+  for (const a of ctx.agents) {
+    if (a.dead || a.side !== 'myrr') continue
+    if (a.kind === 'broodling') { kill(a, ctx); continue }
+    a.health -= L.collapseDecayPerSecond / TPS
+    if (a.health <= 0) kill(a, ctx)
+  }
 }
 
 // ---------------------------------------------------------------- infections
@@ -89,6 +149,8 @@ export function updateInfections(ctx: HiveContext): void {
     brood.myrr.ticksLeft = Math.round(L.growSeconds * TPS)
     ctx.agents.push(brood)
     ctx.hive.hatched++
+    ctx.stats.hatched++
+    logEvent(ctx, 'hatch', `A Broodling burst out of ${who(host).toLowerCase()} on Level ${host.levelIndex + 1}`)
   }
 }
 
@@ -205,8 +267,10 @@ function guardSpot(agent: Agent, ctx: HiveContext): void {
   const near = roomTiles(ctx.world, hive).filter(
     (t) => !mother || Math.hypot(t.x + 0.5 - mother.x, t.y + 0.5 - mother.y) <= L.guardRadius,
   )
-  if (!near.length) return
-  const path = findPath(ctx.world, tileOf(agent), ctx.rng.pick(near), 'myrr')
+  // She's left the hive core (fleeing): escort her instead.
+  const goal = near.length ? ctx.rng.pick(near) : mother ? tileOf(mother) : null
+  if (!goal) return
+  const path = findPath(ctx.world, tileOf(agent), goal, 'myrr')
   if (path?.length) {
     agent.path = path
     agent.state = { name: 'moving' }

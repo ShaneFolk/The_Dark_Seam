@@ -7,6 +7,7 @@ import type { Agent } from '../agents/agent.ts'
 import type { World } from '../world/loadWorld.ts'
 import { findRooms, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
 import { tileOf } from '../agents/agent.ts'
+import { logEvent, type Log } from '../core/events.ts'
 
 export interface MedBay {
   room: RoomRef
@@ -29,7 +30,7 @@ export function needsMedBay(agent: Agent): boolean {
 }
 
 /** Fill free beds with patients standing in the room; heal and cure those in beds. */
-export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World, powered: boolean): void {
+export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World, powered: boolean, log: Log): void {
   for (const bay of medbays) {
     // Patients who left, died, or are fully better give up their bed.
     bay.beds = bay.beds.filter((id) => {
@@ -53,6 +54,8 @@ export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World, 
       if (civ.infection && powered && ++civ.cureTicks >= CONFIG.medbay.cureSeconds * TPS) {
         civ.infection = null
         civ.cured = true
+        log.stats.cures++
+        logEvent(log, 'cure', 'The med bay cured an infected ' + (a.soldier ? 'soldier' : civ.job))
       }
     }
   }

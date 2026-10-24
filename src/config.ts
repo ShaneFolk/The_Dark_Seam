@@ -197,6 +197,13 @@ export const CONFIG = {
     minGuards: 1,
     /** Answering Spinebacks go back to guarding after this long without a human in sight, in seconds. */
     alarmGiveUpSeconds: 15,
+    /** The Brood Mother flees when below this share of health, or when humans are in the hive with fewer Spinebacks than this. */
+    fleeBelowHealth: 0.5,
+    fleeWhenGuardsBelow: 2,
+    /** How fast she moves when fleeing, in tiles per second. */
+    motherFleeSpeed: 1.5,
+    /** After she dies, the other Myrr lose this much health per second. */
+    collapseDecayPerSecond: 2,
   },
 
   combat: {

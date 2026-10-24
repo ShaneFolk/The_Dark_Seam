@@ -1,6 +1,14 @@
-// One-line descriptions of agents, for the debug readout.
+// One-line descriptions of agents, for the debug readout and the event log.
 
 import type { Agent } from './agent.ts'
+
+/** A short name: "a miner", "a medic", "Taker #12". */
+export function who(agent: Agent): string {
+  if (agent.soldier) return agent.soldier.role === 'medic' ? 'A medic' : 'A soldier'
+  if (agent.civ) return 'A ' + agent.civ.job
+  if (agent.kind === 'brood-mother') return 'The Brood Mother'
+  return agent.kind[0].toUpperCase() + agent.kind.slice(1) + ' #' + agent.id
+}
 
 export function describeAgent(agent: Agent, tick: number): string {
   const civ = agent.civ

@@ -35,6 +35,8 @@ import { chokePoint, collapseTunnel } from '../systems/digging.ts'
 import { countResin } from '../systems/resin.ts'
 import { makeNoise } from '../systems/noise.ts'
 import { kill } from './combat.ts'
+import { logEvent } from '../core/events.ts'
+import { who } from './describe.ts'
 import type { CivilianContext as CombatContext } from './civilian.ts'
 
 export interface SoldierData {
@@ -251,6 +253,7 @@ function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
   if (squad.order === 'deployTurret') {
     if (squad.carryingTurret) {
       ctx.agents.push(createTurret(ctx.agents.length, squad.goal!))
+      logEvent(ctx, 'gear', `Squad ${squad.id + 1} set up a sentry turret on Level ${squad.goal!.levelIndex + 1}`)
       squad.carryingTurret = false
     }
     setOrder(squad, 'patrol', null)
@@ -278,6 +281,7 @@ function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
     }
     makeNoise(ctx.noises, 'blast', at.levelIndex, at.x, at.y, ctx.tick, alive[0].id)
     squad.charges--
+    logEvent(ctx, 'gear', `Squad ${squad.id + 1} collapsed a tunnel on Level ${at.levelIndex + 1} with a mining charge`)
     ctx.hive.resinTiles = countResin(ctx.world)
     setOrder(squad, 'patrol', null)
     return
@@ -290,6 +294,7 @@ function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
       if (level.barrier[o.tile] <= 0) putBarrier(level, o.tile, o.kind === Barrier.Boards ? Barrier.Boards : Barrier.Weld)
     }
     squad.welded = true
+    logEvent(ctx, 'command', `Squad ${squad.id + 1} fell back and welded itself in`)
     return
   }
   if (squad.order === 'resupply') {
@@ -310,6 +315,8 @@ function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
     if (person?.civ && person.civ.mode === 'cocooned') {
       // Cut free, but still infected: they need a medic or the med bay.
       person.civ.rescued = true
+      ctx.stats.cutFree++
+      logEvent(ctx, 'rescue', `Soldiers cut ${who(person).toLowerCase()} free from a cocoon`)
       person.civ.fear = CONFIG.fear.flee
       setMode(person, person.civ, 'hide')
     }

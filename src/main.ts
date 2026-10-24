@@ -8,6 +8,7 @@ import { Renderer } from './render/renderer.ts'
 import { createView } from './render/view.ts'
 import { Input } from './render/input.ts'
 import { Sidebar } from './render/sidebar.ts'
+import { showSummary } from './render/summary.ts'
 
 /** Read ?seed=123 from the URL, or fall back to the default seed. */
 function getSeed(): number {
@@ -48,5 +49,6 @@ startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
     input.update(view, frameMs)
     renderer.render(sim, view)
     sidebar.update(sim, view)
+    if (sim.ending) showSummary(sim)
   },
 })

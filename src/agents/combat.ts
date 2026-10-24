@@ -8,6 +8,8 @@ import { canSee } from './perception.ts'
 import { setMode } from './civilian.ts'
 import type { HiveContext } from './myrr.ts'
 import type { PowerState } from '../systems/power.ts'
+import { logEvent } from '../core/events.ts'
+import { who } from './describe.ts'
 import { markChanged } from '../systems/resin.ts'
 
 export type WeaponKind = keyof typeof CONFIG.combat.weapons
@@ -163,11 +165,20 @@ export function kill(agent: Agent, ctx: CombatContext): void {
   if (agent.civ) {
     agent.civ.mode = 'dead'
     agent.civ.deathCause = agent.civ.deathCause ?? 'killed'
+    if (agent.soldier) ctx.stats.soldiersKilled++
+    else ctx.stats.civiliansKilled++
+    logEvent(ctx, 'death', `${who(agent)} was killed on Level ${agent.levelIndex + 1}`)
   }
   const m = agent.myrr
   if (m) {
     if (m.role === 'taker') ctx.hive.losses.taker++
     if (m.role === 'spineback') ctx.hive.losses.spineback++
+    if (m.role !== 'mother') ctx.stats.myrrKilled[m.role]++
+    if (m.role === 'mother') {
+      ctx.stats.myrrKilled.mother++
+      ctx.hive.collapsing = true
+      logEvent(ctx, 'hive', 'The Brood Mother is dead. The hive is collapsing')
+    }
     // A Taker killed while carrying someone drops them, still paralysed for a while.
     if (m.task === 'carry' && m.targetId >= 0) {
       const captive = ctx.agents[m.targetId]
@@ -175,6 +186,8 @@ export function kill(agent: Agent, ctx: CombatContext): void {
         setMode(captive, captive.civ, 'paralyzed')
         captive.civ.paralyzedUntilTick = ctx.tick + Math.round(CONFIG.hive.paralysisSeconds * TPS * 0.5)
         captive.state = { name: 'idle', ticksLeft: 1e9 }
+        ctx.stats.dropped++
+        logEvent(ctx, 'rescue', `A Taker carrying ${who(captive).toLowerCase()} was killed; they were dropped`)
       }
       m.targetId = -1
     }

@@ -19,6 +19,8 @@ import { digTile, findDigSite, type DigJob } from '../systems/digging.ts'
 import { makeNoise } from '../systems/noise.ts'
 import type { Noise } from '../systems/noise.ts'
 import { tileOf, type Agent } from './agent.ts'
+import { logEvent, type Log } from '../core/events.ts'
+import { who } from './describe.ts'
 import { followPath } from './movement.ts'
 import { canSee } from './perception.ts'
 import { isFree, setMode } from './civilian.ts'
@@ -58,6 +60,11 @@ export interface HiveState {
   captives: number[]
   /** Broodlings hatched so far. */
   hatched: number
+  /** The Brood Mother has died: the hive is collapsing. */
+  collapsing: boolean
+  /** The Brood Mother is fleeing to this spot (escape ending if she gets there). */
+  escapeTo: PathNode | null
+  escaped: boolean
   /** Recent losses, used to decide what Broodlings grow into (Phase 6 fills these). */
   losses: { taker: number; spineback: number }
   /** Tiles covered in resin, all levels. */
@@ -68,7 +75,7 @@ export interface HiveState {
   tunnelsDug: number
 }
 
-export interface HiveContext {
+export interface HiveContext extends Log {
   world: World
   rng: Rng
   tick: number
@@ -221,6 +228,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       ctx.hive.dig = null
       ctx.hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS)
       ctx.hive.tunnelsDug++
+      logEvent(ctx, 'hive', `The hive dug a tunnel on Level ${agent.levelIndex + 1}`)
       return rest(agent, m, ctx)
     }
 
@@ -344,6 +352,8 @@ export function sting(target: Agent, ctx: HiveContext): void {
 }
 
 function capture(agent: Agent, m: MyrrData, target: Agent, ctx: HiveContext): void {
+  ctx.stats.captures++
+  logEvent(ctx, 'capture', `${who(target)} was taken by a Taker on Level ${agent.levelIndex + 1}`)
   target.civ!.mode = 'captured'
   target.path = []
   target.state = { name: 'idle', ticksLeft: 1e9 }

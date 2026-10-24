@@ -21,6 +21,8 @@ import { roomsWith, stockIn, take, type Supplies } from '../systems/supplies.ts'
 import { medBayFor, needsMedBay, type MedBay } from '../systems/medbay.ts'
 import { buildSeconds, putBarrier, roomOpenings, type BarrierKind } from '../systems/barriers.ts'
 import { Tile } from '../world/tiles.ts'
+import { logEvent } from '../core/events.ts'
+import { who } from './describe.ts'
 import { damagedGenerators, humanSight, type Generator } from '../systems/power.ts'
 import { makeWeapon } from './combat.ts'
 
@@ -296,6 +298,10 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
       sightGain += F.sight * (1 - (0.5 * dist) / CONFIG.perception.sightRange)
       civ.threat = { levelIndex: other.levelIndex, x: other.x, y: other.y }
       civ.lastSeenTick = ctx.tick
+      if (!ctx.stats.contact) {
+        ctx.stats.contact = true
+        logEvent(ctx, 'contact', `First sighting: ${who(agent).toLowerCase()} saw a Myrr on Level ${agent.levelIndex + 1}`)
+      }
     } else if (isFree(other) && Math.hypot(other.x - agent.x, other.y - agent.y) <= F.companyRadius) {
       company++
     }
