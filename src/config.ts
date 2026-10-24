@@ -263,10 +263,10 @@ export const CONFIG = {
      * `variation` either way, by seed. Lockers and supply rooms share type "supply".
      */
     stock: {
-      armory: { rifleMags: 60, pistolMags: 30, pistols: 10, stabilizers: 6 },
-      supply: { rifleMags: 6, pistolMags: 6, pistols: 2, stabilizers: 1 },
-      medbay: { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 8 },
-      security: { rifleMags: 10, pistolMags: 6, pistols: 2, stabilizers: 0 },
+      armory: { rifleMags: 60, pistolMags: 30, pistols: 10, stabilizers: 6, turrets: 6 },
+      supply: { rifleMags: 6, pistolMags: 6, pistols: 2, stabilizers: 1, turrets: 0 },
+      medbay: { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 8, turrets: 0 },
+      security: { rifleMags: 10, pistolMags: 6, pistols: 2, stabilizers: 0, turrets: 0 },
     },
     variation: 0.3,
     /** A scared civilian goes for a pistol if a room with one is within this many tiles. */
@@ -292,9 +292,19 @@ export const CONFIG = {
   },
 
   turrets: {
-    /** Sentry turrets placed in surface corridors and in the Upper Mine's Elevator Station. */
-    surface: 4,
-    elevatorStation: 2,
+    /**
+     * Sentry turrets start packed in the armory (see supplies.stock.armory.turrets).
+     * A squad on patrol fetches one, carries it (slower) and sets it up at a defence point.
+     */
+    pickupSeconds: 3,
+    setupSeconds: 6,
+    carrySpeedMultiplier: 0.7,
+    /** Defence points: where danger scent (fighting) is at least this strong... */
+    deployDanger: 3,
+    /** ...or else these rooms, in order. */
+    defaultSpots: ['Mine Head', 'Elevator Station', 'Security', 'Mess Hall', 'Supply Depot', 'Med Bay'],
+    /** Turrets are kept at least this many tiles apart. */
+    spacing: 8,
     health: 150,
     skill: 0.7,
     /** Squads reload a turret below this share of its magazine, spending this many spare rifle magazines. */

@@ -20,7 +20,7 @@ import { createSupplies, type Supplies } from './systems/supplies.ts'
 import { createMedBays, updateMedBays, type MedBay } from './systems/medbay.ts'
 import { createPower, hasPower, type PowerState } from './systems/power.ts'
 import { createSensors, updateSensors, type Sensor } from './systems/sensors.ts'
-import { createTurret, turretSpots, updateTurret } from './agents/turret.ts'
+import { updateTurret } from './agents/turret.ts'
 import type { RoomType } from './world/level.ts'
 import type { PathNode } from './world/pathfinding.ts'
 
@@ -69,7 +69,6 @@ export function createSim(seed: number): SimState {
   sim.hive.resinTiles = countResin(world)
   spawnCivilians(sim)
   spawnSoldiers(sim)
-  for (const at of turretSpots(world, sim.rng)) sim.agents.push(createTurret(sim.agents.length, at))
   spawnHive(sim)
   spawnMyrrWanderers(sim)
   return sim
@@ -179,7 +178,7 @@ function spawnSoldiers(sim: SimState): void {
       sim.squads[squadId] = {
         id: squadId, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
         lastContactTick: 0, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
-        charges: squadId < CONFIG.charges.count ? 1 : 0,
+        charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
       }
     }
     const isMedic = n % squadSize === squadSize - 1

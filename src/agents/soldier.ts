@@ -10,6 +10,7 @@
 //   cut       a cocoon in sight: cut the person free
 //   blast     heavy fighting in an Upper Mine tunnel: collapse it with a mining charge
 //   reload    a turret is low: feed it spare rifle magazines
+//   fetchTurret / deployTurret   carry a packed turret from the armory to a defence point
 //   patrol    otherwise walk the squad's route
 //
 // The leader walks to the squad's goal; the others keep close to the leader.
@@ -28,7 +29,7 @@ import { nearestVisible, roundsLeft, tryAttack } from './combat.ts'
 import { roomsWith, stockIn, take } from '../systems/supplies.ts'
 import { Barrier, putBarrier, roomOpenings } from '../systems/barriers.ts'
 import { humanSight } from '../systems/power.ts'
-import { needsReload } from './turret.ts'
+import { createTurret, deploySite, needsReload } from './turret.ts'
 import { strongest } from '../systems/pheromones.ts'
 import { chokePoint, collapseTunnel } from '../systems/digging.ts'
 import { countResin } from '../systems/resin.ts'
@@ -49,7 +50,7 @@ export interface SoldierData {
   workTicks: number
 }
 
-export type Order = 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast'
+export type Order = 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret'
 
 export interface Squad {
   id: number
@@ -70,6 +71,8 @@ export interface Squad {
   welded: boolean
   /** Mining charges the squad carries. */
   charges: number
+  /** The leader is carrying a packed turret. */
+  carryingTurret: boolean
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -139,6 +142,11 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     } else if (heard && squad.order === 'patrol') {
       setOrder(squad, 'respond', { levelIndex: heard.levelIndex, x: Math.floor(heard.x), y: Math.floor(heard.y) })
       squad.lastContactTick = ctx.tick
+    } else if (squad.order === 'patrol' && squad.carryingTurret) {
+      const site = deploySite(ctx, reservedSites(squads))
+      if (site) setOrder(squad, 'deployTurret', site)
+    } else if (squad.order === 'patrol' && !squad.carryingTurret && armoryWithTurret(ctx) && deploySite(ctx, reservedSites(squads))) {
+      setOrder(squad, 'fetchTurret', randomTileIn(ctx.world, armoryWithTurret(ctx)!, ctx.rng))
     } else if (squad.order === 'patrol' && turretToReload(ctx, leader)) {
       const t = turretToReload(ctx, leader)!
       setOrder(squad, 'reload', tileOf(t))
@@ -189,6 +197,8 @@ function shoot(agent: Agent, ctx: CombatContext): void {
 
 function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContext): void {
   const s = agent.soldier!
+  // Carrying a packed turret slows the leader (and so the squad).
+  agent.speed = agent.baseSpeed * (squad.carryingTurret ? CONFIG.turrets.carrySpeedMultiplier : 1)
 
   // Timed work at the goal: restocking, cutting a cocoon, pausing on patrol.
   if (squad.ticksLeft > 0) {
@@ -217,6 +227,8 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     if (squad.order === 'resupply') squad.ticksLeft = Math.round(S.resupplySeconds * TPS)
     if (squad.order === 'retreat' && !squad.welded) squad.ticksLeft = Math.round(CONFIG.barriers.weldSeconds * TPS)
     if (squad.order === 'reload') squad.ticksLeft = Math.round(CONFIG.turrets.reloadSeconds * TPS)
+    if (squad.order === 'fetchTurret') squad.ticksLeft = Math.round(CONFIG.turrets.pickupSeconds * TPS)
+    if (squad.order === 'deployTurret') squad.ticksLeft = Math.round(CONFIG.turrets.setupSeconds * TPS)
     if (squad.order === 'blast') squad.ticksLeft = Math.round(CONFIG.charges.setSeconds * TPS)
     if (squad.order === 'cut') squad.ticksLeft = Math.round(S.cutSeconds * TPS)
     if (squad.order === 'respond') squad.goal = null
@@ -230,6 +242,20 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
 }
 
 function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
+  if (squad.order === 'fetchTurret') {
+    const stock = stockIn(ctx.supplies, roomAt(ctx.world, tileOf(alive[0])))
+    if (stock && take(stock, 'turrets', 1)) squad.carryingTurret = true
+    setOrder(squad, 'patrol', null) // the brain sends a carrying squad to deploy next
+    return
+  }
+  if (squad.order === 'deployTurret') {
+    if (squad.carryingTurret) {
+      ctx.agents.push(createTurret(ctx.agents.length, squad.goal!))
+      squad.carryingTurret = false
+    }
+    setOrder(squad, 'patrol', null)
+    return
+  }
   if (squad.order === 'reload') {
     // Feed spare rifle magazines into the turret.
     const turret = ctx.agents[squad.targetId]
@@ -329,6 +355,16 @@ function nearestSquad(squads: Squad[], at: { levelIndex: number; x: number; y: n
 }
 
 // ---------------------------------------------------------------- turrets and charges
+
+/** Spots squads are already carrying turrets to. */
+function reservedSites(squads: Squad[]): PathNode[] {
+  return squads.filter((s) => s.order === 'deployTurret' && s.goal).map((s) => s.goal!)
+}
+
+/** A room that still has a packed turret. */
+function armoryWithTurret(ctx: CombatContext): RoomRef | null {
+  return [...ctx.supplies.values()].find((s) => s.stock.turrets > 0)?.room ?? null
+}
 
 /** A turret on the leader's level that needs ammo, if the squad has spare rifle magazines. */
 function turretToReload(ctx: CombatContext, leader: Agent): Agent | null {

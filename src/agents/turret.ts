@@ -1,42 +1,57 @@
-// Sentry turrets: fixed guns in hallways. They shoot the nearest Myrr in reach
-// while the colony has power and they have ammo. Squads reload them.
+// Sentry turrets: start packed in the armory. Squads carry them out and set them
+// up at defence points. They shoot the nearest Myrr in reach while the colony has
+// power and they have ammo. Squads reload them.
 
 import { CONFIG } from '../config.ts'
-import type { Rng } from '../core/rng.ts'
 import type { World } from '../world/loadWorld.ts'
 import { Tile } from '../world/tiles.ts'
-import { findRooms, roomTiles } from '../world/rooms.ts'
+import { roomTiles } from '../world/rooms.ts'
+import { strongest } from '../systems/pheromones.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 import { createAgent, type Agent } from './agent.ts'
 import { makeWeapon, nearestVisible, tryAttack, type CombatContext } from './combat.ts'
 import { hasPower } from '../systems/power.ts'
 
-/** Turret spots: built corridor tiles on the surface, and inside the Elevator Station. */
-export function turretSpots(world: World, rng: Rng): PathNode[] {
-  const spots: PathNode[] = []
-  const surface = world.levels[0]
-  const corridor: PathNode[] = []
-  for (let i = 0; i < surface.tiles.length; i++) {
-    // Corridor = built floor outside any room, with walls on two opposite sides.
-    if (surface.tiles[i] !== Tile.Floor || surface.roomOf[i] >= 0 || surface.natural[i]) continue
-    corridor.push({ levelIndex: 0, x: i % surface.width, y: Math.floor(i / surface.width) })
+/**
+ * Where should the next turret go? A defence point near recent fighting on
+ * Levels 1-2 (danger scent), else the next default room (Mine Head, Elevator
+ * Station, ...). Never within `spacing` tiles of another turret or of a spot
+ * another squad is already carrying one to (`reserved`).
+ */
+export function deploySite(ctx: CombatContext, reserved: PathNode[] = []): PathNode | null {
+  const C = CONFIG.turrets
+  // Taken: turrets already standing, and spots other squads are carrying one to.
+  const taken: PathNode[] = [...ctx.agents.filter((a) => a.kind === 'turret' && !a.dead).map((a) => ({ levelIndex: a.levelIndex, x: a.x, y: a.y })), ...reserved]
+  const free = (p: PathNode) => !taken.some((x) => x.levelIndex === p.levelIndex && Math.hypot(x.x - p.x, x.y - p.y) < C.spacing)
+
+  for (const hot of strongest(ctx.pheromones, 'danger', ctx.world, 10, C.deployDanger)) {
+    if (hot.at.levelIndex > 1) continue
+    const spot = standableNear(ctx.world, hot.at)
+    if (spot && free(spot)) return spot
   }
-  for (let n = 0; n < CONFIG.turrets.surface && corridor.length; n++) {
-    // Spread them out: pick the candidate farthest from turrets already placed.
-    let best = rng.pick(corridor), bestD = -1
-    for (let k = 0; k < 40; k++) {
-      const c = rng.pick(corridor)
-      const d = Math.min(...spots.filter((s) => s.levelIndex === 0).map((s) => Math.hypot(s.x - c.x, s.y - c.y)), 999)
-      if (d > bestD) { best = c; bestD = d }
-    }
-    spots.push(best)
+  for (const name of C.defaultSpots) {
+    const room = ctx.world.levels.flatMap((l, li) => l.rooms.map((r) => ({ levelIndex: li, room: r }))).find((r) => r.room.name === name)
+    if (!room) continue
+    const tiles = roomTiles(ctx.world, room).filter((p) => ctx.world.levels[p.levelIndex].tiles[p.y * ctx.world.levels[p.levelIndex].width + p.x] === Tile.Floor)
+    const centre = tiles.sort((a, b) => Math.hypot(a.x - room.room.centerX, a.y - room.room.centerY) - Math.hypot(b.x - room.room.centerX, b.y - room.room.centerY))[0]
+    if (centre && free(centre)) return centre
   }
-  const station = findRooms(world, ['other'], 1).find((r) => r.room.name === 'Elevator Station')
-  if (station) {
-    const tiles = roomTiles(world, station).filter((t) => world.levels[1].tiles[t.y * world.levels[1].width + t.x] === Tile.Floor)
-    for (let n = 0; n < CONFIG.turrets.elevatorStation && tiles.length; n++) spots.push(rng.pick(tiles))
-  }
-  return spots
+  return null
+}
+
+/** A plain floor tile a human can stand on, close to a spot. */
+function standableNear(world: World, at: PathNode): PathNode | null {
+  const level = world.levels[at.levelIndex]
+  for (let r = 0; r <= 4; r++)
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+        const x = at.x + dx, y = at.y + dy
+        if (x < 1 || y < 1 || x >= level.width - 1 || y >= level.height - 1) continue
+        const tile = level.tiles[y * level.width + x]
+        if ((tile === Tile.Floor || tile === Tile.Ground) && !level.linksAt.has(y * level.width + x)) return { levelIndex: at.levelIndex, x, y }
+      }
+  return null
 }
 
 export function createTurret(id: number, at: PathNode): Agent {
