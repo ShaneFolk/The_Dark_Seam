@@ -218,8 +218,8 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Broodlings hatch and grow by hive needs
 
 ### Phase 6 — Combat
-- [ ] Health, weapons, skill (civilian vs. soldier), ammo
-- [ ] Soldier squads, morale, retreat, rescues
+- [x] Health, weapons, skill (civilian vs. soldier), ammo
+- [x] Soldier squads, morale, retreat, rescues
 - [ ] Medic: wake paralyzed, stabilize
 - [ ] Spinebacks: guard, alarm response
 - [ ] Danger pheromones, flanking, digging
