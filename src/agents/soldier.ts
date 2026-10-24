@@ -3,10 +3,10 @@
 // Each squad has one order at a time, picked by its "brain" a few times a second
 // in this priority order:
 //
-//   retreat   morale broke: fall back to Security until it recovers
+//   retreat   morale broke: fall back to Security, weld it shut, wait until it recovers
 //   resupply  low on ammo: restock at the Armory
 //   rescue    a Taker is carrying someone: chase it and shoot it
-//   respond   Myrr in sight, or screams / gunfire / digging heard: go there and fight
+//   respond   Myrr in sight, or screams, gunfire, digging, smashing or chewing heard
 //   cut       a cocoon in sight: cut the person free
 //   patrol    otherwise walk the squad's route
 //
@@ -24,6 +24,7 @@ import { canHear, canSee } from './perception.ts'
 import { isFree, setMode } from './civilian.ts'
 import { nearestVisible, roundsLeft, tryAttack } from './combat.ts'
 import { roomsWith, stockIn, take } from '../systems/supplies.ts'
+import { Barrier, putBarrier, roomOpenings } from '../systems/barriers.ts'
 import type { CivilianContext as CombatContext } from './civilian.ts'
 
 export interface SoldierData {
@@ -54,8 +55,10 @@ export interface Squad {
   lastContactTick: number
   patrol: RoomRef[]
   patrolIndex: number
-  /** Ticks left on timed work (resupplying, cutting, pausing on patrol). */
+  /** Ticks left on timed work (resupplying, cutting, welding, pausing on patrol). */
   ticksLeft: number
+  /** Welded themselves in during the current retreat. */
+  welded: boolean
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -91,7 +94,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
         }
       }
     }
-    const heard = ctx.noises.find((n) => (n.kind === 'scream' || n.kind === 'gunshot' || n.kind === 'dig') && n.sourceId >= 0 &&
+    const heard = ctx.noises.find((n) => n.kind !== 'skitter' && n.sourceId >= 0 &&
       !squad.members.includes(n.sourceId) && alive.some((s) => canHear(s, n, ctx.world.levels[s.levelIndex])))
 
     // Morale drifts: down while outnumbered, back up when it's quiet.
@@ -130,7 +133,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
 }
 
 function setOrder(squad: Squad, order: Order, goal: PathNode | null): void {
-  if (squad.order !== order) squad.ticksLeft = 0
+  if (squad.order !== order) { squad.ticksLeft = 0; squad.welded = false }
   squad.order = order
   if (goal) squad.goal = goal
   if (order === 'patrol') { squad.goal = null; squad.targetId = -1 }
@@ -193,6 +196,7 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     agent.state = { name: 'idle', ticksLeft: 0 }
     if (squad.order === 'patrol') { squad.ticksLeft = 5 * TPS; squad.goal = null }
     if (squad.order === 'resupply') squad.ticksLeft = Math.round(S.resupplySeconds * TPS)
+    if (squad.order === 'retreat' && !squad.welded) squad.ticksLeft = Math.round(CONFIG.barriers.weldSeconds * TPS)
     if (squad.order === 'cut') squad.ticksLeft = Math.round(S.cutSeconds * TPS)
     if (squad.order === 'respond') squad.goal = null
     return
@@ -205,6 +209,16 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
 }
 
 function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
+  if (squad.order === 'retreat') {
+    // Fallen back: weld the doors and board the windows of the room they're in.
+    const room = roomAt(ctx.world, tileOf(alive[0]))
+    const level = ctx.world.levels[alive[0].levelIndex]
+    if (room) for (const o of roomOpenings(ctx.world, room)) {
+      if (level.barrier[o.tile] <= 0) putBarrier(level, o.tile, o.kind === Barrier.Boards ? Barrier.Boards : Barrier.Weld)
+    }
+    squad.welded = true
+    return
+  }
   if (squad.order === 'resupply') {
     // Restock from what this room actually has.
     const stock = stockIn(ctx.supplies, roomAt(ctx.world, tileOf(alive[0])))

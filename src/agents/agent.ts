@@ -32,6 +32,8 @@ export interface Agent {
   maxHealth: number
   /** Killed (or, for humans, hatched). Dead agents stay in the list but do nothing. */
   dead: boolean
+  /** Ticks spent breaking the obstacle in front of it (for noise timing). */
+  breakTicks?: number
   /** Id of the Myrr holding this agent in its claws, or -1. */
   heldBy: number
   /** What it fights with, if anything. */

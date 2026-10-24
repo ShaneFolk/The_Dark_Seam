@@ -439,7 +439,7 @@ function rest(agent: Agent, m: MyrrData, ctx: HiveContext, scale = 1): void {
 
 function goTo(agent: Agent, ctx: HiveContext, to: PathNode): boolean {
   // Takers steer around danger scent (places Myrr have been shot or killed).
-  const path = findPath(ctx.world, tileOf(agent), to, 'myrr', { avoid: ctx.pheromones.danger, avoidCost: CONFIG.pheromones.dangerCost })
+  const path = findPath(ctx.world, tileOf(agent), to, 'myrr', { avoid: ctx.pheromones.danger, avoidCost: CONFIG.pheromones.dangerCost, breakWalls: true })
   if (!path || !path.length) return false
   agent.path = path
   agent.state = { name: 'moving' }

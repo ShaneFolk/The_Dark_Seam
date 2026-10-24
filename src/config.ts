@@ -88,7 +88,7 @@ export const CONFIG = {
 
   noise: {
     /** How far each kind of noise carries, in tiles. */
-    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14 },
+    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14, smash: 14, chew: 10 },
     /** Myrr make a skittering noise this often while moving, in seconds. */
     skitterEverySeconds: 2,
     /** Panicking humans scream this often, in seconds. */
@@ -103,6 +103,8 @@ export const CONFIG = {
     skitter: 0.05,
     gunshot: 0.04,
     dig: 0.03,
+    smash: 0.06,
+    chew: 0.04,
     /** Hearing alone never raises fear above this (enough to hide, not to flee). */
     hearingCap: 0.35,
     /** Fear lost per second when nothing scary is sensed. */
@@ -267,6 +269,26 @@ export const CONFIG = {
     armRange: 25,
     /** Pistol magazines a civilian takes with a pistol. */
     civilianMags: 2,
+  },
+
+  barriers: {
+    /** Health of each obstacle. Windows and walls start with their own; barricades, welds and boards add on top. */
+    windowHp: 30,
+    wallHp: 400,
+    barricadeHp: 120,
+    weldHp: 250,
+    boardsHp: 80,
+    /** Damage per second a Myrr does to an obstacle in its way. */
+    myrrBreakDps: 8,
+    /** How fast humans take their own barriers down: barricades and boards, and welds (cutting). */
+    humanRemoveDps: 20,
+    humanCutDps: 6,
+    /** Seconds for a human to put up each barrier. */
+    barricadeSeconds: 6,
+    weldSeconds: 8,
+    boardSeconds: 4,
+    /** Breaking noises are made this often, in seconds. */
+    noiseEverySeconds: 2,
   },
 
   medbay: {

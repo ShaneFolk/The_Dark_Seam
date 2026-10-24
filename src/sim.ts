@@ -6,6 +6,7 @@ import { Rng } from './core/rng.ts'
 import { createWorld, type World } from './world/world.ts'
 import { createAgent, type Agent } from './agents/agent.ts'
 import { updateWanderer } from './agents/wander.ts'
+import { movementHooks } from './agents/movement.ts'
 import { activityAt, createCivilianData, roomFor, updateCivilian, type CivilianContext } from './agents/civilian.ts'
 import { createMyrrData, planDigging, takerHurt, updateTaker, type HiveState } from './agents/myrr.ts'
 import { updateBroodling, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
@@ -87,6 +88,7 @@ export function step(sim: SimState): void {
     onMyrrHurt: (myrr, source) => takerHurt(myrr, source, ctx),
   }
 
+  movementHooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
   updateInfections(ctx)
   updateMedBays(sim.medbays, sim.agents, sim.world)
   updateSquads(sim.squads, ctx)
@@ -161,7 +163,7 @@ function spawnSoldiers(sim: SimState): void {
       const patrol: RoomRef[] = beat.flatMap((b) => findRooms(world, b.types, b.level).filter((r) => !r.room.outdoor))
       sim.squads[squadId] = {
         id: squadId, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
-        lastContactTick: 0, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0,
+        lastContactTick: 0, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
       }
     }
     const isMedic = n % squadSize === squadSize - 1

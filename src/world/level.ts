@@ -56,8 +56,13 @@ export interface Level {
   width: number
   height: number
   tiles: Uint8Array
-  /** Resin layer on top of the floor (0 = none). Filled in Phase 4. */
+  /** Resin layer on top of the floor (0 = none). */
   resin: Uint8Array
+  /** Barrier on a tile (0 none, 1 barricade, 2 weld, 3 boards) and its remaining health. */
+  barrierKind: Uint8Array
+  barrier: Float32Array
+  /** Damage taken by windows and walls (they break when it reaches their health). */
+  damage: Float32Array
   /** 1 where a floor tile outside any room is natural (cave, tunnel), 0 where it is built (corridor). */
   natural: Uint8Array
   /** Room index for each tile, or -1 outside rooms. */

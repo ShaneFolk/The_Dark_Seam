@@ -4,7 +4,7 @@ import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
 import type { Level } from '../world/level.ts'
 import type { Tile } from '../world/tiles.ts'
-import { TILE_ART, drawResin, floorColor, type FloorKind } from './tileArt.ts'
+import { BARRIER_ART, TILE_ART, drawResin, floorColor, type FloorKind } from './tileArt.ts'
 import { AGENT_ART } from './agentArt.ts'
 import { describeAgent } from '../agents/describe.ts'
 import { formatClock } from '../core/clock.ts'
@@ -128,6 +128,7 @@ export class Renderer {
       : level.natural[i] ? 'natural' : 'built'
     TILE_ART[level.tiles[i] as Tile](ctx, x * size, y * size, size, floorColor(kind))
     if (level.resin[i]) drawResin(ctx, x * size, y * size, size, '')
+    if (level.barrierKind[i]) BARRIER_ART[level.barrierKind[i]]?.(ctx, x * size, y * size, size, '')
   }
 
   /** Scent as coloured squares, brighter where stronger. */

@@ -4,9 +4,15 @@ import { CONFIG } from '../config.ts'
 import type { World } from '../world/loadWorld.ts'
 import { speedFactor } from '../world/pathfinding.ts'
 import { otherEnd } from '../world/links.ts'
+import { Tile } from '../world/tiles.ts'
+import { breakRate, hitObstacle, isObstacle } from '../systems/barriers.ts'
 import type { Agent } from './agent.ts'
 
 const SECONDS_PER_TICK = 1 / CONFIG.sim.ticksPerSecond
+const TPS = CONFIG.sim.ticksPerSecond
+
+/** Hooks the sim sets each tick so movement can make noise when breaking things. */
+export const movementHooks: { onBreak?: (agent: Agent, kind: 'smash' | 'chew') => void } = {}
 
 /** Advance one tick. Returns true when the path is finished. */
 export function followPath(agent: Agent, world: World): boolean {
@@ -39,6 +45,16 @@ export function followPath(agent: Agent, world: World): boolean {
     }
 
     const level = world.levels[agent.levelIndex]
+    // Something in the way (barricade, weld, window, wall): break it, or take it down.
+    const ni = next.y * level.width + next.x
+    if (isObstacle(level, ni, agent.side, true)) {
+      const kind = level.tiles[ni] === Tile.BuildingWall && level.barrier[ni] <= 0 ? 'chew' : 'smash'
+      if (agent.side === 'myrr') agent.breakTicks = (agent.breakTicks ?? 0) + 1
+      if (agent.side === 'myrr' && agent.breakTicks! % Math.round(CONFIG.barriers.noiseEverySeconds * TPS) === 1) movementHooks.onBreak?.(agent, kind)
+      hitObstacle(level, ni, breakRate(level, ni, agent.side) / TPS)
+      return false
+    }
+    agent.breakTicks = 0
     const factor = speedFactor(level, Math.floor(agent.y) * level.width + Math.floor(agent.x), agent.side)
     const tx = next.x + 0.5, ty = next.y + 0.5
     const dx = tx - agent.x, dy = ty - agent.y

@@ -80,6 +80,25 @@ export const TILE_ART: Record<Tile, TileDraw> = {
   },
 }
 
+/** Barriers drawn over a tile: 1 barricade (planks), 2 weld (orange seam), 3 boards (planks on a window). */
+export const BARRIER_ART: Record<number, TileDraw> = {
+  1: (ctx, x, y, s) => {
+    ctx.fillStyle = '#7a5530'
+    ctx.fillRect(x + s * 0.05, y + s * 0.2, s * 0.9, s * 0.18)
+    ctx.fillRect(x + s * 0.05, y + s * 0.6, s * 0.9, s * 0.18)
+  },
+  2: (ctx, x, y, s) => {
+    ctx.fillStyle = '#ff8c1a'
+    ctx.fillRect(x + s * 0.42, y + s * 0.05, s * 0.16, s * 0.9)
+    ctx.fillRect(x + s * 0.05, y + s * 0.42, s * 0.9, s * 0.16)
+  },
+  3: (ctx, x, y, s) => {
+    ctx.fillStyle = '#8a6238'
+    ctx.fillRect(x + s * 0.1, y + s * 0.15, s * 0.8, s * 0.2)
+    ctx.fillRect(x + s * 0.1, y + s * 0.6, s * 0.8, s * 0.2)
+  },
+}
+
 /** Resin layer drawn over a tile. */
 export const drawResin: TileDraw = (ctx, x, y, s) => {
   ctx.fillStyle = 'rgba(120, 70, 170, 0.55)'

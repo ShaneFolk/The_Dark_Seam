@@ -19,6 +19,8 @@ import { canHear, canSee } from './perception.ts'
 import { isRanged, nearestVisible, tryAttack, type CombatContext } from './combat.ts'
 import { roomsWith, stockIn, take, type Supplies } from '../systems/supplies.ts'
 import { medBayFor, needsMedBay, type MedBay } from '../systems/medbay.ts'
+import { buildSeconds, putBarrier, roomOpenings, type BarrierKind } from '../systems/barriers.ts'
+import { Tile } from '../world/tiles.ts'
 import { makeWeapon } from './combat.ts'
 
 export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier'
@@ -67,6 +69,9 @@ export interface CivilianData {
   cureTicks: number
   /** Was cured of an infection in the med bay. */
   cured: boolean
+  /** While hiding: openings of the room still to barricade or board up (null = not started). */
+  fortify: { tile: number; standX: number; standY: number; kind: BarrierKind }[] | null
+  fortifyTicks: number
 }
 
 /** What the world looks like to a civilian this tick. */
@@ -105,6 +110,8 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
     deathCause: null,
     cureTicks: 0,
     cured: false,
+    fortify: null,
+    fortifyTicks: 0,
   }
 }
 
@@ -227,16 +234,20 @@ function flee(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
 }
 
 function hide(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
+  // Barricading the doors and boarding the windows of the hiding room.
+  if (civ.fortify?.length) return fortifyStep(agent, civ, ctx)
   if (agent.state.name === 'moving') {
-    // Arrived: grab a pistol if this room has one, then settle in, still and quiet.
+    // Arrived: grab a pistol if this room has one, then fortify the room.
     if (followPath(agent, ctx.world)) {
       tryArm(agent, ctx)
-      agent.state = { name: 'idle', ticksLeft: 1e9 }
+      civ.fortify = planFortify(agent, ctx)
+      agent.state = { name: 'idle', ticksLeft: civ.fortify.length ? 0 : 1e9 }
     }
     return
   }
   // A long idle state means "already hiding here".
   if (agent.state.name === 'idle' && agent.state.ticksLeft > 0) return
+  if (civ.fortify) { agent.state = { name: 'idle', ticksLeft: 1e9 }; return } // done fortifying: stay put
   const spot = hidingSpot(agent, civ, ctx)
   if (spot && walkTo(agent, ctx, spot)) return
   agent.state = { name: 'idle', ticksLeft: 1e9 }
@@ -307,11 +318,44 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
 export function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
   civ.mode = mode
   civ.target = null
+  civ.fortify = null
   agent.speed = mode === 'flee' || mode === 'panic' ? agent.baseSpeed * CONFIG.civilians.runMultiplier : agent.baseSpeed
   if (agent.state.name !== 'crossing') {
     agent.path = []
     agent.state = { name: 'idle', ticksLeft: 0 }
   }
+}
+
+// ---------------------------------------------------------------- fortifying
+
+/** Openings of the room they're hiding in that have no barrier yet (indoor rooms only). */
+function planFortify(agent: Agent, ctx: CivilianContext): NonNullable<CivilianData['fortify']> {
+  const room = roomAt(ctx.world, tileOf(agent))
+  if (!room || room.room.outdoor || room.room.type === 'hive') return []
+  const level = ctx.world.levels[agent.levelIndex]
+  return roomOpenings(ctx.world, room).filter((o) => level.barrier[o.tile] <= 0)
+}
+
+/** Walk to the next opening and put up a barricade (doors) or boards (windows). */
+function fortifyStep(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
+  const level = ctx.world.levels[agent.levelIndex]
+  const job = civ.fortify![0]
+  const tile = level.tiles[job.tile]
+  const stillOpen = level.barrier[job.tile] <= 0 && (tile === Tile.Door || tile === Tile.Doorway || tile === Tile.Window)
+  if (!stillOpen) { civ.fortify!.shift(); civ.fortifyTicks = 0; return }
+  if (Math.floor(agent.x) !== job.standX || Math.floor(agent.y) !== job.standY) {
+    if (agent.state.name !== 'moving' && !walkTo(agent, ctx, { levelIndex: agent.levelIndex, x: job.standX, y: job.standY })) {
+      civ.fortify!.shift()
+      return
+    }
+    followPath(agent, ctx.world)
+    return
+  }
+  agent.state = { name: 'idle', ticksLeft: 0 }
+  if (++civ.fortifyTicks < buildSeconds(job.kind) * TPS) return
+  putBarrier(level, job.tile, job.kind)
+  civ.fortify!.shift()
+  civ.fortifyTicks = 0
 }
 
 // ---------------------------------------------------------------- arming

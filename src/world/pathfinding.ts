@@ -13,6 +13,7 @@ import { TILE_INFO, type Tile } from './tiles.ts'
 import { otherEnd } from './links.ts'
 import type { World } from './loadWorld.ts'
 import type { Level } from './level.ts'
+import { breakSeconds, isObstacle } from '../systems/barriers.ts'
 
 export type Side = 'human' | 'myrr'
 
@@ -65,6 +66,8 @@ let buffers: SearchBuffers | null = null
 export interface PathOptions {
   avoid?: Float32Array[]
   avoidCost?: number
+  /** Myrr only: may chew through building walls (Takers). */
+  breakWalls?: boolean
 }
 
 export function findPath(world: World, from: PathNode, to: PathNode, side: Side, opts: PathOptions = {}): PathNode[] | null {
@@ -85,6 +88,7 @@ export function findPath(world: World, from: PathNode, to: PathNode, side: Side,
   const maxSpeed = baseSpeed * (side === 'myrr' ? CONFIG.movement.resinSpeedMultiplier : 1)
   const minLinkSeconds = Math.min(...Object.values(CONFIG.movement.linkSeconds))
   const avoid = opts.avoid
+  const breakWalls = side === 'myrr' && !!opts.breakWalls
   const avoidCost = opts.avoidCost ?? 0
 
   // Estimated seconds to the goal: straight-line (octile) distance at top speed,
@@ -116,11 +120,17 @@ export function findPath(world: World, from: PathNode, to: PathNode, side: Side,
     // Walk to a neighbouring tile. Diagonals may not cut wall corners.
     for (const [dx, dy, dist] of DIRS) {
       const nx = x + dx, ny = y + dy
-      if (!canWalk(level, nx, ny, side)) continue
-      if (dx && dy && (!canWalk(level, x + dx, y, side) || !canWalk(level, x, y + dy, side))) continue
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
       const ni = ny * w + nx
+      // Obstacles (barricades, welds, windows, walls) can be crossed straight on,
+      // at the cost of the time it takes to break or remove them.
+      const obstacle = isObstacle(level, ni, side, breakWalls)
+      if (!obstacle && !canWalk(level, nx, ny, side)) continue
+      if (obstacle && dx && dy) continue
+      if (dx && dy && (!canWalk(level, x + dx, y, side) || !canWalk(level, x, y + dy, side))) continue
       const there = speedFactor(level, ni, side)
       let step = dist / (baseSpeed * (here + there) / 2)
+      if (obstacle) step += breakSeconds(level, ni, side)
       if (avoid) step += avoid[li][ni] * avoidCost
       relax(node, li * perLevel + ni, cost[node] + step, li, nx, ny)
     }
