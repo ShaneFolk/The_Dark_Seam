@@ -202,9 +202,9 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Speed modifiers (Myrr faster on resin)
 
 ### Phase 3 — Humans v1
-- [ ] Civilian routines (work / eat / sleep by room)
-- [ ] Sight and hearing
-- [ ] Flee, hide, panic
+- [x] Civilian routines (work / eat / sleep by room)
+- [x] Sight and hearing
+- [x] Flee, hide, panic
 
 ### Phase 4 — Hive v1
 - [ ] Brood Mother in the hive core
