@@ -229,9 +229,9 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Barricades, welding, cutting doors open
 - [x] Boarding up windows; Myrr smashing through windows
 - [x] Takers chewing through walls, with noise humans can detect
-- [ ] Sentry turrets + reloading
-- [ ] Flamethrower, mining charges, motion sensors
-- [ ] Generators, power, repairs
+- [x] Sentry turrets + reloading
+- [x] Flamethrower, mining charges, motion sensors
+- [x] Generators, power, repairs
 - [x] Med bay cures
 
 ### Phase 8 — Commander & Endings
