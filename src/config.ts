@@ -88,6 +88,37 @@ export const CONFIG = {
     wallMuffle: 0.5,
   },
 
+  spinebacks: {
+    /** Spinebacks that always stay home guarding the Brood Mother; the rest go raiding. */
+    homeGuards: 2,
+    /** A spare guard sets off on a raid about this often, in seconds. */
+    raidEverySeconds: 40,
+    /** Raiders sting at this health (Takers wait for lower), so they rarely kill. */
+    stingHealth: 60,
+    /** Carrying someone barely slows a Spineback. */
+    carrySpeedMultiplier: 0.9,
+    /** A raider takes on a person with up to this many others nearby (Takers: hive.groupSize). */
+    groupSize: 3,
+    /** Below this share of its own health a Spineback stops taking prisoners and fights to kill. */
+    killBelowHealth: 0.4,
+  },
+
+  swarm: {
+    /** Myrr this far away answer a screech, in tiles (another level counts as levelDistance). */
+    callRange: 80,
+    levelDistance: 15,
+    /** They rush once this many have gathered within gatherRadius of the caller... */
+    size: 4,
+    gatherRadius: 5,
+    /** ...or after waitSeconds with at least two; after maxWaitSeconds the swarm breaks up. */
+    waitSeconds: 20,
+    maxWaitSeconds: 40,
+    /** People within this many tiles of the rally point are rushed. */
+    preyRange: 14,
+    /** Seconds before the hive can call another swarm. */
+    cooldownSeconds: 30,
+  },
+
   camouflage: {
     /** Humans spot a hidden Myrr (holding still on resin) only within this many tiles. */
     sightRange: 2.5,
@@ -103,7 +134,7 @@ export const CONFIG = {
 
   noise: {
     /** How far each kind of noise carries, in tiles. */
-    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14, smash: 14, chew: 10, blast: 30, sensor: 0 },
+    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14, smash: 14, chew: 10, blast: 30, sensor: 0, screech: 22 },
     /** Myrr make a skittering noise this often while moving, in seconds. */
     skitterEverySeconds: 2,
     /** Panicking humans scream this often, in seconds. */
@@ -122,6 +153,7 @@ export const CONFIG = {
     chew: 0.04,
     blast: 0.1,
     sensor: 0,
+    screech: 0.1,
     /** Hearing alone never raises fear above this (enough to hide, not to flee). */
     hearingCap: 0.35,
     /** Fear lost per second when nothing scary is sensed. */

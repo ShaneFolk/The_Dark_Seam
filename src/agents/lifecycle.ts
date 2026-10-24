@@ -6,7 +6,8 @@
 // The infection belongs to the person: if soldiers cut them free, it keeps
 // ticking wherever they go until a medic stabilizes them or the med bay cures them.
 // Spinebacks guard the Brood Mother, kill humans who come near the hive, and
-// answer alarm scent wherever it goes up.
+// answer alarm scent wherever it goes up. Spare Spinebacks go raiding: they hunt
+// and carry people home like Takers, and only kill when they must.
 
 import { CONFIG } from '../config.ts'
 import { findPath } from '../world/pathfinding.ts'
@@ -14,8 +15,8 @@ import { cornerTiles, findRooms, randomTileIn, roomAt, roomTiles, sameRoom } fro
 import type { PathNode } from '../world/pathfinding.ts'
 import { createAgent, tileOf, type Agent } from './agent.ts'
 import { isFree, setMode } from './civilian.ts'
-import { followPath } from './movement.ts'
-import { createMyrrData, type HiveContext, type MyrrData } from './myrr.ts'
+import { followPath, isMoving } from './movement.ts'
+import { createMyrrData, updateTaker, type HiveContext, type MyrrData } from './myrr.ts'
 import { makeWeapon, nearestVisible, tryAttack, type CombatContext } from './combat.ts'
 import { strongest } from '../systems/pheromones.ts'
 import { logEvent } from '../core/events.ts'
@@ -26,6 +27,9 @@ import { canWalk } from '../world/pathfinding.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const L = CONFIG.lifecycle
+
+/** A Spineback doing one of these is out raiding (run by the Taker brain). */
+const RAID_TASKS = new Set(['rest', 'scout', 'return', 'hunt', 'attack', 'carry', 'swarm'])
 
 // ---------------------------------------------------------------- Brood Mother
 
@@ -320,6 +324,8 @@ export function whatTheHiveNeeds(ctx: HiveContext): 'taker' | 'spineback' {
  */
 export function updateSpineback(agent: Agent, ctx: CombatContext): void {
   const m = agent.myrr!
+  // Raiding: hunt and carry people home, like a Taker (only stronger).
+  if (RAID_TASKS.has(m.task)) return updateTaker(agent, ctx)
   const mother = ctx.agents[ctx.hive.motherId]
   const chaseRange = L.guardRadius + 10
   const responding = m.task === 'respond'
@@ -350,7 +356,7 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
   }
   m.targetId = -1
 
-  if (agent.state.name === 'moving' || agent.state.name === 'crossing') {
+  if (isMoving(agent)) {
     followPath(agent, ctx.world)
     return
   }
@@ -358,6 +364,15 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
     // At the alarm and nobody to fight for a while: go back to guarding.
     if (ctx.tick - m.lastSeenTick > L.alarmGiveUpSeconds * TPS) m.task = 'guard'
     else return
+  }
+  // Spare guards go raiding (the hive needs hosts), as long as the Brood Mother is safe.
+  if (m.task === 'guard' && !ctx.hive.escapeTo && ctx.rng.chance(1 / (CONFIG.spinebacks.raidEverySeconds * TPS))) {
+    const guards = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && a.myrr.task === 'guard').length
+    if (guards > CONFIG.spinebacks.homeGuards) {
+      m.task = 'rest'
+      m.ticksLeft = 1
+      return
+    }
   }
   const far = mother && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > L.guardRadius)
   if (far || ctx.rng.chance(1 / (L.guardWanderSeconds * TPS))) guardSpot(agent, ctx)

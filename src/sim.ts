@@ -13,6 +13,7 @@ import { updateBroodling, updateCollapse, updateInfections, updateMother, update
 import { createStats, logEvent, type GameEvent, type RunStats } from './core/events.ts'
 import { checkEnding, type Ending } from './systems/endings.ts'
 import { updateCamouflage } from './systems/camouflage.ts'
+import { updateSwarm } from './agents/swarm.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
@@ -66,7 +67,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, swarm: null, nextSwarmTick: 0 },
     squads: [],
     shots: [],
     supplies: new Map(),
@@ -139,6 +140,7 @@ export function step(sim: SimState): void {
   updateSquads(sim.squads, ctx)
   planDigging(ctx)
 
+  updateSwarm(ctx)
   // Only agents that existed at the start of the tick act (new Broodlings wait a tick).
   const count = sim.agents.length
   for (let i = 0; i < count; i++) {

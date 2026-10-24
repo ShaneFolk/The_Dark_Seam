@@ -23,11 +23,13 @@ import { logEvent, type Log } from '../core/events.ts'
 import { who } from './describe.ts'
 import { followPath } from './movement.ts'
 import { canSee } from './perception.ts'
+import { callSwarm, type Swarm } from './swarm.ts'
 import { isFree, setMode } from './civilian.ts'
 import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 
 export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
+  | 'swarm' // Takers and raiding Spinebacks gathering for a swarm
   | 'inject' | 'uproot' | 'root' // Brood Mother (she also uses 'rest', 'hunt' and 'return')
   | 'grow' // Broodlings
   | 'guard' | 'respond' // Spinebacks
@@ -54,6 +56,8 @@ export interface MyrrData {
   ignoreUntilTick: number
   /** Brood Mother: anchored in her chamber. She must uproot before she can move. */
   rooted: boolean
+  /** Hunting as part of a swarm: don't back off from groups or guns. */
+  swarmHunt: boolean
 }
 
 export interface HiveState {
@@ -69,6 +73,9 @@ export interface HiveState {
   escaped: boolean
   /** The Brood Mother's spot in the middle of her chamber. */
   motherHome: PathNode | null
+  /** The swarm gathering right now, if any, and when the next may be called. */
+  swarm: Swarm | null
+  nextSwarmTick: number
   /** Recent losses, used to decide what Broodlings grow into (Phase 6 fills these). */
   losses: { taker: number; spineback: number }
   /** Tiles covered in resin, all levels. */
@@ -93,7 +100,7 @@ const TPS = CONFIG.sim.ticksPerSecond
 const H = CONFIG.hive
 
 export function createMyrrData(role: MyrrData['role']): MyrrData {
-  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother' }
+  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false }
 }
 
 // ---------------------------------------------------------------- update
@@ -107,13 +114,22 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
     return
   }
 
-  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage') {
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage' && m.task !== 'swarm') {
     lookForPrey(agent, m, ctx)
   }
 
   switch (m.task) {
     case 'rest': {
       if (--m.ticksLeft > 0) return
+      if (m.role === 'spineback') {
+        // Raiders head back to guard duty when the Brood Mother is short of guards.
+        const guards = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && (a.myrr.task === 'guard' || a.myrr.task === 'respond')).length
+        if (guards < CONFIG.spinebacks.homeGuards) { m.task = 'guard'; return }
+        m.task = 'scout'
+        m.trips = 0
+        nextScoutTrip(agent, m, ctx)
+        return
+      }
       // Strategic target: once humans have shown they fight back, knock out the power.
       const working = ctx.power.generators.filter((g) => g.health > 0)
       if (working.length && ctx.hive.losses.taker >= CONFIG.power.sabotageAfterLosses && ctx.rng.chance(CONFIG.power.sabotageChance)) {
@@ -182,6 +198,15 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
         m.repathTick = ctx.tick
         return
       }
+      // The goal is to feed the hive: sting once they're weak enough, rather than kill.
+      // A badly hurt Spineback stops taking prisoners.
+      const stingAt = m.role === 'spineback' ? CONFIG.spinebacks.stingHealth : H.stingHealth
+      const lethal = m.role === 'spineback' && agent.health < agent.maxHealth * CONFIG.spinebacks.killBelowHealth
+      if (!lethal && target.health <= stingAt) {
+        sting(target, ctx)
+        capture(agent, m, target, ctx)
+        return
+      }
       tryAttack(agent, target, ctx)
       // The human fights back with whatever they have (fists for most civilians).
       tryAttack(target, agent, ctx)
@@ -190,10 +215,17 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       civ.fear = Math.max(civ.fear, CONFIG.fear.panic)
       civ.threat = { levelIndex: agent.levelIndex, x: agent.x, y: agent.y }
       civ.lastSeenTick = ctx.tick
-      if (!target.dead && target.health <= H.stingHealth) {
+      if (!lethal && !target.dead && target.health <= stingAt) {
         sting(target, ctx)
         capture(agent, m, target, ctx)
       }
+      return
+    }
+
+    case 'swarm': {
+      // Gathering at the caller's spot; the swarm (swarm.ts) decides when to rush.
+      if (!ctx.hive.swarm || !ctx.hive.swarm.members.includes(agent.id)) return rest(agent, m, ctx, 0.2)
+      if (agent.state.name === 'moving') followPath(agent, ctx.world)
       return
     }
 
@@ -304,12 +336,17 @@ function lookForPrey(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   let bestDist = Infinity
   const scentPerLook = CONFIG.pheromones.sighting * (CONFIG.perception.intervalTicks / TPS)
 
+  const spine = m.role === 'spineback'
+  const groupSize = spine ? CONFIG.spinebacks.groupSize : H.groupSize
+  let crowded = false
   for (const human of ctx.agents) {
-    if (human.dead || !isFree(human) || human.levelIndex !== agent.levelIndex) continue
+    if (human.dead || !isFree(human) || human.levelIndex !== agent.levelIndex || human.kind === 'turret') continue
     const dist = Math.hypot(human.x - agent.x, human.y - agent.y)
     if (dist > range || !canSee(agent, human, level, range)) continue
-    // Armed humans: Takers are weak in a straight fight, so they go home.
-    if (human.weapon && isRanged(human.weapon)) {
+    // Armed humans: a Taker alone is weak in a straight fight, so it calls a swarm or goes home.
+    // Spinebacks (and swarms) take them on.
+    if (human.weapon && isRanged(human.weapon) && !spine && !m.swarmHunt) {
+      if (m.task !== 'hunt' && callSwarm(agent, ctx)) return
       // Not worth it here: wipe out the prey scent around this spot so scouts look elsewhere.
       weakenScent(ctx, tileOf(agent), 8, 0.05)
       if (m.task !== 'return' && m.task !== 'rest') goHome(agent, m, ctx)
@@ -317,16 +354,18 @@ function lookForPrey(agent: Agent, m: MyrrData, ctx: HiveContext): void {
     }
     depositTrail(ctx.pheromones, ctx.world, human.levelIndex, human.x, human.y, scentPerLook)
     if (m.task === 'hunt' && human.id === m.targetId) m.lastSeenTick = ctx.tick
-    if (companions(human, ctx) >= H.groupSize) continue // too many of them
+    if (companions(human, ctx) >= groupSize && !m.swarmHunt) { crowded = true; continue } // too many of them
     if (human.id === m.ignoreId && ctx.tick < m.ignoreUntilTick) continue // gave up on this one
     if (dist < bestDist) { best = human; bestDist = dist }
   }
 
   if (m.task === 'hunt') {
     const target = ctx.agents[m.targetId]
-    if (target && companions(target, ctx) >= H.groupSize) giveUp(agent, m, ctx)
+    if (target && companions(target, ctx) >= groupSize && !m.swarmHunt) giveUp(agent, m, ctx)
     return
   }
+  // Only groups in sight: call the others in.
+  if (!best && crowded && callSwarm(agent, ctx)) return
   if (best) {
     m.task = 'hunt'
     m.targetId = best.id
@@ -357,7 +396,7 @@ export function sting(target: Agent, ctx: HiveContext): void {
 
 function capture(agent: Agent, m: MyrrData, target: Agent, ctx: HiveContext): void {
   ctx.stats.captures++
-  logEvent(ctx, 'capture', `${who(target)} was taken by a Taker on Level ${agent.levelIndex + 1}`)
+  logEvent(ctx, 'capture', `${who(target)} was taken by a ${agent.kind === 'spineback' ? 'Spineback' : 'Taker'} on Level ${agent.levelIndex + 1}`)
   target.civ!.mode = 'captured'
   target.path = []
   target.state = { name: 'idle', ticksLeft: 1e9 }
@@ -365,8 +404,9 @@ function capture(agent: Agent, m: MyrrData, target: Agent, ctx: HiveContext): vo
   depositTrail(ctx.pheromones, ctx.world, agent.levelIndex, agent.x, agent.y, CONFIG.pheromones.capture)
 
   m.task = 'carry'
+  m.swarmHunt = false
   m.lastTrailTile = -1
-  agent.speed = agent.baseSpeed * H.carrySpeedMultiplier
+  agent.speed = agent.baseSpeed * (m.role === 'spineback' ? CONFIG.spinebacks.carrySpeedMultiplier : H.carrySpeedMultiplier)
   if (!goTo(agent, ctx, nearMother(ctx))) agent.path = []
 }
 
@@ -414,6 +454,7 @@ function giveUp(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   m.ignoreId = m.targetId
   m.ignoreUntilTick = ctx.tick + Math.round(H.ignoreSeconds * TPS)
   m.targetId = -1
+  m.swarmHunt = false
   agent.speed = agent.baseSpeed
   m.task = 'scout'
   agent.path = []
@@ -452,7 +493,7 @@ function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
  */
 export function takerHurt(agent: Agent, source: Agent | null, ctx: HiveContext): void {
   const m = agent.myrr!
-  if (m.role !== 'taker' || m.task === 'carry' || m.task === 'return' || m.task === 'dig') return
+  if (m.role !== 'taker' || m.task === 'carry' || m.task === 'return' || m.task === 'dig' || m.swarmHunt) return
   if (m.task === 'sabotage' && agent.health > agent.maxHealth * 0.4) return // determined
   const shot = !!source?.weapon && isRanged(source.weapon)
   if (!shot && agent.health > agent.maxHealth * 0.4) return
@@ -469,6 +510,7 @@ function goHome(agent: Agent, m: MyrrData, ctx: HiveContext): void {
 function rest(agent: Agent, m: MyrrData, ctx: HiveContext, scale = 1): void {
   const [min, max] = H.restSeconds
   m.task = 'rest'
+  m.swarmHunt = false
   m.ticksLeft = Math.round((min + ctx.rng.next() * (max - min)) * scale * TPS)
   agent.path = []
   agent.state = { name: 'idle', ticksLeft: 0 }
