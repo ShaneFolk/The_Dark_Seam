@@ -238,7 +238,7 @@ export function describeTile(level: Level, x: number, y: number): string {
   const room = level.roomOf[i]
   const parts = [TILE_INFO[t].name]
   if (room >= 0) parts.push(level.rooms[room].name)
-  const barrierNames = ['', 'barricaded', 'welded', 'boarded']
+  const barrierNames = ['', 'barricaded', 'welded', 'boarded', 'locked']
   if (level.barrierKind[i]) parts.push(barrierNames[level.barrierKind[i]] + ' (' + Math.round(level.barrier[i]) + ' hp)')
   else if (level.damage[i] > 0) parts.push('damaged (' + Math.round(level.damage[i]) + ')')
   const links = level.linksAt.get(i)

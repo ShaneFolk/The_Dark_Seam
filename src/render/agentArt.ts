@@ -28,12 +28,13 @@ export const CIVILIAN_MODE_COLORS: Record<Mode, string> = {
   captive: '#b18bd1',
   cocooned: '#b18bd1',
   dead: '#000000',
+  evacuated: '#000000',
 }
 
 export const AGENT_ART: Record<AgentKind, AgentDraw> = {
   civilian: (ctx, cx, cy, tile, agent) => {
     const mode = agent.civ?.mode ?? 'routine'
-    if (mode === 'dead') return
+    if (mode === 'dead' || mode === 'evacuated') return
     if (mode === 'cocooned') {
       // An upright purple oval stuck to the hive wall.
       ctx.beginPath()

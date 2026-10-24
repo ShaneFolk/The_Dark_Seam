@@ -172,7 +172,7 @@ Every run produces a **run summary**: the ending, how long it lasted, casualties
 
 - Civilians: **40–60**
 - Soldiers: **8–12**, in squads, each with a medic
-- Hive: Brood Mother + ~6 Takers + ~2 Spinebacks *(to be tuned)*
+- Hive: Brood Mother + 6 Takers + 4 Spinebacks *(raised from 2 in Phase 8 so early hive assaults are not an automatic win; final tuning in Phase 9)*
 
 All numbers live in one config file so balancing is just editing values.
 

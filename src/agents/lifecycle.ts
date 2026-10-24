@@ -100,7 +100,7 @@ function escapeSpot(mother: Agent, ctx: HiveContext): PathNode | null {
   let best: PathNode | null = null, bestD = 0
   for (let n = 0; n < 400; n++) {
     const x = ctx.rng.int(1, level.width - 2), y = ctx.rng.int(1, level.height - 2)
-    if (!canWalk(level, x, y, 'myrr')) continue
+    if (!canWalk(level, x, y, 'human')) continue
     const d = Math.hypot(x - mother.x, y - mother.y)
     if (d > bestD) { best = { levelIndex: mother.levelIndex, x, y }; bestD = d }
   }
@@ -113,7 +113,8 @@ function flee(mother: Agent, ctx: HiveContext): void {
     if (followPath(mother, ctx.world)) ctx.hive.escaped = true
     return
   }
-  const path = findPath(ctx.world, tileOf(mother), to, 'myrr')
+  // She is far too big for vent ducts or chutes: open tunnels only (the routes humans can use).
+  const path = findPath(ctx.world, tileOf(mother), to, 'human')
   if (path?.length) { mother.path = path; mother.state = { name: 'moving' } }
   else ctx.hive.escaped = true // nowhere further to go: she's out of reach
 }

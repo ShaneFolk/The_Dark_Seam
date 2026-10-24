@@ -22,19 +22,20 @@ import { medBayFor, needsMedBay, type MedBay } from '../systems/medbay.ts'
 import { buildSeconds, putBarrier, roomOpenings, type BarrierKind } from '../systems/barriers.ts'
 import { Tile } from '../world/tiles.ts'
 import { logEvent } from '../core/events.ts'
+import { landingPad, type CommanderState } from '../systems/commander.ts'
 import { who } from './describe.ts'
 import { damagedGenerators, humanSight, type Generator } from '../systems/power.ts'
 import { makeWeapon } from './combat.ts'
 
 export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier'
 /** 'treat' = heading to or staying in the med bay (hurt, or knows they're infected). */
-export type Activity = 'eat' | 'work' | 'free' | 'sleep' | 'treat' | 'repair'
+export type Activity = 'eat' | 'work' | 'free' | 'sleep' | 'treat' | 'repair' | 'shelter' | 'evacuate'
 /**
  * `paralyzed` = stung, can't act until it wears off; `captured` = being carried by a Taker;
  * `captive` = held in the hive waiting for the Brood Mother; `cocooned` = injected,
  * incubating; `dead` = a Broodling burst out.
  */
-export type Mode = 'routine' | 'flee' | 'hide' | 'panic' | 'paralyzed' | 'captured' | 'captive' | 'cocooned' | 'dead'
+export type Mode = 'routine' | 'flee' | 'hide' | 'panic' | 'paralyzed' | 'captured' | 'captive' | 'cocooned' | 'dead' | 'evacuated'
 
 export interface CivilianData {
   job: Job
@@ -81,6 +82,7 @@ export interface CivilianData {
 export interface CivilianContext extends CombatContext {
   supplies: Supplies
   medbays: MedBay[]
+  commander: CommanderState
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -154,6 +156,10 @@ export function roomFor(civ: CivilianData, activity: Activity, levelIndex: numbe
       return findRooms(world, ['medbay'])[0] ?? civ.home
     case 'repair':
       return findRooms(world, ['generator'])[0] ?? civ.work
+    case 'shelter':
+      return civ.home
+    case 'evacuate':
+      return findRooms(world, ['other'], 0).find((r) => r.room.name === 'Landing Pad') ?? civ.home
   }
 }
 
@@ -204,20 +210,23 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   // Techs drop everything to fix a damaged generator.
   const medbay = needsMedBay(agent) ? medBayFor(ctx.medbays) : null
   const generator = !medbay && civ.job === 'tech' ? damagedGenerators(ctx.power)[0] ?? null : null
-  const activity: Activity = medbay ? 'treat' : generator ? 'repair' : activityAt(civ, ctx.tick)
+  // Commander's orders: head for the evacuation ship, or shelter at home during an alarm.
+  const cmd = ctx.commander
+  const evac = cmd.evacuation === 'called' || cmd.evacuation === 'landed' ? landingPad(ctx) : null
+  const activity: Activity = medbay ? 'treat' : generator ? 'repair' : evac ? 'evacuate' : cmd.alarm ? 'shelter' : activityAt(civ, ctx.tick)
   if (generator && Math.hypot(agent.x - (generator.at.x + 0.5), agent.y - (generator.at.y + 0.5)) <= 1.6 && agent.levelIndex === generator.at.levelIndex) {
     repair(agent, generator)
     return
   }
   if (activity !== civ.activity || !civ.target) {
     civ.activity = activity
-    civ.target = medbay ?? generator?.room ?? roomFor(civ, activity, agent.levelIndex, ctx.world, ctx.rng)
+    civ.target = medbay ?? generator?.room ?? evac ?? roomFor(civ, activity, agent.levelIndex, ctx.world, ctx.rng)
     agent.path = []
     agent.state = { name: 'idle', ticksLeft: 0 }
   }
 
   if (agent.state.name === 'moving') {
-    if (followPath(agent, ctx.world)) rest(agent, ctx.rng, civ.activity === 'sleep' || civ.activity === 'treat')
+    if (followPath(agent, ctx.world)) rest(agent, ctx.rng, civ.activity === 'sleep' || civ.activity === 'treat' || civ.activity === 'shelter' || civ.activity === 'evacuate')
     return
   }
   if (agent.state.name === 'idle' && --agent.state.ticksLeft > 0) return
@@ -226,7 +235,7 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   const here = roomAt(ctx.world, tileOf(agent))
   if (generator) {
     if (!walkTo(agent, ctx, generator.at)) rest(agent, ctx.rng, false)
-  } else if (!sameRoom(here, civ.target) || (civ.activity !== 'sleep' && civ.activity !== 'treat')) {
+  } else if (!sameRoom(here, civ.target) || !['sleep', 'treat', 'shelter', 'evacuate'].includes(civ.activity)) {
     if (!walkTo(agent, ctx, randomTileIn(ctx.world, civ.target!, ctx.rng))) rest(agent, ctx.rng, false)
   } else {
     rest(agent, ctx.rng, true)
@@ -298,6 +307,7 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
       sightGain += F.sight * (1 - (0.5 * dist) / CONFIG.perception.sightRange)
       civ.threat = { levelIndex: other.levelIndex, x: other.x, y: other.y }
       civ.lastSeenTick = ctx.tick
+      ctx.commander.lastSightingTick = ctx.tick
       if (!ctx.stats.contact) {
         ctx.stats.contact = true
         logEvent(ctx, 'contact', `First sighting: ${who(agent).toLowerCase()} saw a Myrr on Level ${agent.levelIndex + 1}`)
@@ -403,7 +413,7 @@ function shootBack(agent: Agent, ctx: CivilianContext): void {
 // ---------------------------------------------------------------- helpers
 
 /** A human who isn't captured or held by the hive. */
-const NOT_FREE: readonly Mode[] = ['paralyzed', 'captured', 'captive', 'cocooned', 'dead']
+const NOT_FREE: readonly Mode[] = ['paralyzed', 'captured', 'captive', 'cocooned', 'dead', 'evacuated']
 export function isFree(agent: Agent): boolean {
   return agent.side === 'human' && !!agent.civ && !NOT_FREE.includes(agent.civ.mode)
 }

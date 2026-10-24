@@ -92,6 +92,10 @@ export const BARRIER_ART: Record<number, TileDraw> = {
     ctx.fillRect(x + s * 0.42, y + s * 0.05, s * 0.16, s * 0.9)
     ctx.fillRect(x + s * 0.05, y + s * 0.42, s * 0.9, s * 0.16)
   },
+  4: (ctx, x, y, s) => {
+    ctx.fillStyle = '#4da3ff'
+    ctx.fillRect(x + s * 0.3, y + s * 0.3, s * 0.4, s * 0.4)
+  },
   3: (ctx, x, y, s) => {
     ctx.fillStyle = '#8a6238'
     ctx.fillRect(x + s * 0.1, y + s * 0.15, s * 0.8, s * 0.2)

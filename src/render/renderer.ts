@@ -172,7 +172,7 @@ export class Renderer {
   private drawAgents(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
     const { ctx } = this
     for (const agent of sim.agents) {
-      if (agent.dead || agent.levelIndex !== levelIndex) continue
+      if (agent.dead || agent.civ?.mode === 'evacuated' || agent.levelIndex !== levelIndex) continue
       ctx.globalAlpha = agent.state.name === 'crossing' ? 0.4 : 1
       const cx = ox + agent.x * tile, cy = oy + agent.y * tile
       AGENT_ART[agent.kind](ctx, cx, cy, tile, agent)

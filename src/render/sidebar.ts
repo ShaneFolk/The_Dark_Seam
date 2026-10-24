@@ -8,6 +8,21 @@ import { CONFIG } from '../config.ts'
 import { totalStock } from '../systems/supplies.ts'
 import { hasPower } from '../systems/power.ts'
 
+function commanderLine(sim: SimState): string {
+  const c = sim.commander
+  const parts: string[] = []
+  parts.push(c.alarm ? 'ALARM' : 'no alarm')
+  if (c.lockdown) parts.push(c.locked ? 'lockdown' : 'lockdown (no power)')
+  const assault = sim.squads.filter((s) => s.mission === 'assault').map((s) => s.id + 1)
+  if (assault.length) parts.push('assaulting the hive: squad ' + assault.join(', '))
+  const tps = CONFIG.sim.ticksPerSecond
+  if (c.reinforcementsDue !== null) parts.push('reinforcements in ' + Math.ceil((c.reinforcementsDue - sim.tick) / tps) + 's')
+  parts.push(c.reinforcementsLeft + ' reinforcement calls left')
+  if (c.evacuation === 'called') parts.push('evacuation ship in ' + Math.ceil((c.shipLands - sim.tick) / tps) + 's')
+  if (c.evacuation === 'landed') parts.push('SHIP AT THE PAD, leaves in ' + Math.ceil((c.shipLeaves - sim.tick) / tps) + 's')
+  return parts.join(' · ')
+}
+
 function stockLine(sim: SimState): string {
   const t = totalStock(sim.supplies)
   return `${t.rifleMags} rifle mags · ${t.pistolMags} pistol mags · ${t.pistols} pistols · ${t.stabilizers} stabilizers`
@@ -75,6 +90,7 @@ export class Sidebar {
       + `
 Colony: ${civilians} civilians · ${soldiers} soldiers · ${infected} infected walking around`
       + `\nPower: ${hasPower(sim.power) ? 'on' : 'OFF'} (${sim.power.generators.map((g) => `${g.room.room.name} ${Math.round(g.health)}`).join(', ')}) · sensor alerts ${sim.sensorAlerts}`
+      + `\nCommander: ${commanderLine(sim)}`
       + `\nSupplies: ${stockLine(sim)}`
       + sim.medbays.map((b) => `
 Med bay: ${b.beds.length}/${CONFIG.medbay.beds} beds`).join('')

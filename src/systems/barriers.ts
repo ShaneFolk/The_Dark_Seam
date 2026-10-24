@@ -15,7 +15,8 @@ import type { World } from '../world/loadWorld.ts'
 import { roomTiles, type RoomRef } from '../world/rooms.ts'
 import { markChanged } from './resin.ts'
 
-export const Barrier = { None: 0, Barricade: 1, Weld: 2, Boards: 3 } as const
+/** Lock = a powered door locked by the Commander: Myrr must break it, humans open it. */
+export const Barrier = { None: 0, Barricade: 1, Weld: 2, Boards: 3, Lock: 4 } as const
 export type BarrierKind = (typeof Barrier)[keyof typeof Barrier]
 
 const B = CONFIG.barriers
@@ -35,7 +36,7 @@ export function remainingHp(level: Level, i: number): number {
  * Humans: only barriers on doors/floors. Myrr: barriers, windows, and walls if `walls`.
  */
 export function isObstacle(level: Level, i: number, side: 'human' | 'myrr', walls: boolean): boolean {
-  if (level.barrier[i] > 0) return true
+  if (level.barrier[i] > 0) return side === 'myrr' || level.barrierKind[i] !== Barrier.Lock
   if (side === 'human') return false
   const t = level.tiles[i]
   return t === Tile.Window || (walls && t === Tile.BuildingWall)
@@ -75,7 +76,7 @@ export function hitObstacle(level: Level, i: number, amount: number): boolean {
 }
 
 export function putBarrier(level: Level, i: number, kind: BarrierKind): void {
-  const hp = kind === Barrier.Weld ? B.weldHp : kind === Barrier.Boards ? B.boardsHp : B.barricadeHp
+  const hp = kind === Barrier.Weld ? B.weldHp : kind === Barrier.Boards ? B.boardsHp : kind === Barrier.Lock ? CONFIG.commander.lockHp : B.barricadeHp
   level.barrierKind[i] = kind
   level.barrier[i] = hp
   markChanged(level, i)

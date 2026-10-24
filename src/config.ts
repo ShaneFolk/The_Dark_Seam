@@ -130,7 +130,7 @@ export const CONFIG = {
   hive: {
     takers: 6,
     /** Spinebacks at the start. They guard the Brood Mother (combat comes in Phase 6). */
-    spinebacks: 2,
+    spinebacks: 4,
     /** How far Myrr see, in tiles (same blockers as for humans). */
     sightRange: 10,
     /** A human counts as "alone" with no other free human within this many tiles. */
@@ -199,9 +199,9 @@ export const CONFIG = {
     alarmGiveUpSeconds: 15,
     /** The Brood Mother flees when below this share of health, or when humans are in the hive with fewer Spinebacks than this. */
     fleeBelowHealth: 0.5,
-    fleeWhenGuardsBelow: 2,
+    fleeWhenGuardsBelow: 1,
     /** How fast she moves when fleeing, in tiles per second. */
-    motherFleeSpeed: 1.5,
+    motherFleeSpeed: 2.2,
     /** After she dies, the other Myrr lose this much health per second. */
     collapseDecayPerSecond: 2,
   },
@@ -347,6 +347,40 @@ export const CONFIG = {
     range: 6,
     /** A sensor can alert again after this many seconds. */
     cooldownSeconds: 20,
+  },
+
+  commander: {
+    /** The Commander reviews the situation this often, in seconds. */
+    intervalSeconds: 5,
+    /** The alarm (and any lockdown) clears after this long with no Myrr seen, in seconds. */
+    alarmClearSeconds: 300,
+    /** Health of a locked powered door (Myrr must break it; humans open it). */
+    lockHp: 200,
+    assault: {
+      /** Sent when the hive is known and holds at least minCocoons cocoons, or has at least hiveSize Myrr. */
+      minCocoons: 5,
+      hiveSize: 20,
+      /** Up to this many squads go; each needs this morale and members. */
+      squads: 2,
+      minMorale: 0.6,
+      minMembers: 2,
+      /** At the hive with nothing to fight or cut for this long: the assault is over, in seconds. */
+      quietSeconds: 10,
+    },
+    reinforcements: {
+      calls: 2,
+      /** Called when soldiers alive fall below this share of the starting number. */
+      belowShare: 0.6,
+      /** Seconds from the call until the squad lands at the Landing Pad. */
+      delaySeconds: 180,
+    },
+    evacuation: {
+      /** Ordered when free civilians fall below this share of the starting number. */
+      civiliansBelow: 0.3,
+      /** Seconds until the ship lands at the Landing Pad, and how long it waits there. */
+      shipDelaySeconds: 240,
+      shipWaitSeconds: 60,
+    },
   },
 
   barriers: {

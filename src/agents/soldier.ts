@@ -5,12 +5,14 @@
 //
 //   retreat   morale broke: fall back to Security, weld it shut, wait until it recovers
 //   resupply  low on ammo: restock at the Armory
+//   chase     on an assault, the Brood Mother is fleeing: run her down
 //   rescue    a Taker is carrying someone: chase it and shoot it
 //   respond   Myrr in sight, or screams, gunfire, digging, smashing or chewing heard
 //   cut       a cocoon in sight: cut the person free
 //   blast     heavy fighting in an Upper Mine tunnel: collapse it with a mining charge
 //   reload    a turret is low: feed it spare rifle magazines
 //   fetchTurret / deployTurret   carry a packed turret from the armory to a defence point
+//   assault / escort   the Commander's missions: storm the Hive Core / guard the evacuation
 //   patrol    otherwise walk the squad's route
 //
 // The leader walks to the squad's goal; the others keep close to the leader.
@@ -36,6 +38,7 @@ import { countResin } from '../systems/resin.ts'
 import { makeNoise } from '../systems/noise.ts'
 import { kill } from './combat.ts'
 import { logEvent } from '../core/events.ts'
+import { landingPad } from '../systems/commander.ts'
 import { who } from './describe.ts'
 import type { CivilianContext as CombatContext } from './civilian.ts'
 
@@ -52,7 +55,7 @@ export interface SoldierData {
   workTicks: number
 }
 
-export type Order = 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret'
+export type Order = 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
 
 export interface Squad {
   id: number
@@ -75,6 +78,11 @@ export interface Squad {
   charges: number
   /** The leader is carrying a packed turret. */
   carryingTurret: boolean
+  /** The Commander's orders for this squad: assault the hive, or guard the evacuation. */
+  mission: 'assault' | 'escort' | null
+  missionGoal: PathNode | null
+  /** Has reached the mission goal (assault: the Hive Core). */
+  missionReached: boolean
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -119,7 +127,20 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     if (myrrCount > alive.length) squad.morale -= S.morale.outnumberedPerSecond * seconds
     else if (!myrrSeen) squad.morale += S.morale.recoverPerSecond * seconds
     squad.morale = Math.max(0, Math.min(1, squad.morale))
-    if (myrrSeen) squad.lastContactTick = ctx.tick
+    if (myrrSeen) { squad.lastContactTick = ctx.tick; ctx.commander.lastSightingTick = ctx.tick }
+    if (cocoon) squad.lastContactTick = ctx.tick
+
+    // Assault done: at the hive, nothing left to fight or cut for a while.
+    if (squad.mission === 'assault' && squad.missionReached && ctx.tick - squad.lastContactTick > CONFIG.commander.assault.quietSeconds * TPS) {
+      squad.mission = null
+      squad.missionReached = false
+      logEvent(ctx, 'command', `Squad ${squad.id + 1} finished its assault on the hive`)
+    }
+    // A broken or thinned-out squad abandons its assault.
+    if (squad.mission === 'assault' && (squad.morale < S.morale.breakAt || alive.length < CONFIG.commander.assault.minMembers)) {
+      squad.mission = null
+      logEvent(ctx, 'command', `Squad ${squad.id + 1} broke off its assault on the hive`)
+    }
 
     const ammo = alive.reduce((sum, s) => sum + (s.weapon ? roundsLeft(s.weapon) : 0), 0)
     // Low on ammo, and somewhere still has some to restock from.
@@ -131,6 +152,10 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       setOrder(squad, 'retreat', roomGoal(ctx, ['security'], leader))
     } else if (squad.order === 'resupply' || lowAmmo) {
       if (squad.order !== 'resupply') setOrder(squad, 'resupply', restockAt ? randomTileIn(ctx.world, restockAt, ctx.rng) : roomGoal(ctx, ['armory'], leader))
+    } else if (squad.mission === 'assault' && ctx.hive.escapeTo && ctx.agents[ctx.hive.motherId] && !ctx.agents[ctx.hive.motherId].dead) {
+      // The Brood Mother is getting away: catching her comes first (they still shoot on the move).
+      setOrder(squad, 'assault', tileOf(ctx.agents[ctx.hive.motherId]))
+      squad.missionGoal = squad.goal
     } else if (carrier) {
       setOrder(squad, 'rescue', tileOf(carrier))
       squad.targetId = carrier.id
@@ -139,6 +164,12 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     } else if (cocoon && squad.order !== 'cut') {
       setOrder(squad, 'cut', tileOf(cocoon))
       squad.targetId = cocoon.id
+    } else if (squad.mission && (squad.order === 'patrol' || squad.order === squad.mission)) {
+      // Assaults hunt the Brood Mother wherever she is (and chase her if she flees).
+      const mother = ctx.agents[ctx.hive.motherId]
+      if (squad.mission === 'assault' && mother && !mother.dead) squad.missionGoal = tileOf(mother)
+      if (!squad.missionGoal) squad.missionGoal = missionGoal(squad, ctx)
+      if (squad.missionGoal) setOrder(squad, squad.mission, squad.missionGoal)
     } else if (squad.order === 'patrol' && squad.charges > 0 && blastSite(ctx)) {
       setOrder(squad, 'blast', blastSite(ctx))
     } else if (heard && squad.order === 'patrol') {
@@ -159,6 +190,16 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       setOrder(squad, 'patrol', null)
     }
   }
+}
+
+/** Where a mission sends the squad: the Hive Core, or the Landing Pad. */
+function missionGoal(squad: Squad, ctx: CombatContext): PathNode | null {
+  if (squad.mission === 'assault') {
+    const hive = findRooms(ctx.world, ['hive'])[0]
+    return hive ? randomTileIn(ctx.world, hive, ctx.rng) : null
+  }
+  const pad = landingPad(ctx)
+  return pad ? randomTileIn(ctx.world, pad, ctx.rng) : null
 }
 
 function setOrder(squad: Squad, order: Order, goal: PathNode | null): void {
@@ -234,6 +275,8 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     if (squad.order === 'blast') squad.ticksLeft = Math.round(CONFIG.charges.setSeconds * TPS)
     if (squad.order === 'cut') squad.ticksLeft = Math.round(S.cutSeconds * TPS)
     if (squad.order === 'respond') squad.goal = null
+    if (squad.order === 'assault' || squad.order === 'escort') squad.missionReached = true
+    if (squad.order === 'assault') squad.goal = null // keep closing in on the target
     return
   }
   if (ctx.tick >= s.repathTick || agent.state.name !== 'moving') {

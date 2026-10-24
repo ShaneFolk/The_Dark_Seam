@@ -12,6 +12,7 @@ import { createMyrrData, planDigging, takerHurt, updateTaker, type HiveState } f
 import { updateBroodling, updateCollapse, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
 import { createStats, logEvent, type GameEvent, type RunStats } from './core/events.ts'
 import { checkEnding, type Ending } from './systems/endings.ts'
+import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
 import { countResin, seedHiveResin } from './systems/resin.ts'
@@ -51,6 +52,7 @@ export interface SimState {
   ending: Ending | null
   /** Was the colony powered last tick (to log power going off and on). */
   hadPower: boolean
+  commander: CommanderState
 }
 
 export function createSim(seed: number): SimState {
@@ -75,6 +77,7 @@ export function createSim(seed: number): SimState {
     stats: createStats(),
     ending: null,
     hadPower: true,
+    commander: null as unknown as CommanderState,
   }
   sim.supplies = createSupplies(world, sim.rng)
   sim.sensors = createSensors(world, sim.rng)
@@ -84,6 +87,7 @@ export function createSim(seed: number): SimState {
   spawnSoldiers(sim)
   spawnHive(sim)
   spawnMyrrWanderers(sim)
+  sim.commander = createCommander(sim.agents)
   return sim
 }
 
@@ -108,6 +112,7 @@ export function step(sim: SimState): void {
     events: sim.events,
     stats: sim.stats,
     medbays: sim.medbays,
+    commander: sim.commander,
     power: sim.power,
     pheromones: sim.pheromones,
     hive: sim.hive,
@@ -124,6 +129,12 @@ export function step(sim: SimState): void {
   if (powered !== sim.hadPower) logEvent(ctx, 'power', powered ? 'Power restored' : 'Power is out: both generators are down')
   sim.hadPower = powered
   sim.sensorAlerts += updateSensors(sim.sensors, sim.agents, sim.noises, sim.tick)
+  updateCommander(sim.commander, sim.squads, ctx, {
+    spawnReinforcements: () => {
+      const pad = landingPad(ctx)
+      if (pad) addSquad(sim, pad, CONFIG.soldiers.squadSize, BEATS[sim.squads.length % BEATS.length])
+    },
+  })
   updateSquads(sim.squads, ctx)
   planDigging(ctx)
 
@@ -131,7 +142,7 @@ export function step(sim: SimState): void {
   const count = sim.agents.length
   for (let i = 0; i < count; i++) {
     const agent = sim.agents[i]
-    if (agent.dead) continue
+    if (agent.dead || agent.civ?.mode === 'evacuated') continue
     if (agent.weapon) tickWeapon(agent.weapon) // cooldowns and reloads, for everyone
     if (agent.kind === 'turret') { updateTurret(agent, ctx); continue }
     if (agent.civ) {
@@ -156,7 +167,7 @@ export function step(sim: SimState): void {
 /** Once a second: has the run ended? */
 function checkForEnding(sim: SimState): void {
   if (sim.tick % TPS !== 0) return
-  const ending = checkEnding(sim.agents, sim.hive, sim.stats, sim.tick, false)
+  const ending = checkEnding(sim.agents, sim.hive, sim.stats, sim.tick, sim.commander.evacuation === 'gone')
   if (!ending) return
   sim.ending = ending
   logEvent({ events: sim.events, stats: sim.stats, tick: sim.tick }, 'ending', 'The run ended: ' + ending.kind)
@@ -166,7 +177,7 @@ function checkForEnding(sim: SimState): void {
 export function levelActivity(sim: SimState, levelIndex: number): { humans: number; myrr: number } {
   let humans = 0, myrr = 0
   for (const a of sim.agents) {
-    if (a.dead || a.levelIndex !== levelIndex || a.civ?.mode === 'cocooned' || a.kind === 'turret') continue
+    if (a.dead || a.levelIndex !== levelIndex || a.civ?.mode === 'cocooned' || a.civ?.mode === 'evacuated' || a.kind === 'turret') continue
     if (a.side === 'human') humans++
     else myrr++
   }
@@ -191,36 +202,44 @@ function spawnCivilians(sim: SimState): void {
 
 /** Squads start in Security. Each patrols its own beat; the last member is the medic. */
 function spawnSoldiers(sim: SimState): void {
-  const { world, rng } = sim
-  const security = findRooms(world, ['security'])[0]
+  const security = findRooms(sim.world, ['security'])[0]
   if (!security) return
-  const beats: { level: number; types: RoomType[] }[][] = [
-    [{ level: 0, types: ['command', 'mess', 'supply', 'quarters', 'medbay'] }],
-    [{ level: 1, types: ['workshop', 'other', 'supply', 'mess'] }],
-    [{ level: 0, types: ['other', 'workshop', 'generator'] }, { level: 1, types: ['other'] }],
-  ]
-  const squadSize = CONFIG.soldiers.squadSize
-  for (let n = 0; n < CONFIG.soldiers.count; n++) {
-    const squadId = Math.floor(n / squadSize)
-    if (!sim.squads[squadId]) {
-      const beat = beats[squadId % beats.length]
-      const patrol: RoomRef[] = beat.flatMap((b) => findRooms(world, b.types, b.level).filter((r) => !r.room.outdoor))
-      sim.squads[squadId] = {
-        id: squadId, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
-        lastContactTick: 0, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
-        charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
-      }
-    }
-    const isMedic = n % squadSize === squadSize - 1
+  const squads = Math.ceil(CONFIG.soldiers.count / CONFIG.soldiers.squadSize)
+  for (let q = 0; q < squads; q++) {
+    const size = Math.min(CONFIG.soldiers.squadSize, CONFIG.soldiers.count - q * CONFIG.soldiers.squadSize)
+    addSquad(sim, security, size, BEATS[q % BEATS.length])
+  }
+}
+
+/** Patrol beats: the rooms each squad walks between. */
+const BEATS: { level: number; types: RoomType[] }[][] = [
+  [{ level: 0, types: ['command', 'mess', 'supply', 'quarters', 'medbay'] }],
+  [{ level: 1, types: ['workshop', 'other', 'supply', 'mess'] }],
+  [{ level: 0, types: ['other', 'workshop', 'generator'] }, { level: 1, types: ['other'] }],
+]
+
+/** A new squad starting in `room`. The last member is its medic. */
+function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: number; types: RoomType[] }[]): void {
+  const { world, rng } = sim
+  const squadId = sim.squads.length
+  const patrol: RoomRef[] = beat.flatMap((p) => findRooms(world, p.types, p.level).filter((r) => !r.room.outdoor))
+  sim.squads.push({
+    id: squadId, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
+    lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
+    charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
+    mission: null, missionGoal: null, missionReached: false,
+  })
+  for (let n = 0; n < size; n++) {
+    const isMedic = n === size - 1
     const civ = createCivilianData(world, rng, 'soldier')!
-    const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', randomTileIn(world, security, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
+    const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
     agent.soldier = {
       squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, targetId: -1,
       stabilizers: isMedic ? CONFIG.soldiers.stabilizers : 0, patientId: -1, workTicks: 0,
     }
     // The second soldier of the first squads carries a flamethrower instead of a rifle.
-    const flamer = !isMedic && n % squadSize === 1 && squadId < CONFIG.flamethrower.count
+    const flamer = !isMedic && n === 1 && squadId < CONFIG.flamethrower.count
     agent.weapon = makeWeapon(isMedic ? 'pistol' : flamer ? 'flamethrower' : 'rifle', isMedic ? CONFIG.combat.skill.medic : CONFIG.combat.skill.soldier)
     sim.squads[squadId].members.push(agent.id)
     sim.agents.push(agent)
