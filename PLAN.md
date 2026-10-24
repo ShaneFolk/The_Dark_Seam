@@ -188,10 +188,10 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Seeded random number generator
 
 ### Phase 1 — The World
-*A first pass (rectangular rooms, 80×50 / 101×71 / 90×60 grids) is built. The map redesign above means the first three items are being redone.*
-- [ ] Tile types: rock wall, building wall, floor, outdoor ground, boulder, door, window, resin, vent, shaft / ladder / elevator / chute
-- [ ] Hand-built maps for all 3 levels at 160 × 100, using the new map format and shapes
-- [ ] Level connections (elevator, ladders, chutes, vents) under the new pairing rule
+*Redone after the map redesign: all three levels at 160 × 100 in the new format.*
+- [x] Tile types: rock wall, building wall, floor, outdoor ground, boulder, door, window, resin, vent, shaft / ladder / elevator / chute
+- [x] Hand-built maps for all 3 levels at 160 × 100, using the new map format and shapes
+- [x] Level connections (elevator, ladders, chutes, vents) under the new pairing rule
 - [x] Camera: pan (drag / WASD) and zoom (scroll)
 - [x] Level switching + level activity sidebar
 
