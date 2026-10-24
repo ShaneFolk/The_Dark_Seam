@@ -196,10 +196,10 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Level switching + level activity sidebar
 
 ### Phase 2 — Movement
-- [ ] Base agent (position, speed, level)
-- [ ] A* pathfinding across levels
-- [ ] Wandering agents
-- [ ] Speed modifiers (Myrr faster on resin)
+- [x] Base agent (position, speed, level)
+- [x] A* pathfinding across levels
+- [x] Wandering agents
+- [x] Speed modifiers (Myrr faster on resin)
 
 ### Phase 3 — Humans v1
 - [ ] Civilian routines (work / eat / sleep by room)
