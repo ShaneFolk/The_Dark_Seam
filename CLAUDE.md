@@ -1,7 +1,7 @@
 # CLAUDE.md — The Dark Seam
 
 ## What this project is
-The Dark Seam is a top-down 2D simulation of an alien hive (the Myrr) waking up beneath a three-level mining colony. The graphics are deliberately simple (colored shapes and tiles). The real work is the AI for the Myrr and the humans, so that every run ends differently.
+The Dark Seam is a top-down 2D simulation of an alien hive (the Myrr) waking up beneath a three-level mining colony. The graphics start deliberately simple (colored shapes and tiles); a pixel-art pass comes later (Art Pass phase). The real work is the AI for the Myrr and the humans, so that every run ends differently.
 
 **PLAN.md is the source of truth** for the design and the build phases. Read it before starting work, and keep it updated when decisions change.
 
@@ -30,6 +30,8 @@ The Dark Seam is a top-down 2D simulation of an alien hive (the Myrr) waking up 
 - **All tuning numbers live in `src/config.ts`** (unit counts, speeds, health, timers, ammo, etc.). No magic numbers in logic.
 - Agent behavior uses **state machines** first; utility-AI scoring comes in Phase 9.
 - Keep files small and focused, one system per file.
+- **One draw mapping.** The renderer looks up how to draw each tile and unit type through a single mapping (type → draw function / sprite). Swapping colored shapes for sprites in the Art Pass must only change that mapping, never simulation code.
+- **Maps** are hand-built text files in `src/data/maps/`, all levels the same grid size (set in `config.ts`). The legend is in PLAN.md (*Map format*). Run variety comes from the seeded RNG, not from random maps.
 
 ## Folder layout
 ```
@@ -42,6 +44,7 @@ src/
   systems/         pheromones, resin, combat, medical, power, gear, commander
   render/          camera, renderer, sidebar/UI
   data/maps/       hand-built level layouts
+assets/            sprite sheets and art tools (Art Pass phase)
 ```
 
 ## Names and terms
@@ -55,5 +58,7 @@ src/
 
 ## Design guardrails
 - The Myrr are an original species. Don't copy names, designs, or terms from any existing franchise.
-- Avoid easy choke-point wins for humans: multiple routes between levels, mazelike Level 2, alien-only vents, danger-pheromone avoidance, and digging.
+- Avoid easy choke-point wins for humans: multiple routes between levels, mazelike Level 2, alien-only vents on Levels 2–3, several breach points per surface building (doors, windows, chewing through walls), danger-pheromone avoidance, and digging.
+- On Level 1, vents never open inside human buildings; they surface outdoors.
+- Rooms are not all rectangles: use angled, octagonal, L-shaped and irregular outlines.
 - Neither side should win every time. Balance is tested with batch runs (Phase 9).

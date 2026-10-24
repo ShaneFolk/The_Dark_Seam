@@ -1,6 +1,6 @@
 # The Dark Seam — Design & Build Plan
 
-A top-down 2D simulation of an alien hive waking up beneath a mining colony. The focus is the AI: every run should play out differently. Graphics stay simple (colored shapes and tiles), with pan and zoom.
+A top-down 2D simulation of an alien hive waking up beneath a mining colony. The focus is the AI: every run should play out differently. Graphics start simple (colored shapes and tiles), with pan and zoom; a pixel-art pass comes later (Phase 10).
 
 ---
 
@@ -18,12 +18,65 @@ Three levels, viewed one at a time (number keys / tabs), with a sidebar showing 
 
 **Connections between levels:** main elevator, ladders/stairwells, ore chutes, ventilation shafts.
 
+### Level size
+- All three levels use the **same grid size: 160 × 100 tiles** (`world.levelWidth` / `world.levelHeight` in `config.ts`). No level is noticeably bigger than the others.
+- Level 3 (Deep Mine) fills the whole grid. It was the smallest in the first draft and grows to match.
+
+### Map shapes
+The map is a square tile grid underneath, but rooms are **not** all rectangles: angled corners, octagonal or rounded rooms, L-shapes, alcoves and irregular outlines wherever they fit.
+
+- **Level 1 — Surface Colony:** mostly **open outdoor terrain**, with the colony compound taking up only part of the map.
+  - The compound is **modular, hub-and-spoke**: separate wings/modules (quarters, mess hall, command, med bay, armory, generator, supply) joined by narrow corridors and junction hubs, with angled and octagonal rooms. Think blueprint of a space station or research outpost, **not** one big square building.
+  - Outdoor terrain: open ground with scattered rocks and boulders, plus one or two small caves.
+- **Level 2 — Upper Mine ("the Fighting Grounds"):** organic and irregular. Winding tunnels, uneven caverns, dead ends, side pockets, varying tunnel widths. Man-made rooms (equipment bays, supply rooms, locker rooms) also get unique, non-square shapes. Stays mazelike with multiple routes, so there are no choke points.
+- **Level 3 — Deep Mine:** organic caverns and old tunnels filling the full grid, with the hive core deep inside.
+
+### Surface entry rules (Level 1)
+- **No vents open inside human buildings.** Vent shafts from the mine surface **outside**, in the open terrain (and inside the surface caves).
+- To get into a building, the Myrr must use:
+  - **Doors:** normal, barricaded, or welded. Breaking through takes time (see Gear).
+  - **Windows** (new tile type): Myrr can smash through, slower than an open door and faster than a wall. Humans can **board up** windows like a barricade.
+  - **Chewing through walls:** very slow, done by Takers. Humans can notice it (noise / event log) and respond.
+- On **Levels 2 and 3**, vents still link areas directly as alien-only routes.
+
 ### Avoiding the choke-point problem
-- **Many routes up:** elevator, side tunnels, ore chutes, and vent shafts reach different rooms. No single door holds everything.
-- **Mazelike hallways** on Level 2 so there's always a flank.
-- **Vents:** hidden links between rooms that only the Myrr can path through. No separate map layer.
+- **Many routes up:** elevator, side tunnels, ore chutes, and vent shafts reach different areas. No single door holds everything.
+- **Many ways into the surface buildings:** vents surface outside, so the Myrr cross open ground and then pick an entry: doors, windows, or chewing through a wall. Every building has several possible breach points.
+- **Mazelike, irregular tunnels** on Level 2 so there's always a flank.
+- **Vents (Levels 2–3):** hidden links between areas that only the Myrr can path through. No separate map layer.
 - **The hive learns:** Myrr that die leave a *danger pheromone*. Others avoid that route and look for another way.
 - **Digging:** Takers can slowly tunnel a new connection near a fortified spot. Humans can notice and respond.
+
+### Map format
+Levels are hand-built as text files in `src/data/maps/` (one per level), one character per tile, easy to edit by hand.
+
+| Char | Meaning | Char | Meaning |
+|---|---|---|---|
+| `#` | Rock / cave wall | `L` | Ladder |
+| `X` | Building wall | `C` | Ore chute |
+| `.` | Floor (indoor or tunnel) | `V` | Vent |
+| `,` | Outdoor ground | `A` | Armory |
+| `o` | Boulder | `M` | Med bay |
+| `D` | Door | `G` | Generator |
+| `W` | Window | `S` | Supply room / locker |
+| `E` | Elevator | `H` | Hive core |
+
+Resin, barricades, boarded windows and welds are **not** map characters: they change during a run and live in the sim state.
+
+*To settle when the loader is rewritten:*
+- **Link pairing:** since all levels are the same size, an `E`/`L`/`C`/`V` endpoint could connect to the same kind of tile at the same position on the level above or below. A `V` with no partner would be an in-level vent duct.
+- **Room letters:** `A`/`M`/`G`/`S`/`H` mark room types. Quarters, mess hall, command and workshops need letters too, and multiple rooms of one type (e.g. two generators) need names.
+
+### Run variety
+Maps stay hand-built. Each run varies through the **seeded RNG**:
+- Human starting positions
+- Supply / locker contents
+- Which tunnels start collapsed
+- Boulder placement on the surface
+- Hive starting spot within the Deep Mine
+- AI decisions
+
+*Future idea:* fully random maps, using cellular-automata caves for the mine levels only.
 
 ---
 
@@ -80,7 +133,7 @@ Taker finds human → (fight / sting if low health → paralyzed) → captured
 | Item | Notes |
 |---|---|
 | **Ammo** | Main resource. Soldiers travel to resupply. |
-| **Barricades** | Built in doorways/hallways, have health. Myrr claw through them eventually. Civilians can build them. |
+| **Barricades** | Built in doorways/hallways, have health. Myrr claw through them eventually. Civilians can build them. Also used to **board up windows**. |
 | **Sentry turrets** | Placed in hallways. Limited ammo, **reloadable** by humans. Need power. Myrr can drain them with sacrificial Takers or route around them. |
 | **Flamethrower** | Short range, area denial, burns resin. |
 | **Welders** | **Weld doors shut.** Myrr take a long time to break through. Humans can cut them back open, which also takes time. A panic-weld can trap your own people. |
@@ -125,9 +178,10 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Seeded random number generator
 
 ### Phase 1 — The World
-- [x] Tile types (floor, wall, door, resin, vent, shaft)
-- [x] Hand-built maps for all 3 levels
-- [x] Level connections (elevator, ladders, chutes, vents)
+*A first pass (rectangular rooms, 80×50 / 101×71 / 90×60 grids) is built. The map redesign above means the first three items are being redone.*
+- [ ] Tile types: rock wall, building wall, floor, outdoor ground, boulder, door, window, resin, vent, shaft / ladder / elevator / chute
+- [ ] Hand-built maps for all 3 levels at 160 × 100, using the new map format and shapes
+- [ ] Level connections (elevator, ladders, chutes, vents) under the new pairing rule
 - [x] Camera: pan (drag / WASD) and zoom (scroll)
 - [x] Level switching + level activity sidebar
 
@@ -163,6 +217,8 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 ### Phase 7 — Facility & Gear
 - [ ] Armory, lockers, supply rooms with stock
 - [ ] Barricades, welding, cutting doors open
+- [ ] Boarding up windows; Myrr smashing through windows
+- [ ] Takers chewing through walls, with noise humans can detect
 - [ ] Sentry turrets + reloading
 - [ ] Flamethrower, mining charges, motion sensors
 - [ ] Generators, power, repairs
@@ -179,12 +235,21 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [ ] Utility-AI scoring for smarter decisions
 - [ ] Balance passes
 
-### Phase 10 — Player Interference
+### Phase 10 — Art Pass
+Move from colored shapes to a Dwarf Fortress (Steam version) style.
+- [ ] Pixel-art sprites from a sprite sheet (16×16 or 32×32)
+- [ ] Autotiling: walls and edges connect based on their neighbours
+- [ ] Small unit sprites
+- [ ] Assets live in `assets/`. A placeholder tileset exists (`tileset.png`, `brood_mother.png`, `make_tiles.py`) and moves there for this phase.
+
+### Phase 11 — Player Interference
 - [ ] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
 
 ---
 
 ## 9. Open Questions
 - Self-destruct: in or out?
-- Should the mine tunnels be partly randomized each run, or always hand-built?
 - Which player-interference tools come first?
+- Map format details: link pairing and room letters (see *Map format*).
+
+*Closed:* mine tunnels stay hand-built; variety comes from the seeded RNG (see *Run variety*).
