@@ -222,7 +222,7 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Soldier squads, morale, retreat, rescues
 - [x] Medic: wake paralyzed, stabilize
 - [x] Spinebacks: guard, alarm response
-- [ ] Danger pheromones, flanking, digging
+- [x] Danger pheromones, flanking, digging
 
 ### Phase 7 — Facility & Gear
 - [ ] Armory, lockers, supply rooms with stock
