@@ -100,6 +100,7 @@ Maps stay hand-built. Each run varies through the **seeded RNG**:
 | **Broodlings** | Larvae | Hatch from injected hosts. Grow into Takers or Spinebacks based on hive needs (losing fighters → more Spinebacks). |
 
 ### Hive rules
+- **Speed:** the Myrr are much faster than humans (about 1.8× walking speed, more on resin). Humans can't outrun them; they survive by numbers, gear, barriers and reinforcements.
 - **Sting:** Takers and Spinebacks can sting a **low-health** human, paralyzing them for a timer. Paralyzed humans can't act and are easy to carry.
 - **Resin:** Takers spread resin across tiles. **Myrr move faster on resin**, so the hive is their home turf. Flamethrowers burn resin away.
 - **Pheromones:** a *trail* marks routes to prey and back home; *danger* marks kill zones; *alarm* calls Spinebacks to defend.
@@ -114,7 +115,7 @@ Maps stay hand-built. Each run varies through the **seeded RNG**:
 | **Civilians** (miners, techs, staff) | Daily routines (work, eat, sleep). Notice threats by sight and sound. Flee, hide, or barricade when scared. Panic more alone, less near soldiers. Can grab weapons from the armory or lockers at **reduced skill**. Can build barricades. |
 | **Soldiers / security** | Patrol, investigate, fight. Track health, ammo, and morale. Work in squads. Attempt rescues. Retreat when morale breaks. |
 | **Medic** (one per squad) | Wakes paralyzed humans. Gives a stabilizer that **pauses larva growth**. Limited supplies. |
-| **Commander** | Colony-wide decisions: sound the alarm, lock down sections, send search-and-destroy or rescue teams, order evacuation. |
+| **Commander** | Colony-wide decisions: sound the alarm, lock down sections, send search-and-destroy or rescue teams, **call in reinforcements** (a fresh squad lands at the Landing Pad), order evacuation. |
 
 ---
 
@@ -144,7 +145,7 @@ Taker finds human → (fight / sting if low health → paralyzed) → captured
 |---|---|
 | **Ammo** | Main resource. Soldiers travel to resupply. |
 | **Barricades** | Built in doorways/hallways, have health. Myrr claw through them eventually. Civilians can build them. Also used to **board up windows**. |
-| **Sentry turrets** | Placed in hallways. Limited ammo, **reloadable** by humans. Need power. Myrr can drain them with sacrificial Takers or route around them. |
+| **Sentry turrets** | Start **packed in the armory**. Soldiers carry them out and set them up at choke points and defence points. Limited ammo, **reloadable** by humans. Need power. Myrr can drain them with sacrificial Takers or route around them. |
 | **Flamethrower** | Short range, area denial, burns resin. |
 | **Welders** | **Weld doors shut.** Myrr take a long time to break through. Humans can cut them back open, which also takes time. A panic-weld can trap your own people. |
 | **Mining charges** | Collapse a tunnel to seal it permanently. Very few, and slow to set. |
@@ -230,12 +231,14 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Boarding up windows; Myrr smashing through windows
 - [x] Takers chewing through walls, with noise humans can detect
 - [x] Sentry turrets + reloading
+- [ ] Turrets start in the armory; squads carry them to choke / defence points
 - [x] Flamethrower, mining charges, motion sensors
 - [x] Generators, power, repairs
 - [x] Med bay cures
 
 ### Phase 8 — Commander & Endings
 - [ ] Commander decisions (alarm, lockdown, teams, evacuation)
+- [ ] Reinforcements: the Commander calls in a fresh squad that lands at the Landing Pad (arrival delay, limited calls per run)
 - [ ] Ending detection
 - [ ] Run summary / event log
 

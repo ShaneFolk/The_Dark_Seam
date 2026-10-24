@@ -24,7 +24,7 @@ export const CONFIG = {
   movement: {
     /** Walking speed in tiles per second. */
     humanSpeed: 2.5,
-    myrrSpeed: 3.2,
+    myrrSpeed: 4.5,
     /** Myrr move this many times faster on resin. */
     resinSpeedMultiplier: 1.6,
     /** Seconds to travel a link between levels. */
