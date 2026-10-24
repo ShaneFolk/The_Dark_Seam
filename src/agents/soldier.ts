@@ -15,7 +15,7 @@
 
 import { CONFIG } from '../config.ts'
 import type { PathNode } from '../world/pathfinding.ts'
-import { findPath } from '../world/pathfinding.ts'
+import { canWalk, findPath } from '../world/pathfinding.ts'
 import { findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
@@ -140,7 +140,7 @@ export function updateSoldier(agent: Agent, squads: Squad[], ctx: CombatContext)
   const alive = members(squad, ctx)
   const leader = alive[0]
   if (agent === leader) leadSquad(agent, squad, alive, ctx)
-  else follow(agent, leader, ctx)
+  else follow(agent, leader, alive.indexOf(agent), ctx)
 }
 
 /** Shoot the nearest Myrr in reach (re-checked a few times a second). */
@@ -210,14 +210,29 @@ function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
   }
 }
 
-function follow(agent: Agent, leader: Agent, ctx: CombatContext): void {
+/** Spots around the leader, one per follower, so the squad spreads out instead of stacking. */
+const FORMATION: readonly [number, number][] = [[-1, 1], [1, 1], [-1, -1], [1, -1], [0, 2], [2, 0], [-2, 0], [0, -2]]
+
+function follow(agent: Agent, leader: Agent, slot: number, ctx: CombatContext): void {
   const s = agent.soldier!
   const far = agent.levelIndex !== leader.levelIndex || dist(agent, leader) > S.followDistance
+  // Re-plan about once a second, staggered by id so followers don't move in lockstep.
   if (far && (ctx.tick >= s.repathTick || agent.state.name !== 'moving')) {
-    s.repathTick = ctx.tick + TPS
-    walkTo(agent, tileOf(leader), ctx)
+    s.repathTick = ctx.tick + TPS + (agent.id % 7)
+    walkTo(agent, formationSpot(leader, slot, ctx), ctx)
   }
   if (agent.state.name === 'moving') followPath(agent, ctx.world)
+}
+
+/** This follower's spot next to the leader (the next free one if that tile is blocked). */
+function formationSpot(leader: Agent, slot: number, ctx: CombatContext): PathNode {
+  const at = tileOf(leader)
+  const level = ctx.world.levels[at.levelIndex]
+  for (let k = 0; k < FORMATION.length; k++) {
+    const [dx, dy] = FORMATION[(slot - 1 + k) % FORMATION.length]
+    if (canWalk(level, at.x + dx, at.y + dy, 'human')) return { levelIndex: at.levelIndex, x: at.x + dx, y: at.y + dy }
+  }
+  return at
 }
 
 // ---------------------------------------------------------------- helpers
