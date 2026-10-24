@@ -56,6 +56,8 @@ export function loadWorld(defs: LevelDef[]): World {
       roomOf: rooms.roomOf,
       rooms: rooms.list,
       linksAt: new Map(),
+      changes: [],
+      changesTrimmed: 0,
     }
     return level
   })

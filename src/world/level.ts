@@ -63,6 +63,13 @@ export interface Level {
   /** Room index for each tile, or -1 outside rooms. */
   roomOf: Int16Array
   rooms: Room[]
+  /**
+   * Tile indices whose look changed during the run (resin, later doors and walls),
+   * oldest first. The renderer reads it to repaint just those tiles.
+   */
+  changes: number[]
+  /** How many old entries were trimmed off the front of `changes`. */
+  changesTrimmed: number
   /** Links at a tile index (an elevator tile on Level 2 has one up and one down). */
   linksAt: Map<number, Link[]>
 }
