@@ -220,8 +220,8 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 ### Phase 6 — Combat
 - [x] Health, weapons, skill (civilian vs. soldier), ammo
 - [x] Soldier squads, morale, retreat, rescues
-- [ ] Medic: wake paralyzed, stabilize
-- [ ] Spinebacks: guard, alarm response
+- [x] Medic: wake paralyzed, stabilize
+- [x] Spinebacks: guard, alarm response
 - [ ] Danger pheromones, flanking, digging
 
 ### Phase 7 — Facility & Gear
