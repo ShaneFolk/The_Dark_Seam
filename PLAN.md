@@ -225,14 +225,14 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Danger pheromones, flanking, digging
 
 ### Phase 7 — Facility & Gear
-- [ ] Armory, lockers, supply rooms with stock
+- [x] Armory, lockers, supply rooms with stock
 - [ ] Barricades, welding, cutting doors open
 - [ ] Boarding up windows; Myrr smashing through windows
 - [ ] Takers chewing through walls, with noise humans can detect
 - [ ] Sentry turrets + reloading
 - [ ] Flamethrower, mining charges, motion sensors
 - [ ] Generators, power, repairs
-- [ ] Med bay cures
+- [x] Med bay cures
 
 ### Phase 8 — Commander & Endings
 - [ ] Commander decisions (alarm, lockdown, teams, evacuation)
