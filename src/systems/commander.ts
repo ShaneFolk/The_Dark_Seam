@@ -22,6 +22,7 @@ import type { CivilianContext } from '../agents/civilian.ts'
 import { members, movableTurret, type Squad } from '../agents/soldier.ts'
 import { logEvent } from '../core/events.ts'
 import { findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
+import type { PathNode } from '../world/pathfinding.ts'
 import { Tile } from '../world/tiles.ts'
 import { tileOf } from '../agents/agent.ts'
 import { Barrier, putBarrier } from './barriers.ts'
@@ -68,6 +69,8 @@ export interface CommanderState {
   /** The Commander on the map (-1 if none), and whether the second-in-command has taken over. */
   commanderId: number
   second: boolean
+  /** While the command squad goes somewhere (for supplies, turrets, or falling back), the Commander goes with them: where to. */
+  escortTo: PathNode | null
 }
 
 export function createCommander(agents: Agent[]): CommanderState {
@@ -78,6 +81,7 @@ export function createCommander(agents: Agent[]): CommanderState {
     burnResin: false,
     commanderId: agents.find((a) => a.kind === 'commander')?.id ?? -1,
     second: false,
+    escortTo: null,
     startSoldiers: agents.filter((a) => a.soldier).length,
     startCivilians: agents.filter((a) => a.civ && !a.soldier).length,
   }

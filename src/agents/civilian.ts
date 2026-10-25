@@ -223,6 +223,8 @@ export function updateCivilian(agent: Agent, ctx: CivilianContext): void {
 }
 
 function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
+  // The Commander goes along with the command squad when it has to go somewhere.
+  if (civ.job === 'commander' && ctx.commander.escortTo) return followEscort(agent, ctx.commander.escortTo, ctx)
   // Hurt, or knowingly infected: the med bay comes before the schedule.
   // Techs drop everything to fix a damaged generator.
   const medbay = needsMedBay(agent) ? medBayFor(ctx.medbays) : null
@@ -261,6 +263,18 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   } else {
     rest(agent, ctx.rng, true)
   }
+}
+
+/** Walk with the command squad's leader (re-planning once a second), stopping close to them. */
+function followEscort(agent: Agent, to: PathNode, ctx: CivilianContext): void {
+  const close = agent.levelIndex === to.levelIndex && Math.hypot(agent.x - to.x - 0.5, agent.y - to.y - 0.5) <= 2
+  if (close) {
+    agent.path = []
+    agent.state = { name: 'idle', ticksLeft: 0 }
+    return
+  }
+  if (agent.state.name !== 'moving' || (ctx.tick + agent.id) % TPS === 0) walkTo(agent, ctx, to)
+  followPath(agent, ctx.world)
 }
 
 function flee(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {

@@ -16,7 +16,8 @@
 //   fetchTurret / deployTurret   carry a packed turret from the armory to a defence point
 //   packTurret  evacuation, armory empty: pack up a turret already standing to move it to the Landing Pad
 //   assault / escort   the Commander's missions: storm the Hive Core / guard the evacuation
-//   guard     the command squad stays with the Commander (and only fights near them)
+//   guard     the command squad stays with the Commander (and only fights near them); when it
+//             has to go somewhere (supplies, turrets, falling back), the Commander goes with it
 //   patrol    otherwise walk the squad's route
 //
 // After an ambush the Commander has squads burn resin ahead of them (grenades, or
@@ -116,6 +117,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
   const seconds = CONFIG.perception.intervalTicks / TPS
   for (const squad of squads) {
     const alive = members(squad, ctx)
+    if (squad.guardId >= 0 && !alive.length) ctx.commander.escortTo = null
     if (!alive.length) continue
     const leader = alive[0]
 
@@ -182,7 +184,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       if (squad.order !== 'resupply') setOrder(squad, 'resupply', restockAt ? randomTileIn(ctx.world, restockAt, ctx.rng) : roomGoal(ctx, ['armory'], leader))
     } else if (squad.guardId >= 0 && padWork(squad, ctx)) {
       // The command squad is busy setting up the Landing Pad (the Commander waits there).
-    } else if (squad.guardId >= 0 && !(onPad(ctx.agents[squad.guardId], ctx) && squad.order === 'guard' && !myrrSeen &&
+    } else if (squad.guardId >= 0 && !(squad.order === 'guard' && !myrrSeen &&
         squad.mission === 'escort' && ctx.commander.evacuation === 'fortify' && fortifyPad(squad, squads, ctx))) {
       guardCommander(squad, leader, myrrSeen, ctx)
     } else if (squad.mission === 'assault' && ctx.hive.escapeTo && ctx.agents[ctx.hive.motherId] && !ctx.agents[ctx.hive.motherId].dead) {
@@ -230,8 +232,13 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     } else if (squad.order === 'rescue' || (squad.order === 'cut' && !isCocooned(ctx, squad.targetId))) {
       setOrder(squad, 'patrol', null)
     }
+    // The command squad never leaves the Commander: when it has to go somewhere, he goes with it.
+    if (squad.guardId >= 0) ctx.commander.escortTo = STAY_WITH_COMMANDER.has(squad.order) ? null : tileOf(leader)
   }
 }
+
+/** Command-squad orders done at the Commander's side; for any other, he walks along with them. */
+const STAY_WITH_COMMANDER = new Set<Order>(['guard', 'respond', 'rescue', 'patrol'])
 
 /**
  * The command squad: stay with the Commander, fight Myrr that come near them,
