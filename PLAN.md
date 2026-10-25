@@ -271,6 +271,9 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] The Brood Mother scores keep laying vs calling her raiding Spinebacks home (she shrieks when humans get into her chamber or she is hurt)
 - [x] Paused, each Myrr shows its last scored choice over its head (zoom in to read)
 - [x] Turret backup batteries: with the power out, a turret keeps firing for 240 s of shooting; it recharges on mains power
+- [x] Fix: squads that fell back to Security stayed welded in forever; they now go back on duty when morale recovers, and during an evacuation fall back to the Landing Pad
+- [x] The Commander goes with his command squad whenever it leaves its post (supplies, turrets, falling back)
+- [x] Broodlings stay where they hatched; Spineback guards share their posts between cocoons and Broodlings
 - [ ] Balance passes
 
 ### Phase 10 — Art Pass
@@ -280,6 +283,7 @@ Move from colored shapes to a Dwarf Fortress (Steam version) style.
 - [x] Small unit sprites: miners, techs, staff (armed and torch versions), soldiers, medics, the Commander, people lying down (stung or carried), Takers, Spinebacks, Broodlings, cocoons, turrets, the Brood Mother; pips show hiding / fleeing / panicking
 - [x] Sprites live in `assets/`; the old Python placeholder art was replaced by the generator. G switches between sprites and the plain shapes
 - [x] Effects (sprite mode, `src/render/effects.ts`): Myrr walk frames, resin glints, fight marks that fade (green acid where Myrr were hit, red blood for humans), night on the surface (20:00-05:00), and on dark levels a darkness layer with flashlight beams from soldiers and the Commander, glows around people and flares, and a faint glow on each Myrr
+- [x] Always night on the surface and dark on Level 2 (visual only; the sim's lighting is unchanged); muzzle flashes, screech rings, the drop ship and evacuation ship landing on the pad, burn scars where resin was burned
 
 ### Phase 11 — Player Interference
 - [ ] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
