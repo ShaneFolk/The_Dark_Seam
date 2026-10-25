@@ -282,7 +282,7 @@ Move from colored shapes to a Dwarf Fortress (Steam version) style.
 
 ## Future options
 - **Run timeline** on the end screen: a graph of humans vs Myrr over time, so you can see where a run turned. Needs the sim to record a few numbers every colony hour, plus a small chart on the summary screen.
-- **The hive learns** *(only once there are later reinforcement drops)*: after the first drop ship, the Myrr watch the Landing Pad and ambush the next landings.
+- **Watch the pad** *(only once there are later reinforcement drops)*: after the first drop ship, the Myrr watch the Landing Pad and ambush the next landings.
 
 ## 9. Open Questions
 - Self-destruct: in or out?
