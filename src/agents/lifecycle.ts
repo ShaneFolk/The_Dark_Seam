@@ -25,6 +25,8 @@ import { who } from './describe.ts'
 import { kill } from './combat.ts'
 import { isHidden } from '../systems/camouflage.ts'
 import { nurserySpot } from './nest.ts'
+import { makeNoise } from '../systems/noise.ts'
+import { choose, ramp, scoreList, type Option } from '../core/utility.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const L = CONFIG.lifecycle
@@ -50,6 +52,7 @@ export function updateMother(mother: Agent, ctx: HiveContext & CombatContext): v
   const check = ctx.tick % CONFIG.perception.intervalTicks === 0
 
   bite(mother, ctx)
+  if (check) considerRecall(mother, ctx)
 
   if (!hive.escapeTo && m.task !== 'burrow' && check && badlyThreatened(mother, ctx)) {
     if (!hive.retreated && hive.deepHome) {
@@ -103,6 +106,45 @@ export function updateMother(mother: Agent, ctx: HiveContext & CombatContext): v
   m.task = 'inject'
   m.targetId = next
   m.ticksLeft = Math.round(L.injectSeconds * TPS)
+}
+
+/**
+ * Keep laying, or call the raiders home? Scored (CONFIG.utility.mother): laying has a
+ * fixed score; recalling grows with the threat (free humans in her chamber, her lost
+ * health). If recalling wins, she shrieks and every raiding Spineback not carrying
+ * someone drops what it's doing and comes back to guard.
+ */
+function considerRecall(mother: Agent, ctx: HiveContext): void {
+  const U = CONFIG.utility.mother
+  const hive = ctx.hive
+  const m = mother.myrr!
+  if (ctx.tick - hive.lastRecallTick < U.recallCooldownSeconds * TPS) return
+  const raiders = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && RAID_TASKS.has(a.myrr.task) && a.myrr.task !== 'carry')
+  if (!raiders.length) return
+  const threat = Math.max(ramp(intruderCount(ctx), ...U.intruders), 1 - mother.health / mother.maxHealth)
+  const options: Option<'lay' | 'recall'>[] = [{ action: 'lay', score: U.lay }, { action: 'recall', score: U.recall * threat }]
+  const pick = choose(options)?.action ?? 'lay'
+  m.lastChoice = `${pick} (${scoreList(options)})`
+  if (pick !== 'recall') return
+  hive.lastRecallTick = ctx.tick
+  for (const a of raiders) {
+    a.myrr!.task = 'guard'
+    a.myrr!.targetId = -1
+    a.myrr!.swarmHunt = false
+    a.path = []
+    a.state = { name: 'idle', ticksLeft: 0 }
+  }
+  makeNoise(ctx.noises, 'screech', mother.levelIndex, mother.x, mother.y, ctx.tick, mother.id)
+  logEvent(ctx, 'hive', `The Brood Mother shrieks: ${raiders.length} raiding Spineback${raiders.length === 1 ? ' comes' : 's come'} home to guard (${scoreList(options)})`)
+}
+
+/** Free humans in her room. */
+function intruderCount(ctx: HiveContext): number {
+  const home = ctx.hive.motherHome
+  const room = (home && roomAt(ctx.world, home)) || findRooms(ctx.world, ['hive'])[0]
+  if (!room) return 0
+  return ctx.agents.filter((a) => !a.dead && a.side === 'human' && a.kind !== 'turret' && isFree(a) && a.levelIndex === room.levelIndex &&
+    sameRoom(roomAt(ctx.world, tileOf(a)), room)).length
 }
 
 function addBroodling(at: PathNode, ctx: HiveContext): void {

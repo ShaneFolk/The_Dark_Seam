@@ -13,7 +13,7 @@ export function who(agent: Agent): string {
 
 export function describeAgent(agent: Agent, tick: number): string {
   const civ = agent.civ
-  if (agent.kind === 'turret') return 'Sentry turret #' + agent.id + ' · ammo ' + (agent.weapon?.inMag ?? 0) + ' · health ' + Math.round(agent.health)
+  if (agent.kind === 'turret') return 'Sentry turret #' + agent.id + ' · ammo ' + (agent.weapon?.inMag ?? 0) + ' · battery ' + Math.round((agent.battery ?? 0) / 20) + 's · health ' + Math.round(agent.health)
   if (agent.soldier && civ) {
     const w = agent.weapon
     const ammo = w ? `${w.inMag}+${w.spare} mags` : ''
@@ -27,7 +27,7 @@ export function describeAgent(agent: Agent, tick: number): string {
     return `Civilian #${agent.id} · ${civ.trait ? civ.trait + ' ' : ''}${civ.job} (${shift}) · ${doing}${inf} · health ${Math.round(agent.health)} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
   }
   const m = agent.myrr
-  if (m?.role === 'mother') return `Brood Mother #${agent.id} · ${m.task === 'inject' ? `injecting #${m.targetId}` : 'waiting'}`
+  if (m?.role === 'mother') return `Brood Mother #${agent.id} · ${m.task === 'inject' ? `injecting #${m.targetId}` : m.task} · health ${Math.round(agent.health)}${m.lastChoice ? ` · last chose ${m.lastChoice}` : ''}`
   if (m?.role === 'broodling') return `Broodling #${agent.id} · grows up in ${Math.ceil(m.ticksLeft / 20)}s`
   if (m?.role === 'spineback') return `Spineback #${agent.id} · ${m.task === 'respond' ? 'answering alarm' : 'guarding'} · health ${Math.round(agent.health)}`
   if (agent.dead) return `${agent.kind} #${agent.id} · dead`

@@ -158,6 +158,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     // A broken or thinned-out squad abandons its assault.
     if (squad.mission === 'assault' && (squad.morale < S.morale.breakAt || alive.length < CONFIG.commander.assault.minMembers)) {
       squad.mission = null
+      ctx.commander.lastFailTick = ctx.tick
       logEvent(ctx, 'command', `Squad ${squad.id + 1} broke off its assault on the hive`)
     }
 

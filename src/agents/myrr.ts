@@ -65,6 +65,8 @@ export interface MyrrData {
   swarmHunt: boolean
   /** The last job picked after resting, with the scores (for the description). */
   lastChoice: string
+  /** Tick it was last shot (a shaken Myrr steers clear of risky jobs for a while). */
+  shotTick: number
 }
 
 export interface HiveState {
@@ -89,6 +91,8 @@ export interface HiveState {
   nextNestTick: number
   /** Soldiers have been in among the cocoons since the last move. */
   raided: boolean
+  /** Last tick the Brood Mother called her raiders home. */
+  lastRecallTick: number
   /** The diversion under way, if any, and when the next may start. */
   decoy: Decoy | null
   nextDecoyTick: number
@@ -119,7 +123,7 @@ const TPS = CONFIG.sim.ticksPerSecond
 const H = CONFIG.hive
 
 export function createMyrrData(role: MyrrData['role']): MyrrData {
-  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false, lastChoice: '' }
+  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false, lastChoice: '', shotTick: -1e9 }
 }
 
 // ---------------------------------------------------------------- update
@@ -354,12 +358,16 @@ type Job = 'scout' | 'spread' | 'sabotage' | 'commander'
  *              more losses and more turrets (they need power) make it more attractive
  *   commander  go looking for the Commander, once the humans have killed Myrr;
  *              less attractive while the command squad is at full strength
+ *
+ * A Myrr shot recently is shaken: sabotage and the Commander hunt score lower until it calms down.
  */
 function chooseNextJob(agent: Agent, m: MyrrData, ctx: CombatContext): void {
   const U = CONFIG.utility.taker
   const hive = ctx.hive
   const losses = hive.losses.taker + hive.losses.spineback
   const fought = ramp(losses, CONFIG.power.sabotageAfterLosses - 1, U.lossesFull)
+  // Shot recently: risky jobs look worse until it has calmed down.
+  const nerve = ramp(ctx.tick - m.shotTick, 0, U.shakenSeconds * TPS)
   const fed = ctx.agents.filter((a) => a.civ?.mode === 'cocooned').length + hive.captives.length
   const options: Option<Job>[] = [{ action: 'scout', score: U.scoutBase + U.scoutHunger * (1 - ramp(fed, 0, U.fullAt)) }]
   const working = ctx.power.generators.filter((g) => g.health > 0)
@@ -367,13 +375,13 @@ function chooseNextJob(agent: Agent, m: MyrrData, ctx: CombatContext): void {
     if (hive.resinTiles < CONFIG.resin.maxTiles) options.push({ action: 'spread', score: U.spreadBase * (1 - ramp(hive.resinTiles, 0, CONFIG.resin.maxTiles)) })
     if (working.length && fought > 0) {
       const turrets = ctx.agents.filter((a) => a.kind === 'turret' && !a.dead).length
-      options.push({ action: 'sabotage', score: U.sabotageMax * fought + U.turretBonus * ramp(turrets, 0, 3) })
+      options.push({ action: 'sabotage', score: (U.sabotageMax * fought + U.turretBonus * ramp(turrets, 0, 3)) * nerve })
     }
   }
   const boss = ctx.agents.find((a) => a.kind === 'commander' && !a.dead && isFree(a))
   if (boss && fought > 0) {
     const guards = ctx.agents.filter((a) => a.soldier && !a.dead && isFree(a) && a.levelIndex === boss.levelIndex && Math.hypot(a.x - boss.x, a.y - boss.y) <= CONFIG.commander.guardRange).length
-    options.push({ action: 'commander', score: U.commanderMax * fought * (guards >= CONFIG.commander.guardSquadSize ? 0.5 : 1) })
+    options.push({ action: 'commander', score: U.commanderMax * fought * (guards >= CONFIG.commander.guardSquadSize ? 0.5 : 1) * nerve })
   }
   const pick = pickByScore(options, ctx.rng, CONFIG.utility.sharpness)?.action ?? 'scout'
   m.lastChoice = `${pick} (${scoreList(options)})`
@@ -565,6 +573,7 @@ function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
  */
 export function takerHurt(agent: Agent, source: Agent | null, ctx: HiveContext): void {
   const m = agent.myrr!
+  if (source?.weapon && isRanged(source.weapon)) m.shotTick = ctx.tick
   if (m.role !== 'taker' || m.task === 'carry' || m.task === 'haulCarry' || m.task === 'return' || m.task === 'dig' || m.swarmHunt) return
   if (m.task === 'sabotage' && agent.health > agent.maxHealth * 0.4) return // determined
   const shot = !!source?.weapon && isRanged(source.weapon)

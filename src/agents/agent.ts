@@ -51,6 +51,8 @@ export interface Agent {
   stillTicks: number
   /** Myrr: ticks left in which an attack still counts as striking from hiding. */
   ambushTicks: number
+  /** Turrets: backup battery left, in ticks of use. */
+  battery?: number
 }
 
 export function createAgent(id: number, kind: AgentKind, side: Side, at: PathNode, speed: number, health = 100): Agent {

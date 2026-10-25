@@ -1,6 +1,7 @@
 // Sentry turrets: start packed in the armory. Squads carry them out and set them
-// up at defence points. They shoot the nearest Myrr in reach while the colony has
-// power and they have ammo. Squads reload them.
+// up at defence points. They shoot the nearest Myrr in reach while they have ammo
+// and power: the colony's, or their backup battery when that is out (a few minutes
+// of firing; it recharges while the power is on). Squads reload them.
 
 import { CONFIG } from '../config.ts'
 import type { World } from '../world/loadWorld.ts'
@@ -77,18 +78,28 @@ function standableNear(world: World, at: PathNode): PathNode | null {
 
 export function createTurret(id: number, at: PathNode): Agent {
   const t = createAgent(id, 'turret', 'human', at, 0, CONFIG.turrets.health)
+  t.battery = BATTERY_TICKS
   t.weapon = makeWeapon('turret', CONFIG.turrets.skill)
   t.weapon.spare = 0
   return t
 }
 
-/** Fire at the nearest Myrr in reach, if powered and loaded. */
+const BATTERY_TICKS = Math.round(CONFIG.turrets.batterySeconds * CONFIG.sim.ticksPerSecond)
+/** Battery used per shot: one shot's worth of firing time. */
+const SHOT_COST = CONFIG.sim.ticksPerSecond / CONFIG.combat.weapons.turret.perSecond
+
+/** Fire at the nearest Myrr in reach, if powered (or on battery) and loaded. */
 export function updateTurret(turret: Agent, ctx: CombatContext): void {
   const w = turret.weapon!
-  if (w.inMag <= 0 || !hasPower(ctx.power)) return
-  if (w.cooldown > 0) return
+  const mains = hasPower(ctx.power)
+  // The battery charges on mains power, and drains with each shot without.
+  if (mains) turret.battery = Math.min(BATTERY_TICKS, (turret.battery ?? 0) + 1)
+  if (w.inMag <= 0 || w.cooldown > 0) return
+  if (!mains && (turret.battery ?? 0) < SHOT_COST) return
   const target = nearestVisible(turret, ctx, CONFIG.combat.weapons.turret.range, (a) => a.side === 'myrr')
-  if (target) tryAttack(turret, target, ctx)
+  if (!target) return
+  if (!mains) turret.battery! -= SHOT_COST
+  tryAttack(turret, target, ctx)
 }
 
 /** Does this turret need reloading? */

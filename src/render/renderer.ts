@@ -21,6 +21,8 @@ const COLORS = {
   panel: 'rgba(0, 0, 0, 0.6)',
   roomLabel: 'rgba(230, 237, 243, 0.75)',
   linkLabel: '#f0f3f6',
+  choiceBack: 'rgba(10, 12, 16, 0.75)',
+  choiceText: '#ffe08a',
   hover: 'rgba(255, 255, 255, 0.35)',
 }
 
@@ -70,6 +72,7 @@ export class Renderer {
     if (view.showPheromones) this.drawPheromones(sim, view.levelIndex, ox, oy, tile)
     this.drawSensors(sim, view.levelIndex, ox, oy, tile)
     this.drawAgents(sim, view.levelIndex, ox, oy, tile)
+    if (view.paused) this.drawChoices(sim, view.levelIndex, ox, oy, tile)
     // Darkness: dim the whole level when it has no light.
     if (!isLit(sim.power, view.levelIndex)) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
@@ -199,6 +202,32 @@ export class Renderer {
       ctx.lineTo(ox + s.x1 * tile, oy + s.y1 * tile)
       ctx.stroke()
     }
+  }
+
+  /**
+   * While paused: each Myrr's last scored choice and its score ("scout 0.85") over
+   * its head, once zoomed in enough to read (see core/utility.ts).
+   */
+  private drawChoices(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
+    if (tile < CONFIG.render.linkLabelMinTilePx) return
+    const { ctx } = this
+    ctx.font = `${Math.round(Math.max(9, tile * 0.55))}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'bottom'
+    for (const a of sim.agents) {
+      const choice = a.myrr?.lastChoice
+      if (!choice || a.dead || a.levelIndex !== levelIndex) continue
+      const pick = choice.split(' ')[0]
+      const score = choice.match(new RegExp(`[(,] ?${pick} ([0-9.]+)`))?.[1] ?? ''
+      const label = `${pick} ${score}`
+      const x = ox + a.x * tile, y = oy + a.y * tile - tile * 0.7
+      ctx.fillStyle = COLORS.choiceBack
+      const w = ctx.measureText(label).width + 6
+      ctx.fillRect(x - w / 2, y - tile * 0.65, w, tile * 0.65)
+      ctx.fillStyle = COLORS.choiceText
+      ctx.fillText(label, x, y)
+    }
+    ctx.textAlign = 'left'
   }
 
   /** Up/down arrows on link tiles, once tiles are big enough to read. */

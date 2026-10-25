@@ -151,14 +151,24 @@ export const CONFIG = {
       turretBonus: 0.15,
       /** commander = commanderMax x losses, halved while the command squad is with them. */
       commanderMax: 0.35,
+      /** Shot recently: sabotage and the Commander hunt score lower, recovering over shakenSeconds. */
+      shakenSeconds: 90,
     },
+    /**
+     * The Brood Mother, every few seconds while rooted: keep laying (lay) or shriek for her
+     * raiding Spinebacks to come home (recall = recall x threat). Threat grows with free humans
+     * in her chamber (0 to 1 over intruders) and with lost health. At most once per recallCooldownSeconds.
+     */
+    mother: { lay: 0.5, recall: 0.9, intruders: [0, 4] as [number, number], recallCooldownSeconds: 120 },
     /**
      * The Commander's assault choice (see planAssault in commander.ts). Urgency is the
      * largest of: cocoons (0 at cocoons[0], 1 at cocoons[1]), hive size (same, hiveSize),
      * and finish (when the hive is down to assault.finishHiveAtOrBelow Myrr).
      *   probe = urgency x probe      force = urgency x (0.6 to 1 by soldiers) x (0.5 to 1 by morale)
      *   must  = must x (people about to hatch, mustHatching range)      wait = wait (secondWait for the second-in-command)
+     * After an assault breaks off, force and must are scaled down (to failedScale), recovering over memorySeconds.
      */
+    commanderMemory: { failedScale: 0.5, memorySeconds: 480 },
     commander: { cocoons: [1, 8] as [number, number], hiveSize: [12, 24] as [number, number], finish: 0.9, probe: 0.9, forceBonusSoldiers: 6, mustHatching: [0, 4] as [number, number], must: 0.8, wait: 0.45, secondWait: 0.6 },
   },
 
@@ -445,6 +455,8 @@ export const CONFIG = {
     reloadBelow: 0.5,
     reloadMags: 2,
     reloadSeconds: 4,
+    /** Backup battery: with the colony's power out, a turret keeps firing for this many seconds of use. It recharges as fast while the power is on. */
+    batterySeconds: 240,
   },
 
   flamethrower: {

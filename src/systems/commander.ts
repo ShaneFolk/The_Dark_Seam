@@ -50,8 +50,9 @@ export interface CommanderState {
   missingKnown: number
   /** The probing assault has gone in; from now on only attacks in force (or a must). */
   probed: boolean
-  /** Last tick a single squad was sent in because it was a must. */
+  /** Last tick a single squad was sent in because it was a must, and last tick an assault broke off. */
   lastMustTick: number
+  lastFailTick: number
   /** fortify: falling back to the Landing Pad and setting up turrets before calling the ship. */
   evacuation: 'none' | 'fortify' | 'called' | 'landed' | 'gone'
   /** Tick the fortifying ends at the latest; ticks the ship lands / leaves. */
@@ -72,7 +73,7 @@ export interface CommanderState {
 export function createCommander(agents: Agent[]): CommanderState {
   return {
     alarm: false, lockdown: false, locked: false, hiveKnown: false, lastSightingTick: -1e9,
-    reinforcementsCalled: false, reinforcementsDue: null, missingKnown: 0, probed: false, lastMustTick: -1e9,
+    reinforcementsCalled: false, reinforcementsDue: null, missingKnown: 0, probed: false, lastMustTick: -1e9, lastFailTick: -1e9,
     evacuation: 'none', fortifyUntil: 0, shipLands: 0, shipLeaves: 0, shipHeard: false,
     burnResin: false,
     commanderId: agents.find((a) => a.kind === 'commander')?.id ?? -1,
@@ -187,6 +188,8 @@ type AssaultChoice = 'wait' | 'probe' | 'force' | 'must'
  *           more soldiers and better morale score higher
  *   must    after the probe, too few for a force: people about to hatch, and no
  *           help on the way, so one squad goes in alone
+ *
+ * He remembers: after an assault breaks off, force and must score lower for a while.
  */
 function planAssault(cmd: CommanderState, squads: Squad[], cocoons: number, hiveSize: number, ctx: CivilianContext): void {
   const A = C.assault
@@ -197,17 +200,20 @@ function planAssault(cmd: CommanderState, squads: Squad[], cocoons: number, hive
   const force = ready.reduce((n, s) => n + members(s, ctx).length, 0)
   const morale = ready.reduce((n, s) => n + s.morale, 0) / ready.length
   const urgency = Math.max(ramp(cocoons, ...U.cocoons), ramp(hiveSize, ...U.hiveSize), hiveSize <= A.finishHiveAtOrBelow ? U.finish : 0)
+  // A failed assault is fresh in his mind: attacking looks worse for a while.
+  const R = CONFIG.utility.commanderMemory
+  const memory = R.failedScale + (1 - R.failedScale) * ramp(ctx.tick - cmd.lastFailTick, 0, R.memorySeconds * TPS)
 
   const options: Option<AssaultChoice>[] = [{ action: 'wait', score: cmd.second ? U.secondWait : U.wait }]
   if (!cmd.probed) options.push({ action: 'probe', score: urgency * U.probe })
   else {
     if (force >= A.forceMinSoldiers) {
       const strength = 0.6 + 0.4 * ramp(force, A.forceMinSoldiers, A.forceMinSoldiers + U.forceBonusSoldiers)
-      options.push({ action: 'force', score: urgency * strength * (0.5 + 0.5 * morale) })
+      options.push({ action: 'force', score: urgency * strength * (0.5 + 0.5 * morale) * memory })
     }
     // Only when too few for a force, and not while the drop ship is on its way (help is coming, they hold on).
     else if (cmd.reinforcementsDue === null && ctx.tick - cmd.lastMustTick >= A.mustCooldownSeconds * TPS) {
-      options.push({ action: 'must', score: U.must * ramp(hatchingSoon(ctx), ...U.mustHatching) })
+      options.push({ action: 'must', score: U.must * ramp(hatchingSoon(ctx), ...U.mustHatching) * memory })
     }
   }
   const pick = choose(options)?.action ?? 'wait'
