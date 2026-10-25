@@ -288,6 +288,10 @@ Move from colored shapes to a Dwarf Fortress (Steam version) style.
 ## Future options
 - **Run timeline** on the end screen: a graph of humans vs Myrr over time, so you can see where a run turned. Needs the sim to record a few numbers every colony hour, plus a small chart on the summary screen.
 - **Watch the pad** *(only once there are later reinforcement drops)*: after the first drop ship, the Myrr watch the Landing Pad and ambush the next landings.
+- **Wait out the batteries:** once the Myrr notice turrets on battery, they hang back and rush when the batteries die.
+- **Escorted repairs:** with the power down, a squad guards the tech fixing the generator.
+- **Lights out at night:** dimmer surface lights on the night shift, so Takers find it easier to grab people.
+- **Guards learn flares:** cocoon guards exposed by a flare move to darker resin.
 
 ## 9. Open Questions
 - Self-destruct: in or out?
