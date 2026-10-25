@@ -38,7 +38,7 @@ const TPS = CONFIG.sim.ticksPerSecond
 const W = CONFIG.swarm
 
 /** Tasks a Myrr can drop to answer a swarm call. */
-const CAN_ANSWER = new Set(['rest', 'scout', 'return', 'spread'])
+export const CAN_ANSWER = new Set(['rest', 'scout', 'return', 'spread'])
 
 /** Try to start a swarm on the people `caller` has found. Returns true if it did. */
 export function callSwarm(caller: Agent, ctx: HiveContext): boolean {
@@ -81,13 +81,21 @@ export function callSwarm(caller: Agent, ctx: HiveContext): boolean {
  * Returns how many answered.
  */
 export function callShipSwarm(pad: PathNode, ctx: HiveContext): number {
+  return callSwarmAt(pad, W.ship, ctx)
+}
+
+/**
+ * Send every free Myrr (and spare guards) at a target they know about without
+ * seeing it (the ship swarm, the decoy raid). They gather approachTiles short of it
+ * along the route from the hive, then rush. Returns how many answered.
+ */
+export function callSwarmAt(target: PathNode, S: { approachTiles: number; waitSeconds: number; maxWaitSeconds: number; preyRange: number }, ctx: HiveContext): number {
   const hive = ctx.hive
-  const S = W.ship
-  // The rally point: approachTiles short of the pad along the route up from the hive.
+  // The rally point: approachTiles short of the target along the route from the hive.
   const mother = ctx.agents[hive.motherId]
   const from = mother && !mother.dead ? tileOf(mother) : null
-  const route = from ? findPath(ctx.world, from, pad, 'myrr') : null
-  const rally = route && route.length > S.approachTiles ? route[route.length - 1 - S.approachTiles] : pad
+  const route = from ? findPath(ctx.world, from, target, 'myrr') : null
+  const rally = route && route.length > S.approachTiles ? route[route.length - 1 - S.approachTiles] : target
   const swarm: Swarm = { rally, callerId: -1, members: [], startTick: ctx.tick, waitSeconds: S.waitSeconds, maxWaitSeconds: S.maxWaitSeconds, preyRange: S.preyRange, heard: true }
   hive.swarm = swarm
   const guards = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && a.myrr.task === 'guard').length

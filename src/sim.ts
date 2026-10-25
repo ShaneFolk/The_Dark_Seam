@@ -15,6 +15,7 @@ import { checkEnding, type Ending } from './systems/endings.ts'
 import { pruneFlares, updateCamouflage } from './systems/camouflage.ts'
 import { updateSwarm } from './agents/swarm.ts'
 import { planNest } from './agents/nest.ts'
+import { planDecoy } from './agents/decoy.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
@@ -68,7 +69,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false, decoy: null, nextDecoyTick: 0 },
     squads: [],
     shots: [],
     supplies: new Map(),
@@ -122,6 +123,7 @@ export function step(sim: SimState): void {
     pheromones: sim.pheromones,
     hive: sim.hive,
     shots: sim.shots,
+    sensors: sim.sensors,
     onSoldierHurt: (soldier, killed) => soldierHurt(sim.squads, soldier, killed),
     onMyrrHurt: (myrr, source) => takerHurt(myrr, source, ctx),
   }
@@ -144,6 +146,7 @@ export function step(sim: SimState): void {
   updateSquads(sim.squads, ctx)
   planDigging(ctx)
   planNest(ctx)
+  planDecoy(ctx)
 
   updateSwarm(ctx)
   // Only agents that existed at the start of the tick act (new Broodlings wait a tick).
@@ -255,7 +258,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
     charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
     mission: null, missionGoal: null, missionReached: false,
-    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad,
+    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad, turretAmmo: null,
   })
   for (let n = 0; n < size; n++) {
     const isMedic = n === size - 1

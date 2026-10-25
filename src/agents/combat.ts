@@ -49,6 +49,8 @@ export interface CombatContext extends HiveContext {
   power: PowerState
   /** Called when a soldier is hurt or killed (squad morale). */
   onSoldierHurt?: (soldier: Agent, killed: boolean) => void
+  /** Motion sensors (the hive's decoys use them). */
+  sensors?: readonly { levelIndex: number; x: number; y: number }[]
   /** Called when a Myrr is hurt but not killed. */
   onMyrrHurt?: (myrr: Agent, source: Agent | null) => void
 }

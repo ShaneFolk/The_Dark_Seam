@@ -337,6 +337,8 @@ export const CONFIG = {
     /** Someone cut from a cocoon is weak: health at most this, walking at this share of normal speed until cured. */
     rescuedHealth: 30,
     rescuedSpeed: 0.6,
+    /** A brave civilian who survives being taken (free again, not infected) volunteers: joins the smallest squad with a rifle, at this skill. */
+    volunteerSkill: 0.45,
     /** Medics: stabilizers carried (refilled at the armory for now), and how long each job takes. */
     stabilizers: 3,
     wakeSeconds: 3,
@@ -402,6 +404,8 @@ export const CONFIG = {
      */
     pickupSeconds: 3,
     setupSeconds: 6,
+    /** Seconds to pack up a turret that's already set up (to move it to the Landing Pad on evacuation). */
+    packSeconds: 5,
     carrySpeedMultiplier: 0.7,
     /** Defence points: where danger scent (fighting) is at least this strong... */
     deployDanger: 3,
@@ -447,6 +451,30 @@ export const CONFIG = {
     burnSeconds: 25,
     /** A squad on Levels 2-3 lights one when resin is near and no flare burns within this many tiles. */
     spacing: 10,
+  },
+
+  decoy: {
+    /**
+     * Once the hive has lost afterLosses Myrr, it may stage a diversion (chance per 5 s check,
+     * at most once per cooldownSeconds): a Taker paces around a motion sensor on Level 2,
+     * smashing things, for holdSeconds. raidAfterSeconds after the noise starts, a swarm raids
+     * the Level 1 room with the most people (minPrey+) and no soldier within soldierClear tiles.
+     * The hive needs minFree free Takers and Spinebacks. The decoy runs if humans come within fleeRange.
+     */
+    afterLosses: 3,
+    cooldownSeconds: 900,
+    chance: 0.1,
+    minFree: 5,
+    minPrey: 3,
+    soldierClear: 15,
+    paceRadius: 4,
+    noiseEverySeconds: 2,
+    holdSeconds: 70,
+    fleeRange: 7,
+    raidAfterSeconds: 25,
+    /** The whole diversion is forgotten after this long. */
+    maxSeconds: 240,
+    raid: { approachTiles: 10, waitSeconds: 20, maxWaitSeconds: 60, preyRange: 16 },
   },
 
   nest: {

@@ -14,6 +14,7 @@ import type { World } from '../world/loadWorld.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
 import { findRooms, roomTiles, type RoomRef } from '../world/rooms.ts'
 import { carryCocoon, updateHaul } from './nest.ts'
+import { updateDecoy, type Decoy } from './decoy.ts'
 import { depositTrail, strongestTrail, type Pheromones } from '../systems/pheromones.ts'
 import { coatResin, resinFrontier } from '../systems/resin.ts'
 import { digTile, findDigSite, type DigJob } from '../systems/digging.ts'
@@ -32,6 +33,7 @@ export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
   | 'swarm' // Takers and raiding Spinebacks gathering for a swarm
   | 'haul' | 'haulCarry' // Takers moving a cocoon to a new nursery (nest.ts)
+  | 'decoy' // a Taker making a diversion at a motion sensor (decoy.ts)
   | 'inject' | 'uproot' | 'root' | 'burrow' // Brood Mother (she also uses 'rest', 'hunt' and 'return')
   | 'grow' // Broodlings
   | 'guard' | 'respond' // Spinebacks
@@ -84,6 +86,9 @@ export interface HiveState {
   nextNestTick: number
   /** Soldiers have been in among the cocoons since the last move. */
   raided: boolean
+  /** The diversion under way, if any, and when the next may start. */
+  decoy: Decoy | null
+  nextDecoyTick: number
   /** The swarm gathering right now, if any, and when the next may be called. */
   swarm: Swarm | null
   nextSwarmTick: number
@@ -126,7 +131,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
     return
   }
 
-  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage' && m.task !== 'swarm' && m.task !== 'haul' && m.task !== 'haulCarry') {
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage' && m.task !== 'swarm' && m.task !== 'haul' && m.task !== 'haulCarry' && m.task !== 'decoy') {
     lookForPrey(agent, m, ctx)
   }
 
@@ -233,6 +238,11 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
         sting(target, ctx)
         capture(agent, m, target, ctx)
       }
+      return
+    }
+
+    case 'decoy': {
+      if (updateDecoy(agent, ctx)) goHome(agent, m, ctx)
       return
     }
 

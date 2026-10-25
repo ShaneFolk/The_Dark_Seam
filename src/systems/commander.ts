@@ -10,6 +10,7 @@
 //   burn resin     after a squad is ambushed: squads burn resin ahead of them (unless lives are at stake)
 //   the Commander  is on the map (Command room, with a command squad); if killed or taken,
 //                  a slower, more cautious second-in-command takes over
+//   volunteers     a brave civilian who survived being taken joins the smallest squad with a rifle
 //   evacuation     few civilians left: everyone falls back to the Landing Pad, squads set up turrets
 //                  around it, then the ship is called. The hive hears it coming and swarms the pad;
 //                  whoever is on the pad when it leaves gets away
@@ -18,7 +19,7 @@ import { CONFIG } from '../config.ts'
 import type { Agent } from '../agents/agent.ts'
 import { isFree } from '../agents/civilian.ts'
 import type { CivilianContext } from '../agents/civilian.ts'
-import { members, type Squad } from '../agents/soldier.ts'
+import { members, movableTurret, type Squad } from '../agents/soldier.ts'
 import { logEvent } from '../core/events.ts'
 import { findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
 import { Tile } from '../world/tiles.ts'
@@ -27,6 +28,8 @@ import { Barrier, putBarrier } from './barriers.ts'
 import { markChanged } from './resin.ts'
 import { hasPower } from './power.ts'
 import { callShipSwarm } from '../agents/swarm.ts'
+import { makeWeapon } from '../agents/combat.ts'
+import { who } from '../agents/describe.ts'
 import { makeNoise } from './noise.ts'
 
 export interface CommanderState {
@@ -121,6 +124,9 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
     cmd.burnResin = true
     logEvent(ctx, 'command', 'After the ambush, the Commander orders squads to burn the resin before advancing')
   }
+
+  // Brave survivors of a capture volunteer to fight.
+  for (const a of ctx.agents) if (isVolunteer(a)) enlist(a, squads, ctx)
 
   // Lockdown: Myrr have been seen on the surface.
   if (cmd.alarm && !cmd.lockdown && recentSurfaceSighting(ctx)) {
@@ -217,9 +223,35 @@ export function padTurrets(ctx: CivilianContext): number {
 /** Enough turrets around the pad; or none left anywhere to bring and every squad has made it to the pad. */
 function padReady(squads: Squad[], ctx: CivilianContext): boolean {
   if (padTurrets(ctx) >= C.evacuation.padTurrets) return true
-  const stocked = [...ctx.supplies.values()].some((s) => s.stock.turrets > 0)
+  const stocked = [...ctx.supplies.values()].some((s) => s.stock.turrets > 0) || !!movableTurret(null, squads, ctx)
   const active = squads.filter((s) => members(s, ctx).length)
   return !stocked && !active.some((s) => s.carryingTurret) && active.every((s) => s.mission !== 'escort' || s.missionReached)
+}
+
+/** A brave civilian who was taken and is free again, uninfected and calm. */
+function isVolunteer(a: Agent): boolean {
+  const civ = a.civ
+  return !!civ && !a.dead && !a.soldier && a.kind === 'civilian' && civ.trait === 'brave' && civ.takenTick >= 0 &&
+    isFree(a) && civ.mode === 'routine' && !civ.infection
+}
+
+/** Put a volunteer in the smallest squad (not the command squad), with a rifle. */
+function enlist(a: Agent, squads: Squad[], ctx: CivilianContext): void {
+  const open = squads.filter((s) => s.guardId < 0)
+  if (!open.length) return
+  const squad = open.reduce((best, s) => (members(s, ctx).length < members(best, ctx).length ? s : best))
+  const wasEmpty = members(squad, ctx).length === 0
+  const before = who(a).toLowerCase()
+  a.kind = 'soldier'
+  a.soldier = { squadId: squad.id, role: 'soldier', repathTick: 0, targetId: -1, stabilizers: 0, patientId: -1, workTicks: 0 }
+  a.weapon = makeWeapon('rifle', CONFIG.soldiers.volunteerSkill)
+  a.baseSpeed = a.speed = CONFIG.movement.humanSpeed
+  a.path = []
+  a.state = { name: 'idle', ticksLeft: 0 }
+  squad.members.push(a.id)
+  if (wasEmpty) { squad.morale = 1; squad.order = 'patrol'; squad.goal = null; squad.mission = null }
+  ctx.stats.volunteers++
+  logEvent(ctx, 'command', `Having survived being taken, ${before} volunteers to fight and joins Squad ${squad.id + 1}`)
 }
 
 /** Is the Commander still in charge? Killed or taken: the second-in-command takes over. */

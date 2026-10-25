@@ -17,6 +17,8 @@ export interface RunStats {
   dropped: number
   /** People cut free from cocoons. */
   cutFree: number
+  /** Brave survivors of a capture who joined a squad. */
+  volunteers: number
   cures: number
   civiliansKilled: number
   soldiersKilled: number
@@ -32,7 +34,7 @@ export interface RunStats {
 
 export function createStats(): RunStats {
   return {
-    captures: 0, dropped: 0, cutFree: 0, cures: 0, civiliansKilled: 0, soldiersKilled: 0, hatched: 0,
+    captures: 0, dropped: 0, cutFree: 0, volunteers: 0, cures: 0, civiliansKilled: 0, soldiersKilled: 0, hatched: 0,
     myrrKilled: { taker: 0, spineback: 0, broodling: 0, mother: 0 }, evacuated: 0, ambushes: 0, squadAmbushes: 0, contact: false,
   }
 }
