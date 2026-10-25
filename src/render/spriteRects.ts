@@ -101,6 +101,7 @@ export type SpriteName =
   | 'cocoon'
   | 'turret'
   | 'brood_mother'
+  | 'ship'
 
 export const SPRITE_RECTS: Record<SpriteName, readonly [number, number, number, number]> = {
   rock_0_0: [0, 0, 16, 16],
@@ -202,4 +203,5 @@ export const SPRITE_RECTS: Record<SpriteName, readonly [number, number, number, 
   cocoon: [0, 96, 16, 16],
   turret: [16, 96, 16, 16],
   brood_mother: [0, 112, 32, 32],
+  ship: [32, 112, 32, 32],
 }

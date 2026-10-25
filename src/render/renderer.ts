@@ -110,10 +110,13 @@ export class Renderer {
     this.drawSensors(sim, view.levelIndex, ox, oy, tile)
     this.drawAgents(sim, view.levelIndex, ox, oy, tile)
     if (view.paused) this.drawChoices(sim, view.levelIndex, ox, oy, tile)
-    // Darkness: with sprites, night on the surface and flashlights on unlit levels;
-    // with shapes, just dim the whole level when it has no light.
+    // With sprites: muzzle flashes, the ship, darkness with flashlights (always night up
+    // top, dark in the mines) and screech rings. With shapes: just dim unlit levels.
     if (this.sprites) {
-      this.effects.drawDarkness(ctx, sim, view.levelIndex, isLit(sim.power, view.levelIndex), ox, oy, tile, w, h)
+      this.effects.drawMuzzleFlashes(ctx, sim, view.levelIndex, ox, oy, tile)
+      this.effects.drawShip(ctx, sim, view.levelIndex, ox, oy, tile)
+      this.effects.drawDarkness(ctx, sim, view.levelIndex, ox, oy, tile, w, h)
+      this.effects.drawRings(ctx, sim, view.levelIndex, ox, oy, tile)
     } else if (!isLit(sim.power, view.levelIndex)) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
       ctx.fillRect(ox, oy, level.width * tile, level.height * tile)

@@ -303,6 +303,19 @@ const broodMother = () => {
   return im.set(14, 3, [255, 230, 120]).set(18, 3, [255, 230, 120])
 }
 
+/** The drop ship / evacuation ship seen from above, 32x32 (drawn 3 tiles wide). */
+const ship = () => {
+  const im = new Img(32, 32)
+  im.ellipse(4, 2, 27, 29, [118, 124, 132], [40, 44, 50]) // hull
+  im.rect(1, 12, 30, 19, [96, 102, 110], [40, 44, 50]) // wings
+  im.ellipse(12, 3, 19, 11, [120, 200, 230], [30, 60, 80]) // cockpit
+  im.line(13, 5, 15, 5, [220, 245, 255])
+  for (const x of [8, 22]) im.rect(x, 24, x + 2, 29, [60, 64, 70]).rect(x, 28, x + 2, 30, [255, 170, 60]) // engines
+  im.set(1, 15, [255, 60, 60]).set(30, 15, [60, 255, 90]) // nav lights
+  for (let y = 14; y < 22; y += 3) im.line(10, y, 21, y, [104, 110, 118])
+  return im
+}
+
 // ---------------------------------------------------------------- the list
 
 const sprites: [string, Img][] = []
@@ -351,6 +364,8 @@ sprites.forEach(([name, im], i) => {
 })
 sheet.paste(broodMother(), 0, rows * T)
 rects['brood_mother'] = [0, rows * T, 32, 32]
+sheet.paste(ship(), 32, rows * T)
+rects['ship'] = [32, rows * T, 32, 32]
 
 function png(im: Img): Buffer {
   const crcTable = Array.from({ length: 256 }, (_, n) => {

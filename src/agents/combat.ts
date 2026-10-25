@@ -42,6 +42,8 @@ export interface Shot {
   flame?: boolean
   /** Who attacked: a hit by a human leaves Myrr acid, a hit by a Myrr leaves human blood. */
   side: 'human' | 'myrr'
+  /** An incendiary or flamethrower burn of this radius at (x1, y1) (leaves a scorch mark). */
+  burn?: number
   tick: number
 }
 
@@ -142,6 +144,7 @@ function burn(attacker: Agent, target: Agent, dmg: number, ctx: CombatContext): 
 /** Burn away resin in a square around a tile; Myrr standing in it take `dmg`. */
 export function burnArea(at: { levelIndex: number; x: number; y: number }, radius: number, dmg: number, source: Agent, ctx: CombatContext): void {
   const level = ctx.world.levels[at.levelIndex]
+  ctx.shots.push({ levelIndex: at.levelIndex, x0: at.x + 0.5, y0: at.y + 0.5, x1: at.x + 0.5, y1: at.y + 0.5, hit: false, ranged: false, side: source.side, burn: radius, tick: ctx.tick })
   if (dmg > 0) for (const a of ctx.agents) {
     if (a.dead || a.side !== 'myrr' || a.levelIndex !== at.levelIndex) continue
     if (Math.abs(Math.floor(a.x) - at.x) <= radius && Math.abs(Math.floor(a.y) - at.y) <= radius) damage(a, dmg, source, ctx)
