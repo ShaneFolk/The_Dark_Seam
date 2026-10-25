@@ -28,6 +28,7 @@ import { canSee } from './perception.ts'
 import { callSwarm, type Swarm } from './swarm.ts'
 import { isFree, setMode } from './civilian.ts'
 import { isRanged, tryAttack, type CombatContext } from './combat.ts'
+import { pickWeighted as pickByScore, ramp, scoreList, type Option } from '../core/utility.ts'
 
 export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
@@ -62,6 +63,8 @@ export interface MyrrData {
   rooted: boolean
   /** Hunting as part of a swarm: don't back off from groups or guns. */
   swarmHunt: boolean
+  /** The last job picked after resting, with the scores (for the description). */
+  lastChoice: string
 }
 
 export interface HiveState {
@@ -116,7 +119,7 @@ const TPS = CONFIG.sim.ticksPerSecond
 const H = CONFIG.hive
 
 export function createMyrrData(role: MyrrData['role']): MyrrData {
-  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false }
+  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false, lastChoice: '' }
 }
 
 // ---------------------------------------------------------------- update
@@ -138,31 +141,12 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
   switch (m.task) {
     case 'rest': {
       if (--m.ticksLeft > 0) return
-      // Once humans have fought back, go looking for the Commander now and then.
-      if (huntCommander(agent, m, ctx)) return
       if (m.role === 'spineback') {
         // Raiders head back to guard duty when the Brood Mother is short of guards.
         const guards = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && (a.myrr.task === 'guard' || a.myrr.task === 'respond')).length
         if (guards < CONFIG.spinebacks.homeGuards) { m.task = 'guard'; return }
-        m.task = 'scout'
-        m.trips = 0
-        nextScoutTrip(agent, m, ctx)
-        return
       }
-      // Strategic target: once humans have shown they fight back, knock out the power.
-      const working = ctx.power.generators.filter((g) => g.health > 0)
-      if (working.length && ctx.hive.losses.taker >= CONFIG.power.sabotageAfterLosses && ctx.rng.chance(CONFIG.power.sabotageChance)) {
-        const gen = ctx.rng.pick(working)
-        if (goTo(agent, ctx, gen.at)) { m.task = 'sabotage'; m.targetId = ctx.power.generators.indexOf(gen); return }
-      }
-      if (ctx.hive.resinTiles < CONFIG.resin.maxTiles && ctx.rng.chance(H.resinTaskChance)) {
-        const spot = resinFrontier(ctx.world, agent.levelIndex, ctx.rng)
-        if (spot && goTo(agent, ctx, spot)) { m.task = 'spread'; return }
-      }
-      m.task = 'scout'
-      m.trips = 0
-      nextScoutTrip(agent, m, ctx)
-      return
+      return chooseNextJob(agent, m, ctx)
     }
 
     case 'scout': {
@@ -358,15 +342,57 @@ export function planDigging(ctx: HiveContext): void {
 
 // ---------------------------------------------------------------- hunting
 
-/** Head for the Commander's position (they'll be guarded: expect a swarm). */
-function huntCommander(agent: Agent, m: MyrrData, ctx: HiveContext): boolean {
-  const losses = ctx.hive.losses.taker + ctx.hive.losses.spineback
-  if (losses < CONFIG.power.sabotageAfterLosses || !ctx.rng.chance(CONFIG.commander.huntChance)) return false
+type Job = 'scout' | 'spread' | 'sabotage' | 'commander'
+
+/**
+ * Rested: what next? Each job gets a utility score from what the hive knows, and
+ * one is picked at random, better scores more likely (see core/utility.ts):
+ *
+ *   scout      find prey; scores higher the hungrier the hive (few captives and cocoons)
+ *   spread     coat more resin (Takers); scores lower as the resin nears its limit
+ *   sabotage   knock out a generator (Takers), once the humans have killed Myrr;
+ *              more losses and more turrets (they need power) make it more attractive
+ *   commander  go looking for the Commander, once the humans have killed Myrr;
+ *              less attractive while the command squad is at full strength
+ */
+function chooseNextJob(agent: Agent, m: MyrrData, ctx: CombatContext): void {
+  const U = CONFIG.utility.taker
+  const hive = ctx.hive
+  const losses = hive.losses.taker + hive.losses.spineback
+  const fought = ramp(losses, CONFIG.power.sabotageAfterLosses - 1, U.lossesFull)
+  const fed = ctx.agents.filter((a) => a.civ?.mode === 'cocooned').length + hive.captives.length
+  const options: Option<Job>[] = [{ action: 'scout', score: U.scoutBase + U.scoutHunger * (1 - ramp(fed, 0, U.fullAt)) }]
+  const working = ctx.power.generators.filter((g) => g.health > 0)
+  if (m.role === 'taker') {
+    if (hive.resinTiles < CONFIG.resin.maxTiles) options.push({ action: 'spread', score: U.spreadBase * (1 - ramp(hive.resinTiles, 0, CONFIG.resin.maxTiles)) })
+    if (working.length && fought > 0) {
+      const turrets = ctx.agents.filter((a) => a.kind === 'turret' && !a.dead).length
+      options.push({ action: 'sabotage', score: U.sabotageMax * fought + U.turretBonus * ramp(turrets, 0, 3) })
+    }
+  }
   const boss = ctx.agents.find((a) => a.kind === 'commander' && !a.dead && isFree(a))
-  if (!boss || !goTo(agent, ctx, tileOf(boss))) return false
+  if (boss && fought > 0) {
+    const guards = ctx.agents.filter((a) => a.soldier && !a.dead && isFree(a) && a.levelIndex === boss.levelIndex && Math.hypot(a.x - boss.x, a.y - boss.y) <= CONFIG.commander.guardRange).length
+    options.push({ action: 'commander', score: U.commanderMax * fought * (guards >= CONFIG.commander.guardSquadSize ? 0.5 : 1) })
+  }
+  const pick = pickByScore(options, ctx.rng, CONFIG.utility.sharpness)?.action ?? 'scout'
+  m.lastChoice = `${pick} (${scoreList(options)})`
+
+  if (pick === 'sabotage') {
+    const gen = ctx.rng.pick(working)
+    if (goTo(agent, ctx, gen.at)) { m.task = 'sabotage'; m.targetId = ctx.power.generators.indexOf(gen); return }
+  } else if (pick === 'spread') {
+    const spot = resinFrontier(ctx.world, agent.levelIndex, ctx.rng)
+    if (spot && goTo(agent, ctx, spot)) { m.task = 'spread'; return }
+  } else if (pick === 'commander' && boss && goTo(agent, ctx, tileOf(boss))) {
+    // Head for the Commander's position (they'll be guarded: expect a swarm). One look, then home.
+    m.task = 'scout'
+    m.trips = H.tripsBeforeReturn - 1
+    return
+  }
   m.task = 'scout'
-  m.trips = H.tripsBeforeReturn - 1 // one look, then home
-  return true
+  m.trips = 0
+  nextScoutTrip(agent, m, ctx)
 }
 
 /** Spot free humans; lay scent where they are; hunt the closest one who is alone. */

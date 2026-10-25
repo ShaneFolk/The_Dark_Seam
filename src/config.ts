@@ -133,6 +133,35 @@ export const CONFIG = {
     ship: { approachTiles: 16, waitSeconds: 25, maxWaitSeconds: 70, preyRange: 30 },
   },
 
+  utility: {
+    /** Random picks favour better scores: chance grows with score ^ sharpness. */
+    sharpness: 2,
+    /** A rested Taker's (or raider's) next job (see chooseNextJob in myrr.ts). */
+    taker: {
+      /** scout = scoutBase + scoutHunger x hunger (1 with nothing held, 0 at fullAt captives + cocoons). */
+      scoutBase: 0.45,
+      scoutHunger: 0.4,
+      fullAt: 10,
+      /** spread = spreadBase x the share of the resin limit still uncovered. */
+      spreadBase: 0.55,
+      /** Losses count from power.sabotageAfterLosses up to lossesFull (0 to 1): "the humans fight back". */
+      lossesFull: 10,
+      /** sabotage = sabotageMax x losses + turretBonus x (turrets standing, up to 3). */
+      sabotageMax: 0.35,
+      turretBonus: 0.15,
+      /** commander = commanderMax x losses, halved while the command squad is with them. */
+      commanderMax: 0.35,
+    },
+    /**
+     * The Commander's assault choice (see planAssault in commander.ts). Urgency is the
+     * largest of: cocoons (0 at cocoons[0], 1 at cocoons[1]), hive size (same, hiveSize),
+     * and finish (when the hive is down to assault.finishHiveAtOrBelow Myrr).
+     *   probe = urgency x probe      force = urgency x (0.6 to 1 by soldiers) x (0.5 to 1 by morale)
+     *   must  = must x (people about to hatch, mustHatching range)      wait = wait (secondWait for the second-in-command)
+     */
+    commander: { cocoons: [1, 8] as [number, number], hiveSize: [12, 24] as [number, number], finish: 0.9, probe: 0.9, forceBonusSoldiers: 6, mustHatching: [0, 4] as [number, number], must: 0.8, wait: 0.45, secondWait: 0.6 },
+  },
+
   myrrHealing: {
     /** Health a Myrr regains per second while holding still on resin. */
     onResinPerSecond: 1,
@@ -233,8 +262,6 @@ export const CONFIG = {
     huntGiveUpSeconds: 6,
     /** Hunters re-plan their route this often, in seconds. */
     repathSeconds: 1,
-    /** Chance a rested Taker spreads resin instead of scouting. */
-    resinTaskChance: 0.3,
     /** Digging (Levels 2 and 3 only): starts where danger scent reaches this strength... */
     digTriggerDanger: 15,
     /** ...at most once per this many seconds. */
@@ -392,8 +419,7 @@ export const CONFIG = {
     darkSightMultiplier: 0.5,
     /** Levels with lights (Level 3 never has any). Numbers are level indexes (0 = Level 1). */
     litLevels: [0, 1],
-    /** Chance a rested Taker goes to sabotage a generator, once the hive has lost this many Takers. */
-    sabotageChance: 0.15,
+    /** Once the hive has lost this many Myrr, the humans count as fighting back: sabotage and hunting the Commander become options (see utility.taker). */
     sabotageAfterLosses: 2,
   },
 
@@ -514,8 +540,6 @@ export const CONFIG = {
     /** The command squad (extra, on top of soldiers.count) stays with the Commander and fights Myrr within guardRange tiles of them. */
     guardSquadSize: 3,
     guardRange: 10,
-    /** Once humans have fought back, a resting Myrr goes looking for the Commander with this chance. */
-    huntChance: 0.1,
     /** If the Commander is killed or taken, the second-in-command takes over: slower decisions, more cautious assaults, a morale blow. */
     second: { slowerBy: 3, assaultMinMorale: 0.85, moraleHit: 0.3 },
     /** The alarm (and any lockdown) clears after this long with no Myrr seen, in seconds. */
@@ -525,11 +549,8 @@ export const CONFIG = {
     /** Squads skip burning resin when someone in a cocoon would hatch within this many seconds. */
     riskHatchSeconds: 60,
     assault: {
-      /** Also attack a known hive that is down to this many Myrr or fewer, to finish it off. */
+      /** A known hive down to this many Myrr or fewer is urgent to finish off (see utility.commander). */
       finishHiveAtOrBelow: 8,
-      /** Sent when the hive is known and holds at least minCocoons cocoons, or has at least hiveSize Myrr. */
-      minCocoons: 5,
-      hiveSize: 20,
       /** Squads sent need this morale and members. */
       minMorale: 0.6,
       minMembers: 2,
@@ -538,8 +559,7 @@ export const CONFIG = {
        * in force (every ready squad, at least forceMinSoldiers soldiers together)...
        */
       forceMinSoldiers: 8,
-      /** ...unless he deems it a must (at least mustHatching cocooned people about to hatch): then one squad goes, at most once per mustCooldownSeconds. */
-      mustHatching: 3,
+      /** ...unless he deems it a must (people about to hatch, see utility.commander): then one squad goes, at most once per mustCooldownSeconds. */
       mustCooldownSeconds: 360,
       /** At the hive with nothing to fight or cut for this long: the assault is over, in seconds. */
       quietSeconds: 10,

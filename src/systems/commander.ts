@@ -29,6 +29,7 @@ import { markChanged } from './resin.ts'
 import { hasPower } from './power.ts'
 import { callShipSwarm } from '../agents/swarm.ts'
 import { makeWeapon } from '../agents/combat.ts'
+import { choose, ramp, scoreList, type Option } from '../core/utility.ts'
 import { who } from '../agents/describe.ts'
 import { makeNoise } from './noise.ts'
 
@@ -144,9 +145,7 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
   const cocoons = ctx.agents.filter((a) => a.civ?.mode === 'cocooned').length
   const hiveSize = ctx.agents.filter((a) => !a.dead && a.side === 'myrr').length
   const assaulting = squads.filter((s) => s.mission === 'assault')
-  if (cmd.hiveKnown && cmd.evacuation === 'none' && !assaulting.length && (cocoons >= C.assault.minCocoons || hiveSize >= C.assault.hiveSize || hiveSize <= C.assault.finishHiveAtOrBelow)) {
-    planAssault(cmd, squads, cocoons, ctx)
-  }
+  if (cmd.hiveKnown && cmd.evacuation === 'none' && !assaulting.length) planAssault(cmd, squads, cocoons, hiveSize, ctx)
 
   // Reinforcements: once he realizes people are being taken (or his soldiers run low).
   const R = C.reinforcements
@@ -176,35 +175,58 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
   }
 }
 
+type AssaultChoice = 'wait' | 'probe' | 'force' | 'must'
+
 /**
- * Send squads against the hive. The first time, one squad probes it. After that,
- * only an attack in force (every ready squad, enough soldiers together), unless
- * someone cocooned is about to hatch: then he deems it a must and sends one squad.
+ * Should squads go against the hive now? Each choice gets a utility score
+ * (CONFIG.utility.commander) and the best wins; "wait" has a fixed score, so an
+ * attack has to beat it. Urgency grows with the cocoons and the hive's size.
+ *
+ *   probe   the first assault: one squad tests the hive
+ *   force   after the probe: every ready squad together (at least forceMinSoldiers);
+ *           more soldiers and better morale score higher
+ *   must    after the probe, too few for a force: people about to hatch, and no
+ *           help on the way, so one squad goes in alone
  */
-function planAssault(cmd: CommanderState, squads: Squad[], cocoons: number, ctx: CivilianContext): void {
+function planAssault(cmd: CommanderState, squads: Squad[], cocoons: number, hiveSize: number, ctx: CivilianContext): void {
   const A = C.assault
+  const U = CONFIG.utility.commander
   const minMorale = cmd.second ? C.second.assaultMinMorale : A.minMorale
   const ready = squads.filter((s) => !s.mission && s.guardId < 0 && s.morale >= minMorale && members(s, ctx).length >= A.minMembers)
   if (!ready.length) return
+  const force = ready.reduce((n, s) => n + members(s, ctx).length, 0)
+  const morale = ready.reduce((n, s) => n + s.morale, 0) / ready.length
+  const urgency = Math.max(ramp(cocoons, ...U.cocoons), ramp(hiveSize, ...U.hiveSize), hiveSize <= A.finishHiveAtOrBelow ? U.finish : 0)
+
+  const options: Option<AssaultChoice>[] = [{ action: 'wait', score: cmd.second ? U.secondWait : U.wait }]
+  if (!cmd.probed) options.push({ action: 'probe', score: urgency * U.probe })
+  else {
+    if (force >= A.forceMinSoldiers) {
+      const strength = 0.6 + 0.4 * ramp(force, A.forceMinSoldiers, A.forceMinSoldiers + U.forceBonusSoldiers)
+      options.push({ action: 'force', score: urgency * strength * (0.5 + 0.5 * morale) })
+    }
+    // Only when too few for a force, and not while the drop ship is on its way (help is coming, they hold on).
+    else if (cmd.reinforcementsDue === null && ctx.tick - cmd.lastMustTick >= A.mustCooldownSeconds * TPS) {
+      options.push({ action: 'must', score: U.must * ramp(hatchingSoon(ctx), ...U.mustHatching) })
+    }
+  }
+  const pick = choose(options)?.action ?? 'wait'
+  if (pick === 'wait') return
+
+  const scores = `scores: ${scoreList(options)}`
   const names = (list: Squad[]) => `Squad${list.length > 1 ? 's' : ''} ${list.map((s) => s.id + 1).join(', ')}`
   const send = (list: Squad[]) => { for (const s of list) { s.mission = 'assault'; s.missionGoal = null; s.missionReached = false } }
-  if (!cmd.probed) {
+  if (pick === 'probe') {
     cmd.probed = true
     send(ready.slice(0, 1))
-    logEvent(ctx, 'command', `${names(ready.slice(0, 1))} sent to probe the hive (${cocoons} cocooned)`)
-    return
-  }
-  const force = ready.reduce((n, s) => n + members(s, ctx).length, 0)
-  if (force >= A.forceMinSoldiers) {
+    logEvent(ctx, 'command', `${names(ready.slice(0, 1))} sent to probe the hive (${cocoons} cocooned; ${scores})`)
+  } else if (pick === 'force') {
     send(ready)
-    logEvent(ctx, 'command', `The Commander attacks the hive in force: ${names(ready)}, ${force} soldiers (${cocoons} cocooned)`)
-    return
-  }
-  // Not while the drop ship is on its way: help is coming, they hold on.
-  if (cmd.reinforcementsDue === null && hatchingSoon(ctx) >= A.mustHatching && ctx.tick - cmd.lastMustTick >= A.mustCooldownSeconds * TPS) {
+    logEvent(ctx, 'command', `The Commander attacks the hive in force: ${names(ready)}, ${force} soldiers (${cocoons} cocooned; ${scores})`)
+  } else {
     cmd.lastMustTick = ctx.tick
     send(ready.slice(0, 1))
-    logEvent(ctx, 'command', `The Commander deems it a must: ${names(ready.slice(0, 1))} goes in alone to save someone about to hatch`)
+    logEvent(ctx, 'command', `The Commander deems it a must: ${names(ready.slice(0, 1))} goes in alone to save people about to hatch (${scores})`)
   }
 }
 
