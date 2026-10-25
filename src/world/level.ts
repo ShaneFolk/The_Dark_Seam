@@ -75,6 +75,8 @@ export interface Level {
   changes: number[]
   /** How many old entries were trimmed off the front of `changes`. */
   changesTrimmed: number
+  /** Lit flares: hidden Myrr within CONFIG.flares.radius of one can be seen. Removed when they burn out. */
+  flares: { x: number; y: number; untilTick: number }[]
   /** Links at a tile index (an elevator tile on Level 2 has one up and one down). */
   linksAt: Map<number, Link[]>
 }

@@ -9,6 +9,7 @@
 //   rescue    a Taker is carrying someone: chase it and shoot it
 //   respond   Myrr in sight, or screams, gunfire, digging, smashing or chewing heard
 //   cut       a cocoon in sight: cut the person free
+//   guide     walk someone just cut free (weak, slow) to the med bay (not on an assault: they go alone)
 //   blast     heavy fighting in an Upper Mine tunnel: collapse it with a mining charge
 //   reload    a turret is low: feed it spare rifle magazines
 //   fetchTurret / deployTurret   carry a packed turret from the armory to a defence point
@@ -40,6 +41,7 @@ import { strongest } from '../systems/pheromones.ts'
 import { chokePoint, collapseTunnel } from '../systems/digging.ts'
 import { countResin } from '../systems/resin.ts'
 import { makeNoise } from '../systems/noise.ts'
+import { lightFlare } from '../systems/camouflage.ts'
 import { kill } from './combat.ts'
 import { logEvent } from '../core/events.ts'
 import { hatchingSoon, landingPad } from '../systems/commander.ts'
@@ -59,7 +61,7 @@ export interface SoldierData {
   workTicks: number
 }
 
-export type Order = 'guard' | 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
+export type Order = 'guide' | 'guard' | 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
 
 export interface Squad {
   id: number
@@ -95,6 +97,8 @@ export interface Squad {
   riskTaken: boolean
   /** Command squad: the agent it guards (the Commander), or -1. */
   guardId: number
+  /** Flares left (they show hidden Myrr nearby). */
+  flares: number
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -124,7 +128,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
         if (a.dead || a.levelIndex !== s.levelIndex) continue
         if (a.side === 'myrr' && canSee(s, a, ctx.world.levels[s.levelIndex], SIGHT)) {
           myrrCount++
-          if (a.myrr?.task === 'carry') carrier = a
+          if (a.myrr?.task === 'carry' || a.myrr?.task === 'haulCarry') carrier = a
         } else if (a.civ?.mode === 'cocooned' && canSee(s, a, ctx.world.levels[s.levelIndex], SIGHT)) {
           cocoon = a
         }
@@ -175,6 +179,12 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       squad.targetId = carrier.id
     } else if (myrrSeen) {
       setOrder(squad, 'respond', tileOf(myrrSeen))
+    } else if (squad.order === 'guide') {
+      // Walking a rescued person to the med bay: stay with them until they're in.
+      const person = ctx.agents[squad.targetId]
+      const bay = ctx.medbays[0]?.room
+      if (!person || !isFree(person) || !bay || sameRoom(roomAt(ctx.world, tileOf(person)), bay)) setOrder(squad, 'patrol', null)
+      else squad.goal = tileOf(person)
     } else if (cocoon && squad.order !== 'cut') {
       setOrder(squad, 'cut', tileOf(cocoon))
       squad.targetId = cocoon.id
@@ -314,7 +324,7 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
   }
 
   // Chasing a moving target: keep the goal on it.
-  if (squad.order === 'rescue' && squad.targetId >= 0) {
+  if ((squad.order === 'rescue' || squad.order === 'guide') && squad.targetId >= 0) {
     const carrier = ctx.agents[squad.targetId]
     if (carrier && !carrier.dead) squad.goal = tileOf(carrier)
   }
@@ -338,7 +348,7 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     if (squad.order === 'deployTurret') squad.ticksLeft = Math.round(CONFIG.turrets.setupSeconds * TPS)
     if (squad.order === 'blast') squad.ticksLeft = Math.round(CONFIG.charges.setSeconds * TPS)
     if (squad.order === 'cut') squad.ticksLeft = Math.round(S.cutSeconds * TPS)
-    if (squad.order === 'respond') squad.goal = null
+    if (squad.order === 'respond' || squad.order === 'guide') squad.goal = null
     if (squad.order === 'assault' || squad.order === 'escort') squad.missionReached = true
     if (squad.order === 'assault') squad.goal = null // keep closing in on the target
     return
@@ -347,6 +357,8 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     s.repathTick = ctx.tick + TPS
     walkTo(agent, goal, ctx)
   }
+  // Deep in the mines with resin ahead: light a flare to show anything hiding in it.
+  if (squad.flares > 0 && agent.levelIndex > 0 && (ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) lightFlareAhead(squad, agent, ctx)
   // Burn the resin ahead before walking into it (after an ambush), unless lives are at stake.
   if (wantsToBurn(squad, ctx)) {
     const spot = resinAhead(agent, ctx)
@@ -369,6 +381,18 @@ function wantsToBurn(squad: Squad, ctx: CombatContext): boolean {
   }
   squad.riskTaken = urgent
   return !urgent
+}
+
+/** Throw a flare onto the resin ahead (or underfoot) if none is burning nearby. */
+function lightFlareAhead(squad: Squad, agent: Agent, ctx: CombatContext): void {
+  const level = ctx.world.levels[agent.levelIndex]
+  const here = level.resin[Math.floor(agent.y) * level.width + Math.floor(agent.x)] > 0 ? tileOf(agent) : null
+  const spot = resinAhead(agent, ctx) ?? here
+  if (!spot) return
+  const x = spot.x + 0.5, y = spot.y + 0.5
+  if (level.flares.some((f) => Math.hypot(f.x - x, f.y - y) < CONFIG.flares.spacing)) return
+  lightFlare(level, x, y, ctx.tick)
+  squad.flares--
 }
 
 /** Grenades left, or a flamethrower with fuel to spare. */
@@ -469,16 +493,26 @@ function finishWork(squad: Squad, alive: Agent[], ctx: CombatContext): void {
       if (s.soldier!.role === 'medic' && stock) s.soldier!.stabilizers += take(stock, 'stabilizers', S.stabilizers - s.soldier!.stabilizers)
     }
     if (stock) squad.incendiaries += take(stock, 'incendiaries', CONFIG.incendiaries.perSquad - squad.incendiaries)
+    if (stock) squad.flares += take(stock, 'flares', CONFIG.flares.perSquad - squad.flares)
     setOrder(squad, 'patrol', null)
   } else if (squad.order === 'cut') {
     const person = ctx.agents[squad.targetId]
     if (person?.civ && person.civ.mode === 'cocooned') {
-      // Cut free, but still infected: they need a medic or the med bay.
+      // Cut free, but still infected and weak: they need the med bay, and help getting there.
       person.civ.rescued = true
       ctx.stats.cutFree++
-      logEvent(ctx, 'rescue', `Soldiers cut ${who(person).toLowerCase()} free from a cocoon`)
-      person.civ.fear = CONFIG.fear.flee
-      setMode(person, person.civ, 'hide')
+      person.health = Math.min(person.health, S.rescuedHealth)
+      person.baseSpeed = CONFIG.movement.humanSpeed * S.rescuedSpeed
+      person.civ.fear = 0
+      setMode(person, person.civ, 'routine')
+      if (squad.mission === 'assault') {
+        logEvent(ctx, 'rescue', `Soldiers cut ${who(person).toLowerCase()} free from a cocoon; on an assault, they leave them to make their own way to the med bay`)
+      } else {
+        logEvent(ctx, 'rescue', `Soldiers cut ${who(person).toLowerCase()} free from a cocoon and walk them to the med bay`)
+        setOrder(squad, 'guide', tileOf(person))
+        squad.targetId = person.id
+        return
+      }
     }
     setOrder(squad, 'patrol', null)
   }

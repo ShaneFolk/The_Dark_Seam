@@ -104,6 +104,17 @@ export const BARRIER_ART: Record<number, TileDraw> = {
 }
 
 /** Resin layer drawn over a tile. */
+/** A lit flare: a red-orange glow of radius r pixels around (cx, cy). */
+export function drawFlare(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, tile: number): void {
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+  glow.addColorStop(0, 'rgba(255, 120, 60, 0.35)')
+  glow.addColorStop(1, 'rgba(255, 120, 60, 0)')
+  ctx.fillStyle = glow
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2)
+  ctx.fillStyle = '#ffd2a0'
+  ctx.fillRect(cx - tile * 0.12, cy - tile * 0.12, tile * 0.24, tile * 0.24)
+}
+
 export const drawResin: TileDraw = (ctx, x, y, s) => {
   ctx.fillStyle = 'rgba(120, 70, 170, 0.55)'
   ctx.fillRect(x, y, s + 0.5, s + 0.5)

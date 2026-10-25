@@ -28,6 +28,7 @@ import { damagedGenerators, humanSight, type Generator } from '../systems/power.
 import { makeWeapon } from './combat.ts'
 
 export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier' | 'commander'
+export type Trait = keyof typeof CONFIG.civilians.traits
 /** 'treat' = heading to or staying in the med bay (hurt, or knows they're infected). */
 export type Activity = 'eat' | 'work' | 'free' | 'sleep' | 'treat' | 'repair' | 'shelter' | 'evacuate'
 /**
@@ -39,6 +40,8 @@ export type Mode = 'routine' | 'flee' | 'hide' | 'panic' | 'paralyzed' | 'captur
 
 export interface CivilianData {
   job: Job
+  /** Personality (civilians only; see CONFIG.civilians.traits), or null. */
+  trait: Trait | null
   /** Hour this civilian's day starts (their shift). */
   shiftStart: number
   /** Small personal offset so a whole shift doesn't move on the same tick. */
@@ -103,6 +106,7 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
   if (!homes.length || !works.length) return null
   return {
     job,
+    trait: job === 'soldier' || job === 'commander' ? null : pickTrait(rng),
     shiftStart: rng.pick(CONFIG.civilians.shiftStartHours),
     jitterHours: (rng.next() - 0.5) * 0.5,
     home: rng.pick(homes),
@@ -125,6 +129,12 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
     takenTick: -1,
     takenSeen: false,
   }
+}
+
+function pickTrait(rng: Rng): Trait | null {
+  let roll = rng.next()
+  for (const [name, chance] of Object.entries(CONFIG.civilians.traits) as [Trait, number][]) if ((roll -= chance) < 0) return name
+  return null
 }
 
 function pickJob(rng: Rng): Job {
@@ -219,10 +229,12 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   const generator = !medbay && civ.job === 'tech' ? damagedGenerators(ctx.power)[0] ?? null : null
   // Commander's orders: head for the evacuation ship, or shelter at home during an alarm.
   const cmd = ctx.commander
-  const evac = cmd.evacuation === 'fortify' || cmd.evacuation === 'called' || cmd.evacuation === 'landed' ? landingPad(ctx) : null
+  // Stubborn people ignore the alarm, and only head for the ship once it's on the pad.
+  const stubborn = civ.trait === 'stubborn'
+  const evac = (stubborn ? cmd.evacuation === 'landed' : cmd.evacuation === 'fortify' || cmd.evacuation === 'called' || cmd.evacuation === 'landed') ? landingPad(ctx) : null
   // The Commander stays at their post in the Command room (until the evacuation).
   const activity: Activity = medbay ? 'treat' : generator ? 'repair' : evac ? 'evacuate'
-    : civ.job === 'commander' ? 'work' : cmd.alarm ? 'shelter' : activityAt(civ, ctx.tick)
+    : civ.job === 'commander' ? 'work' : cmd.alarm && !stubborn ? 'shelter' : activityAt(civ, ctx.tick)
   if (generator && Math.hypot(agent.x - (generator.at.x + 0.5), agent.y - (generator.at.y + 0.5)) <= 1.6 && agent.levelIndex === generator.at.levelIndex) {
     repair(agent, generator)
     return
@@ -335,7 +347,8 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
 
   // Fear always fades a little. Sounds alone can make someone nervous (up to the
   // "hear" cap) but only seeing a Myrr pushes them to flee or panic.
-  const mult = company === 0 ? F.aloneMultiplier : company >= 2 ? F.groupMultiplier : 1
+  const trait = civ.trait === 'brave' ? CONFIG.civilians.braveFear : civ.trait === 'panicky' ? CONFIG.civilians.panickyFear : 1
+  const mult = (company === 0 ? F.aloneMultiplier : company >= 2 ? F.groupMultiplier : 1) * trait
   let fear = civ.fear - (F.decayPerSecond * CONFIG.perception.intervalTicks) / TPS
   if (noiseGain > 0 && fear < F.hearingCap) fear = Math.min(F.hearingCap, fear + noiseGain * mult)
   fear += sightGain * mult

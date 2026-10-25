@@ -4,7 +4,7 @@ import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
 import type { Level } from '../world/level.ts'
 import type { Tile } from '../world/tiles.ts'
-import { BARRIER_ART, TILE_ART, drawResin, floorColor, type FloorKind } from './tileArt.ts'
+import { BARRIER_ART, TILE_ART, drawFlare, drawResin, floorColor, type FloorKind } from './tileArt.ts'
 import { AGENT_ART } from './agentArt.ts'
 import { isHidden } from '../systems/camouflage.ts'
 import { describeAgent } from '../agents/describe.ts'
@@ -172,6 +172,7 @@ export class Renderer {
   /** Agents on the shown level. Those riding a link are drawn faded at the link. */
   private drawAgents(sim: SimState, levelIndex: number, ox: number, oy: number, tile: number): void {
     const { ctx } = this
+    for (const f of sim.world.levels[levelIndex].flares) drawFlare(ctx, ox + f.x * tile, oy + f.y * tile, CONFIG.flares.radius * tile, tile)
     for (const agent of sim.agents) {
       if (agent.dead || agent.civ?.mode === 'evacuated' || agent.levelIndex !== levelIndex) continue
       // Faint: crossing between levels, or a Myrr hidden in the resin (humans can't see it).

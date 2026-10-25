@@ -12,7 +12,8 @@ import { CONFIG } from '../config.ts'
 import type { Rng } from '../core/rng.ts'
 import type { World } from '../world/loadWorld.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
-import { findRooms, roomTiles } from '../world/rooms.ts'
+import { findRooms, roomTiles, type RoomRef } from '../world/rooms.ts'
+import { carryCocoon, updateHaul } from './nest.ts'
 import { depositTrail, strongestTrail, type Pheromones } from '../systems/pheromones.ts'
 import { coatResin, resinFrontier } from '../systems/resin.ts'
 import { digTile, findDigSite, type DigJob } from '../systems/digging.ts'
@@ -30,6 +31,7 @@ import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
   | 'swarm' // Takers and raiding Spinebacks gathering for a swarm
+  | 'haul' | 'haulCarry' // Takers moving a cocoon to a new nursery (nest.ts)
   | 'inject' | 'uproot' | 'root' | 'burrow' // Brood Mother (she also uses 'rest', 'hunt' and 'return')
   | 'grow' // Broodlings
   | 'guard' | 'respond' // Spinebacks
@@ -76,6 +78,12 @@ export interface HiveState {
   /** Her fallback: the middle of the Deep Chamber, and whether she has retreated there. */
   deepHome: PathNode | null
   retreated: boolean
+  /** Where the cocoons are kept once the hive has moved them (null = the Hive Core), how often it has, and when it next may. */
+  nursery: RoomRef | null
+  nestMoves: number
+  nextNestTick: number
+  /** Soldiers have been in among the cocoons since the last move. */
+  raided: boolean
   /** The swarm gathering right now, if any, and when the next may be called. */
   swarm: Swarm | null
   nextSwarmTick: number
@@ -114,10 +122,11 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
   if (agent.state.name === 'crossing') {
     followPath(agent, ctx.world)
     carryAlong(agent, ctx)
+    if (m.task === 'haulCarry') carryCocoon(agent, ctx)
     return
   }
 
-  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage' && m.task !== 'swarm') {
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage' && m.task !== 'swarm' && m.task !== 'haul' && m.task !== 'haulCarry') {
     lookForPrey(agent, m, ctx)
   }
 
@@ -224,6 +233,12 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
         sting(target, ctx)
         capture(agent, m, target, ctx)
       }
+      return
+    }
+
+    case 'haul':
+    case 'haulCarry': {
+      if (updateHaul(agent, ctx)) rest(agent, m, ctx, 0.3)
       return
     }
 
@@ -514,7 +529,7 @@ function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
  */
 export function takerHurt(agent: Agent, source: Agent | null, ctx: HiveContext): void {
   const m = agent.myrr!
-  if (m.role !== 'taker' || m.task === 'carry' || m.task === 'return' || m.task === 'dig' || m.swarmHunt) return
+  if (m.role !== 'taker' || m.task === 'carry' || m.task === 'haulCarry' || m.task === 'return' || m.task === 'dig' || m.swarmHunt) return
   if (m.task === 'sabotage' && agent.health > agent.maxHealth * 0.4) return // determined
   const shot = !!source?.weapon && isRanged(source.weapon)
   if (!shot && agent.health > agent.maxHealth * 0.4) return

@@ -24,13 +24,13 @@ export function describeAgent(agent: Agent, tick: number): string {
     const shift = `${String(civ.shiftStart).padStart(2, '0')}:00 shift`
     const doing = civ.mode === 'routine' ? `${civ.activity}${civ.target ? ` → ${civ.target.room.name}` : ''}` : civ.mode
     const inf = civ.infection ? ` · INFECTED (hatches in ${Math.max(0, Math.round((civ.infection.hatchTick - tick) / 20))}s${tick < civ.infection.stabilizedUntilTick ? ', stabilized' : ''})` : ''
-    return `Civilian #${agent.id} · ${civ.job} (${shift}) · ${doing}${inf} · health ${Math.round(agent.health)} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
+    return `Civilian #${agent.id} · ${civ.trait ? civ.trait + ' ' : ''}${civ.job} (${shift}) · ${doing}${inf} · health ${Math.round(agent.health)} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
   }
   const m = agent.myrr
   if (m?.role === 'mother') return `Brood Mother #${agent.id} · ${m.task === 'inject' ? `injecting #${m.targetId}` : 'waiting'}`
   if (m?.role === 'broodling') return `Broodling #${agent.id} · grows up in ${Math.ceil(m.ticksLeft / 20)}s`
   if (m?.role === 'spineback') return `Spineback #${agent.id} · ${m.task === 'respond' ? 'answering alarm' : 'guarding'} · health ${Math.round(agent.health)}`
   if (agent.dead) return `${agent.kind} #${agent.id} · dead`
-  if (m) return `Taker #${agent.id}${m.task === 'dig' ? ' · DIGGING' : ''} · health ${Math.round(agent.health)} · ${m.task}${m.targetId >= 0 ? ` · target #${m.targetId}` : ''}`
+  if (m) return `Taker #${agent.id}${m.task === 'dig' ? ' · DIGGING' : m.task === 'haulCarry' ? ' · CARRYING A COCOON' : ''} · health ${Math.round(agent.health)} · ${m.task}${m.targetId >= 0 ? ` · target #${m.targetId}` : ''}`
   return `Myrr #${agent.id} · ${agent.state.name}`
 }

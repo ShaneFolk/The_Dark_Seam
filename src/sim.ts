@@ -12,8 +12,9 @@ import { createMyrrData, planDigging, takerHurt, updateTaker, type HiveState } f
 import { updateBroodling, updateCollapse, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
 import { createStats, logEvent, type GameEvent, type RunStats } from './core/events.ts'
 import { checkEnding, type Ending } from './systems/endings.ts'
-import { updateCamouflage } from './systems/camouflage.ts'
+import { pruneFlares, updateCamouflage } from './systems/camouflage.ts'
 import { updateSwarm } from './agents/swarm.ts'
+import { planNest } from './agents/nest.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
@@ -67,7 +68,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0 },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false },
     squads: [],
     shots: [],
     supplies: new Map(),
@@ -103,6 +104,7 @@ export function step(sim: SimState): void {
   sim.tick++
   pruneNoises(sim.noises, sim.tick)
   pruneShots(sim.shots, sim.tick)
+  for (const level of sim.world.levels) pruneFlares(level, sim.tick)
   if (sim.tick % TPS === 0) decayPheromones(sim.pheromones)
 
   const ctx: CivilianContext = {
@@ -141,6 +143,7 @@ export function step(sim: SimState): void {
   })
   updateSquads(sim.squads, ctx)
   planDigging(ctx)
+  planNest(ctx)
 
   updateSwarm(ctx)
   // Only agents that existed at the start of the tick act (new Broodlings wait a tick).
@@ -204,7 +207,7 @@ function spawnCivilians(sim: SimState): void {
     const at = randomTileIn(world, civ.target, rng)
     const agent = createAgent(sim.agents.length, 'civilian', 'human', at, CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
-    agent.weapon = makeWeapon('fists', CONFIG.combat.skill.civilian)
+    agent.weapon = makeWeapon(civ.trait === 'brave' && civ.job === 'miner' ? 'torch' : 'fists', CONFIG.combat.skill.civilian)
     sim.agents.push(agent)
   }
 }
@@ -252,7 +255,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
     charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
     mission: null, missionGoal: null, missionReached: false,
-    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1,
+    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad,
   })
   for (let n = 0; n < size; n++) {
     const isMedic = n === size - 1

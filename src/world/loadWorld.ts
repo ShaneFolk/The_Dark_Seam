@@ -61,6 +61,7 @@ export function loadWorld(defs: LevelDef[]): World {
       linksAt: new Map(),
       changes: [],
       changesTrimmed: 0,
+      flares: [],
     }
     return level
   })

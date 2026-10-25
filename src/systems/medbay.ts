@@ -54,6 +54,7 @@ export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World, 
       if (civ.infection && powered && ++civ.cureTicks >= CONFIG.medbay.cureSeconds * TPS) {
         civ.infection = null
         civ.cured = true
+        a.baseSpeed = a.speed = CONFIG.movement.humanSpeed
         log.stats.cures++
         logEvent(log, 'cure', 'The med bay cured an infected ' + (a.soldier ? 'soldier' : civ.job))
       }

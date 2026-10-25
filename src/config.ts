@@ -77,6 +77,15 @@ export const CONFIG = {
     millSeconds: [4, 12] as [number, number],
     /** Running speed when fleeing or panicking, as a multiple of walking speed. */
     runMultiplier: 1.3,
+    /**
+     * Personality, rolled per civilian from the seed (chance of each; the rest have none):
+     *   brave     fear builds slower (braveFear); brave miners carry a cutting torch and fight with it
+     *   panicky   fear builds faster (panickyFear)
+     *   stubborn  ignores the alarm and keeps to their routine; only heads for the ship once it has landed
+     */
+    traits: { brave: 0.15, panicky: 0.15, stubborn: 0.1 },
+    braveFear: 0.6,
+    panickyFear: 1.5,
   },
 
   perception: {
@@ -299,6 +308,8 @@ export const CONFIG = {
       spines: { range: 1.4, damage: 22, perSecond: 1.5, magazine: 0, reloadSeconds: 0 },
       turret: { range: 10, damage: 10, perSecond: 3, magazine: 120, reloadSeconds: 0 },
       flamethrower: { range: 3.5, damage: 18, perSecond: 2, magazine: 40, reloadSeconds: 4 },
+      /** A miner's cutting torch (brave miners): a strong melee weapon. */
+      torch: { range: 1.2, damage: 14, perSecond: 1, magazine: 0, reloadSeconds: 0 },
       /** The Brood Mother's crushing bite: slow, but three bites kill a soldier. */
       maw: { range: 1.8, damage: 40, perSecond: 0.75, magazine: 0, reloadSeconds: 0 },
     },
@@ -323,6 +334,9 @@ export const CONFIG = {
     resupplySeconds: 6,
     /** Seconds to cut a cocoon open. */
     cutSeconds: 5,
+    /** Someone cut from a cocoon is weak: health at most this, walking at this share of normal speed until cured. */
+    rescuedHealth: 30,
+    rescuedSpeed: 0.6,
     /** Medics: stabilizers carried (refilled at the armory for now), and how long each job takes. */
     stabilizers: 3,
     wakeSeconds: 3,
@@ -353,10 +367,10 @@ export const CONFIG = {
      * `variation` either way, by seed. Lockers and supply rooms share type "supply".
      */
     stock: {
-      armory: { rifleMags: 60, pistolMags: 30, pistols: 10, stabilizers: 6, turrets: 6, incendiaries: 24 },
-      supply: { rifleMags: 6, pistolMags: 6, pistols: 2, stabilizers: 1, turrets: 0, incendiaries: 0 },
-      medbay: { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 8, turrets: 0, incendiaries: 0 },
-      security: { rifleMags: 10, pistolMags: 6, pistols: 2, stabilizers: 0, turrets: 0, incendiaries: 4 },
+      armory: { rifleMags: 60, pistolMags: 30, pistols: 10, stabilizers: 6, turrets: 6, incendiaries: 24, flares: 16 },
+      supply: { rifleMags: 6, pistolMags: 6, pistols: 2, stabilizers: 1, turrets: 0, incendiaries: 0, flares: 0 },
+      medbay: { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 8, turrets: 0, incendiaries: 0, flares: 0 },
+      security: { rifleMags: 10, pistolMags: 6, pistols: 2, stabilizers: 0, turrets: 0, incendiaries: 4, flares: 4 },
     },
     variation: 0.3,
     /** A scared civilian goes for a pistol if a room with one is within this many tiles. */
@@ -424,6 +438,26 @@ export const CONFIG = {
     damage: 30,
     /** Without grenades, the flamethrower can burn resin instead, using this much fuel each time. */
     flamerFuel: 8,
+  },
+
+  flares: {
+    /** Flares each squad carries (restocked at the armory). A lit flare shows hidden Myrr within radius tiles. */
+    perSquad: 2,
+    radius: 6,
+    burnSeconds: 25,
+    /** A squad on Levels 2-3 lights one when resin is near and no flare burns within this many tiles. */
+    spacing: 10,
+  },
+
+  nest: {
+    /**
+     * The hive adapts: after soldiers have been among the cocoons, it moves them to
+     * another room on Level 3 (Takers carry them), at most maxMoves times, cooldownSeconds apart.
+     */
+    maxMoves: 2,
+    cooldownSeconds: 600,
+    /** Carrying a cocoon slows a Taker to this share of its speed. */
+    haulSpeedMultiplier: 0.7,
   },
 
   charges: {

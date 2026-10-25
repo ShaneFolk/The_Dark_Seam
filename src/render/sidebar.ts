@@ -27,7 +27,7 @@ function commanderLine(sim: SimState): string {
 
 function stockLine(sim: SimState): string {
   const t = totalStock(sim.supplies)
-  return `${t.rifleMags} rifle mags · ${t.pistolMags} pistol mags · ${t.pistols} pistols · ${t.stabilizers} stabilizers · ${t.incendiaries} incendiaries`
+  return `${t.rifleMags} rifle mags · ${t.pistolMags} pistol mags · ${t.pistols} pistols · ${t.stabilizers} stabilizers · ${t.incendiaries} incendiaries · ${t.flares} flares`
 }
 
 export class Sidebar {

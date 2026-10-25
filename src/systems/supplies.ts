@@ -15,6 +15,7 @@ export interface Stock {
   /** Packed sentry turrets. */
   turrets: number
   incendiaries: number
+  flares: number
 }
 
 export type StockItem = keyof Stock
@@ -33,7 +34,7 @@ export function createSupplies(world: World, rng: Rng): Supplies {
       supplies.set(roomKey(room), {
         room,
         // Turrets don't vary: the armory always has its full set.
-        stock: { rifleMags: vary(base.rifleMags), pistolMags: vary(base.pistolMags), pistols: vary(base.pistols), stabilizers: vary(base.stabilizers), turrets: base.turrets, incendiaries: vary(base.incendiaries) },
+        stock: { rifleMags: vary(base.rifleMags), pistolMags: vary(base.pistolMags), pistols: vary(base.pistols), stabilizers: vary(base.stabilizers), turrets: base.turrets, incendiaries: vary(base.incendiaries), flares: vary(base.flares) },
       })
     }
   }
@@ -65,7 +66,7 @@ export function roomsWith(supplies: Supplies, item: StockItem, from: { levelInde
 
 /** Totals across all rooms, for the sidebar. */
 export function totalStock(supplies: Supplies): Stock {
-  const t: Stock = { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 0, turrets: 0, incendiaries: 0 }
+  const t: Stock = { rifleMags: 0, pistolMags: 0, pistols: 0, stabilizers: 0, turrets: 0, incendiaries: 0, flares: 0 }
   for (const { stock } of supplies.values()) for (const k of Object.keys(t) as StockItem[]) t[k] += stock[k]
   return t
 }

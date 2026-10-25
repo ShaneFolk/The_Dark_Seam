@@ -12,7 +12,7 @@
 
 import { CONFIG } from '../config.ts'
 import { canWalk, findPath } from '../world/pathfinding.ts'
-import { cornerTiles, findRooms, randomTileIn, roomAt, sameRoom } from '../world/rooms.ts'
+import { findRooms, randomTileIn, roomAt, sameRoom } from '../world/rooms.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 import { createAgent, tileOf, type Agent } from './agent.ts'
 import { isFree, setMode } from './civilian.ts'
@@ -24,6 +24,7 @@ import { logEvent } from '../core/events.ts'
 import { who } from './describe.ts'
 import { kill } from './combat.ts'
 import { isHidden } from '../systems/camouflage.ts'
+import { nurserySpot } from './nest.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const L = CONFIG.lifecycle
@@ -212,9 +213,9 @@ function bite(mother: Agent, ctx: CombatContext): void {
   if (foe) tryAttack(mother, foe, ctx)
 }
 
-/** Infect and wrap a captive in a cocoon near the edge of the hive core. */
+/** Infect and wrap a captive in a cocoon along the wall of the nursery (the Hive Core at first). */
 function cocoon(captive: Agent, ctx: HiveContext): void {
-  const spot = cocoonSpot(ctx)
+  const spot = nurserySpot(ctx)
   const civ = captive.civ!
   setMode(captive, civ, 'cocooned')
   civ.infection = { hatchTick: ctx.tick + Math.round(L.incubationSeconds * TPS), stabilizedUntilTick: 0 }
@@ -223,18 +224,6 @@ function cocoon(captive: Agent, ctx: HiveContext): void {
   captive.x = spot.x + 0.5
   captive.y = spot.y + 0.5
   logEvent(ctx, 'injected', `${who(captive)} was injected and cocooned in the hive`)
-}
-
-/** A free corner tile of the hive core (cocoons line its walls). */
-function cocoonSpot(ctx: HiveContext): PathNode {
-  const hive = findRooms(ctx.world, ['hive'])[0]
-  const taken = new Set(
-    ctx.agents.filter((a) => a.civ?.mode === 'cocooned').map((a) => `${Math.floor(a.x)},${Math.floor(a.y)}`),
-  )
-  const home = ctx.hive.motherHome
-  const free = cornerTiles(ctx.world, hive).filter((t) => !taken.has(`${t.x},${t.y}`) &&
-    (!home || Math.hypot(t.x - home.x, t.y - home.y) > L.chamberRadius))
-  return free.length ? ctx.rng.pick(free) : randomTileIn(ctx.world, hive, ctx.rng)
 }
 
 /** Humans in the hive core and few guards left, or the Brood Mother badly hurt. */
