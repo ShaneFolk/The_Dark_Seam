@@ -262,7 +262,10 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Rescued people are weak (30 health, slow until cured); the squad walks them to the med bay, except on an assault
 - [x] Civilian traits from the seed: brave (less fear; brave miners fight with a cutting torch), panicky (more fear), stubborn (ignores the alarm; only goes to the ship once it has landed)
 - [x] Flares: squads carry 2; deep in the mines with resin ahead they light one, showing hidden Myrr within 6 tiles for 25 s
-- [ ] Utility-AI scoring for smarter decisions
+- [x] Move turrets: on evacuation with the armory empty, squads pack up turrets already standing and set them up on the Landing Pad (the command squad helps once the Commander is on the pad)
+- [x] Volunteers: a brave civilian who survives being taken (free again, not infected) joins the smallest squad with a rifle
+- [x] Decoy swarm: once the hive has lost 3 Myrr, a Taker may pace around a Level 2 motion sensor making noise; 25 s later a swarm raids the busiest Level 1 room with no soldiers near
+- [x] Utility-AI scoring (`src/core/utility.ts`): rested Takers score scout / spread resin / sabotage / hunt the Commander and pick at random weighted by score; the Commander scores wait vs probe / attack in force / must and takes the best. Scores show in the event log and agent descriptions
 - [ ] Balance passes
 
 ### Phase 10 — Art Pass
@@ -279,10 +282,6 @@ Move from colored shapes to a Dwarf Fortress (Steam version) style.
 
 ## Future options
 - **Run timeline** on the end screen: a graph of humans vs Myrr over time, so you can see where a run turned. Needs the sim to record a few numbers every colony hour, plus a small chart on the summary screen.
-
-- **Move turrets:** on evacuation, soldiers pack up turrets already set up and carry them to the Landing Pad.
-- **Volunteers:** a brave civilian who survives a capture joins a squad.
-- **Decoy swarm:** the hive makes noise on one level to pull squads away before a big raid somewhere else.
 - **The hive learns** *(only once there are later reinforcement drops)*: after the first drop ship, the Myrr watch the Landing Pad and ambush the next landings.
 
 ## 9. Open Questions
