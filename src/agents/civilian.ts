@@ -343,6 +343,8 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   else if (civ.fear >= F.flee && seenRecently) next = 'flee'
   else if (civ.fear >= F.hide && (civ.mode === 'routine' || civ.mode === 'panic')) next = 'hide'
   else if (civ.fear < F.calm) next = 'routine'
+  // The Commander is a soldier at heart: never runs or hides, stands and shoots.
+  if (civ.job === 'commander') next = 'routine'
   if (next !== civ.mode) setMode(agent, civ, next)
 }
 
