@@ -266,6 +266,11 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Volunteers: a brave civilian who survives being taken (free again, not infected) joins the smallest squad with a rifle
 - [x] Decoy swarm: once the hive has lost 3 Myrr, a Taker may pace around a Level 2 motion sensor making noise; 25 s later a swarm raids the busiest Level 1 room with no soldiers near
 - [x] Utility-AI scoring (`src/core/utility.ts`): rested Takers score scout / spread resin / sabotage / hunt the Commander and pick at random weighted by score; the Commander scores wait vs probe / attack in force / must and takes the best. Scores show in the event log and agent descriptions
+- [x] Shaken Takers: a Myrr shot in the last 90 s scores sabotage and the Commander hunt lower
+- [x] The Commander remembers: after an assault breaks off, attack scores are halved, recovering over 8 minutes
+- [x] The Brood Mother scores keep laying vs calling her raiding Spinebacks home (she shrieks when humans get into her chamber or she is hurt)
+- [x] Paused, each Myrr shows its last scored choice over its head (zoom in to read)
+- [x] Turret backup batteries: with the power out, a turret keeps firing for 240 s of shooting; it recharges on mains power
 - [ ] Balance passes
 
 ### Phase 10 — Art Pass
