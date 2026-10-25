@@ -12,7 +12,7 @@
 
 import { CONFIG } from '../config.ts'
 import { canWalk, findPath } from '../world/pathfinding.ts'
-import { findRooms, randomTileIn, roomAt, sameRoom } from '../world/rooms.ts'
+import { findRooms, roomAt, sameRoom } from '../world/rooms.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 import { createAgent, tileOf, type Agent } from './agent.ts'
 import { isFree, setMode } from './civilian.ts'
@@ -151,6 +151,7 @@ function addBroodling(at: PathNode, ctx: HiveContext): void {
   const brood = createAgent(ctx.agents.length, 'broodling', 'myrr', at, CONFIG.movement.myrrSpeed * 0.5, CONFIG.health.broodling)
   brood.myrr = createMyrrData('broodling')
   brood.myrr.task = 'grow'
+  brood.myrr.home = at
   brood.myrr.ticksLeft = Math.round(L.growSeconds * TPS)
   ctx.agents.push(brood)
 }
@@ -340,7 +341,10 @@ export function updateInfections(ctx: HiveContext): void {
 
 // ---------------------------------------------------------------- Broodlings
 
-/** Crawl around the hive while growing, then turn into what the hive needs. */
+/**
+ * Crawl about where it hatched while growing (Spinebacks come to guard it there),
+ * then turn into what the hive needs.
+ */
 export function updateBroodling(agent: Agent, ctx: HiveContext): void {
   const m = agent.myrr!
   if (--m.ticksLeft <= 0) return growUp(agent, ctx)
@@ -348,7 +352,7 @@ export function updateBroodling(agent: Agent, ctx: HiveContext): void {
     followPath(agent, ctx.world)
     return
   }
-  if (ctx.rng.chance(1 / (3 * TPS))) wanderInHive(agent, ctx)
+  if (ctx.rng.chance(1 / (3 * TPS))) wanderNearHome(agent, ctx)
 }
 
 function growUp(agent: Agent, ctx: HiveContext): void {
@@ -444,7 +448,8 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
 
 /**
  * What this guard watches over: the first `motherGuards` guards (and everyone while
- * she flees) stay with the Brood Mother; the rest are shared out among the cocoons.
+ * she flees) stay with the Brood Mother; the rest are shared out among the cocoons
+ * and the Broodlings growing where they hatched.
  */
 function guardPost(agent: Agent, ctx: HiveContext): { at: Agent | null; radius: number } {
   const mother = ctx.agents[ctx.hive.motherId]
@@ -453,9 +458,9 @@ function guardPost(agent: Agent, ctx: HiveContext): { at: Agent | null; radius: 
   const guards = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && a.myrr.task === 'guard')
   const i = guards.indexOf(agent)
   if (i < L.motherGuards) return home
-  const cocoons = ctx.agents.filter((a) => !a.dead && a.civ?.mode === 'cocooned')
-  if (!cocoons.length) return home
-  return { at: cocoons[(i - L.motherGuards) % cocoons.length], radius: L.cocoonGuardRadius }
+  const young = ctx.agents.filter((a) => !a.dead && (a.civ?.mode === 'cocooned' || a.kind === 'broodling'))
+  if (!young.length) return home
+  return { at: young[(i - L.motherGuards) % young.length], radius: L.cocoonGuardRadius }
 }
 
 /** Go to the strongest alarm, if it's loud enough and enough guards stay behind. */
@@ -496,12 +501,18 @@ function guardSpot(agent: Agent, post: { at: Agent | null; radius: number }, ctx
   }
 }
 
-function wanderInHive(agent: Agent, ctx: HiveContext): void {
-  const hive = findRooms(ctx.world, ['hive'])[0]
-  if (!hive) return
-  const path = findPath(ctx.world, tileOf(agent), randomTileIn(ctx.world, hive, ctx.rng), 'myrr')
-  if (path?.length) {
+/** A short crawl to a spot within broodlingRoam tiles of where it hatched. */
+function wanderNearHome(agent: Agent, ctx: HiveContext): void {
+  const home = agent.myrr!.home ?? tileOf(agent)
+  const level = ctx.world.levels[home.levelIndex]
+  const r = L.broodlingRoam
+  for (let tries = 0; tries < 10; tries++) {
+    const x = home.x + ctx.rng.int(-r, r), y = home.y + ctx.rng.int(-r, r)
+    if (!canWalk(level, x, y, 'myrr')) continue
+    const path = findPath(ctx.world, tileOf(agent), { levelIndex: home.levelIndex, x, y }, 'myrr')
+    if (!path?.length) continue
     agent.path = path
     agent.state = { name: 'moving' }
+    return
   }
 }

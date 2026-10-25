@@ -67,6 +67,8 @@ export interface MyrrData {
   lastChoice: string
   /** Tick it was last shot (a shaken Myrr steers clear of risky jobs for a while). */
   shotTick: number
+  /** Broodlings: where it hatched (it stays near there while it grows). */
+  home: PathNode | null
 }
 
 export interface HiveState {
@@ -123,7 +125,7 @@ const TPS = CONFIG.sim.ticksPerSecond
 const H = CONFIG.hive
 
 export function createMyrrData(role: MyrrData['role']): MyrrData {
-  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false, lastChoice: '', shotTick: -1e9 }
+  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false, lastChoice: '', shotTick: -1e9, home: null }
 }
 
 // ---------------------------------------------------------------- update

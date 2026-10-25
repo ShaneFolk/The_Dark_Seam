@@ -298,7 +298,9 @@ export const CONFIG = {
     lossBias: 0.05,
     /** Spinebacks stay within this many tiles of the Brood Mother. */
     guardRadius: 6,
-    /** Guards that stay with the Brood Mother; the others hide in the resin by the cocoons, within cocoonGuardRadius tiles. */
+    /** Broodlings crawl about within this many tiles of where they hatched while they grow. */
+    broodlingRoam: 3,
+    /** Guards that stay with the Brood Mother; the others hide in the resin by the cocoons and Broodlings, within cocoonGuardRadius tiles. */
     motherGuards: 1,
     cocoonGuardRadius: 3,
     /** Spinebacks that always stay with the Brood Mother when others answer an alarm. */
