@@ -3,7 +3,8 @@
 // Each squad has one order at a time, picked by its "brain" a few times a second
 // in this priority order:
 //
-//   retreat   morale broke: fall back to Security, weld it shut, wait until it recovers
+//   retreat   morale broke: fall back to Security, weld it shut, wait until it recovers, then
+//             go back on duty (during an evacuation: fall back to the Landing Pad instead)
 //   resupply  low on ammo: restock at the Armory
 //   chase     on an assault, the Brood Mother is fleeing: run her down
 //   rescue    a Taker is carrying someone: chase it and shoot it
@@ -167,9 +168,16 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     const restockAt = roomsWith(ctx.supplies, 'rifleMags', leader)[0] ?? null
     const lowAmmo = !!restockAt && ammo < alive.length * CONFIG.combat.weapons.rifle.magazine * 0.5
 
+    // Regrouped: back on duty (they cut their way out of any welds on the way).
+    if (squad.order === 'retreat' && squad.morale >= S.morale.regroupAt) {
+      setOrder(squad, 'patrol', null)
+      logEvent(ctx, 'command', `Squad ${squad.id + 1} has regrouped and is back on duty`)
+    }
     // Pick the order (see the list at the top of this file).
     if (squad.order === 'retreat' ? squad.morale < S.morale.regroupAt : squad.morale < S.morale.breakAt) {
-      setOrder(squad, 'retreat', roomGoal(ctx, ['security'], leader))
+      // During an evacuation they fall back to the Landing Pad, not into Security.
+      const pad = ctx.commander.evacuation !== 'none' && ctx.commander.evacuation !== 'gone' ? landingPad(ctx) : null
+      if (squad.order !== 'retreat') setOrder(squad, 'retreat', pad ? randomTileIn(ctx.world, pad, ctx.rng) : roomGoal(ctx, ['security'], leader))
     } else if (squad.order === 'resupply' || lowAmmo) {
       if (squad.order !== 'resupply') setOrder(squad, 'resupply', restockAt ? randomTileIn(ctx.world, restockAt, ctx.rng) : roomGoal(ctx, ['armory'], leader))
     } else if (squad.guardId >= 0 && padWork(squad, ctx)) {
@@ -383,7 +391,7 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     agent.state = { name: 'idle', ticksLeft: 0 }
     if (squad.order === 'patrol') { squad.ticksLeft = 5 * TPS; squad.goal = null }
     if (squad.order === 'resupply') squad.ticksLeft = Math.round(S.resupplySeconds * TPS)
-    if (squad.order === 'retreat' && !squad.welded) squad.ticksLeft = Math.round(CONFIG.barriers.weldSeconds * TPS)
+    if (squad.order === 'retreat' && !squad.welded && !onPad(alive[0], ctx)) squad.ticksLeft = Math.round(CONFIG.barriers.weldSeconds * TPS)
     if (squad.order === 'reload') squad.ticksLeft = Math.round(CONFIG.turrets.reloadSeconds * TPS)
     if (squad.order === 'fetchTurret') squad.ticksLeft = Math.round(CONFIG.turrets.pickupSeconds * TPS)
     if (squad.order === 'packTurret') squad.ticksLeft = Math.round(CONFIG.turrets.packSeconds * TPS)
