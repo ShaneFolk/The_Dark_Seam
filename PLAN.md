@@ -115,7 +115,7 @@ Maps stay hand-built. Each run varies through the **seeded RNG**:
 | **Civilians** (miners, techs, staff) | Daily routines (work, eat, sleep). Notice threats by sight and sound. Flee, hide, or barricade when scared. Panic more alone, less near soldiers. Can grab weapons from the armory or lockers at **reduced skill**. Can build barricades. |
 | **Soldiers / security** | Patrol, investigate, fight. Track health, ammo, and morale. Work in squads. Attempt rescues. Retreat when morale breaks. |
 | **Medic** (one per squad) | Wakes paralyzed humans. Gives a stabilizer that **pauses larva growth**. Limited supplies. |
-| **Commander** | Colony-wide decisions: sound the alarm, lock down sections, send search-and-destroy or rescue teams, **call in reinforcements** (a fresh squad lands at the Landing Pad), order evacuation. |
+| **Commander** | On the map, armed, never runs. Colony-wide decisions: sound the alarm, lock down sections, probe the hive with one squad and then only **attack in force**, **call in reinforcements** once he realizes people are missing (one drop ship, two squads of four, half a day later), order evacuation (fortify the Landing Pad first, then call the ship). |
 
 ---
 
@@ -171,7 +171,7 @@ Every run produces a **run summary**: the ending, how long it lasted, casualties
 ## 7. Starting Numbers (tuning targets)
 
 - Civilians: **40–60**
-- Soldiers: **8–12**, in squads, each with a medic
+- Soldiers: **2 squads of 3** at the start, plus the Commander's command squad of 3; **8 more** (2 squads of 4) arrive by drop ship once the Commander calls for help. Each squad has a medic.
 - Hive: Brood Mother + 6 Takers + 4 Spinebacks *(raised from 2 in Phase 8 so early hive assaults are not an automatic win; final tuning in Phase 9)*
 
 All numbers live in one config file so balancing is just editing values.
@@ -250,9 +250,18 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Burn the resin: after a squad is ambushed, the Commander has squads burn resin ahead (incendiary grenades, or flamethrower fuel), unless someone is close to hatching (the Commander takes the risk)
 - [x] Spinebacks also capture: raiders hunt and carry people (soldiers too) home; they only kill when they must (defending the Brood Mother, or badly hurt)
 - [x] Swarms: a Myrr that finds a group calls others with a screech; they gather and rush in together
-- [x] The Commander on the map: in the Command room with a command squad; if killed or taken, a second-in-command takes over (slower, more cautious, one fewer reinforcement call)
+- [x] The Commander on the map: in the Command room with a command squad; if killed or taken, a second-in-command takes over (slower, more cautious)
 - [x] Deep Chamber and burrowing: badly threatened, the Brood Mother retreats to a hidden resin-coated Deep Chamber (Level 3, north-east) and roots again; followed in there, she burrows into the rock for 30 s (Escape unless killed)
 - [x] Myrr heal: 1 health/s while holding still on resin; the rooted Brood Mother heals 3/s
+- [x] The Commander fights: never flees or hides, shoots back with his pistol
+- [x] Small start, one big reinforcement: 2 squads of 3 (plus the command squad); once the Commander knows 3 people are missing (a capture someone saw, or someone who missed their shift for 2 minutes) he calls a drop ship: 2 squads of 4 land half a day later
+- [x] Probe, then attack in force: the first assault is one squad; after that only every ready squad together (8+ soldiers), unless 3+ cocooned people are about to hatch and no help is on the way (a "must": one squad, rarely)
+- [x] Fortify the Landing Pad: on evacuation everyone falls back to the pad and squads set up turrets on its edge (the armory keeps 3 back for this); then the ship is called. The hive hears it coming down and swarms the pad
+- [x] Spineback guards hide in the resin by the cocoons; one stays with the Brood Mother
+- [x] The hive adapts: after soldiers have been among the cocoons, Takers carry them to another Level 3 room (up to twice); soldiers chase a Taker hauling a cocoon
+- [x] Rescued people are weak (30 health, slow until cured); the squad walks them to the med bay, except on an assault
+- [x] Civilian traits from the seed: brave (less fear; brave miners fight with a cutting torch), panicky (more fear), stubborn (ignores the alarm; only goes to the ship once it has landed)
+- [x] Flares: squads carry 2; deep in the mines with resin ahead they light one, showing hidden Myrr within 6 tiles for 25 s
 - [ ] Utility-AI scoring for smarter decisions
 - [ ] Balance passes
 
@@ -267,6 +276,9 @@ Move from colored shapes to a Dwarf Fortress (Steam version) style.
 - [ ] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
 
 ---
+
+## Future options
+- **Run timeline** on the end screen: a graph of humans vs Myrr over time, so you can see where a run turned. Needs the sim to record a few numbers every colony hour, plus a small chart on the summary screen.
 
 ## 9. Open Questions
 - Self-destruct: in or out?
