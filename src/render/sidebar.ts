@@ -87,7 +87,7 @@ export class Sidebar {
 
     const help = document.createElement('p')
     help.className = 'help'
-    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>Space to pause, + / - to change speed<br>P to show hive scent (green trail, red alarm, yellow danger)'
+    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>Space to pause, + / - to change speed<br>P to show hive scent (green trail, red alarm, yellow danger)<br>G to switch sprites / plain shapes'
     root.appendChild(help)
   }
 

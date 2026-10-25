@@ -56,6 +56,7 @@ export class Input {
       if (e.key === '-' || e.key === '_') stepSpeed(view, -1)
       this.keysDown.add(e.code)
       if (e.code === 'KeyP') view.showPheromones = !view.showPheromones
+      if (e.code === 'KeyG') view.art = view.art === 'sprites' ? 'shapes' : 'sprites'
       const digit = Number(e.key)
       if (Number.isInteger(digit) && digit >= 1 && digit <= view.cameras.length) onLevelKey(digit - 1)
     })

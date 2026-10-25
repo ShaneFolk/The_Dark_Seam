@@ -3,9 +3,12 @@
 import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
 import type { Level } from '../world/level.ts'
-import type { Tile } from '../world/tiles.ts'
+import { Tile } from '../world/tiles.ts'
 import { BARRIER_ART, TILE_ART, drawFlare, drawResin, floorColor, type FloorKind } from './tileArt.ts'
 import { AGENT_ART } from './agentArt.ts'
+import { BARRIER_SPRITES, TILE_SPRITES, drawResinSprite, type TileSpot } from './tileSprites.ts'
+import { AGENT_SPRITES } from './agentSprites.ts'
+import { drawSprite, spritesReady } from './sprites.ts'
 import { isHidden } from '../systems/camouflage.ts'
 import { describeAgent } from '../agents/describe.ts'
 import { formatClock } from '../core/clock.ts'
@@ -26,6 +29,23 @@ const COLORS = {
   hover: 'rgba(255, 255, 255, 0.35)',
 }
 
+/** Tiles that count as wall when choosing a wall's edges and a door's direction. */
+const WALL_LIKE = new Set<number>([Tile.Rock, Tile.BuildingWall, Tile.Window, Tile.Door, Tile.Doorway])
+
+/** What a tile's sprite depends on: open sides (for wall edges), door direction, texture variant. */
+function tileSpot(level: Level, x: number, y: number, floor: FloorKind): TileSpot {
+  const wall = (tx: number, ty: number) => tx < 0 || ty < 0 || tx >= level.width || ty >= level.height || WALL_LIKE.has(level.tiles[ty * level.width + tx])
+  const open = (wall(x, y - 1) ? 0 : 1) | (wall(x + 1, y) ? 0 : 2) | (wall(x, y + 1) ? 0 : 4) | (wall(x - 1, y) ? 0 : 8)
+  const solid = (tx: number, ty: number) => {
+    if (tx < 0 || ty < 0 || tx >= level.width || ty >= level.height) return true
+    const t = level.tiles[ty * level.width + tx]
+    return t === Tile.Rock || t === Tile.BuildingWall || t === Tile.Window
+  }
+  const horizontal = solid(x - 1, y) || solid(x + 1, y)
+  const variant = (((x * 73856093) ^ (y * 19349663) ^ (level.id * 83492791)) >>> 0) % 4
+  return { levelIndex: level.id - 1, floor, open, horizontal, variant }
+}
+
 export class Renderer {
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
@@ -36,6 +56,8 @@ export class Renderer {
   private levelCache = new Map<number, HTMLCanvasElement>()
   /** How many entries of each level's change list have been repainted. */
   private changesSeen = new Map<number, number>()
+  /** Drawing with sprites (the sheet has loaded and G hasn't switched to shapes). */
+  private sprites = false
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -47,6 +69,13 @@ export class Renderer {
   render(sim: SimState, view: ViewState): void {
     this.resizeToWindow()
     this.updateFps()
+    // Switched between sprites and shapes (or the sheet just loaded): repaint the levels.
+    const sprites = view.art === 'sprites' && spritesReady()
+    if (sprites !== this.sprites) {
+      this.sprites = sprites
+      this.levelCache.clear()
+      this.changesSeen.clear()
+    }
 
     const { ctx, canvas } = this
     const w = canvas.clientWidth
@@ -112,7 +141,12 @@ export class Renderer {
       this.levelCache.set(level.id, cache)
     } else if (seen < total) {
       const ctx = cache.getContext('2d')!
-      for (let k = seen - level.changesTrimmed; k < level.changes.length; k++) this.paintTile(ctx, level, level.changes[k])
+      for (let k = seen - level.changesTrimmed; k < level.changes.length; k++) {
+        const i = level.changes[k]
+        this.paintTile(ctx, level, i)
+        // Walls pick their edges from their neighbours, so a dug tunnel changes those too.
+        if (this.sprites) for (const n of [i - 1, i + 1, i - level.width, i + level.width]) if (n >= 0 && n < level.tiles.length) this.paintTile(ctx, level, n)
+      }
     }
     this.changesSeen.set(level.id, total)
     this.ctx.imageSmoothingEnabled = false
@@ -137,6 +171,14 @@ export class Renderer {
     const kind: FloorKind = room >= 0
       ? { room: level.rooms[room].type, outdoor: level.rooms[room].outdoor }
       : level.natural[i] ? 'natural' : 'built'
+    if (this.sprites) {
+      const spot = tileSpot(level, x, y, kind)
+      TILE_SPRITES[level.tiles[i] as Tile](ctx, x * size, y * size, size, spot)
+      if (level.resin[i]) drawResinSprite(ctx, x * size, y * size, size, spot)
+      const barrier = BARRIER_SPRITES[level.barrierKind[i]]
+      if (barrier) drawSprite(ctx, barrier, x * size, y * size, size, size)
+      return
+    }
     TILE_ART[level.tiles[i] as Tile](ctx, x * size, y * size, size, floorColor(kind))
     if (level.resin[i]) drawResin(ctx, x * size, y * size, size, '')
     if (level.barrierKind[i]) BARRIER_ART[level.barrierKind[i]]?.(ctx, x * size, y * size, size, '')
@@ -181,7 +223,7 @@ export class Renderer {
       // Faint: crossing between levels, or a Myrr hidden in the resin (humans can't see it).
       ctx.globalAlpha = agent.state.name === 'crossing' ? 0.4 : isHidden(agent, sim.world.levels[levelIndex]) ? 0.45 : 1
       const cx = ox + agent.x * tile, cy = oy + agent.y * tile
-      AGENT_ART[agent.kind](ctx, cx, cy, tile, agent)
+      ;(this.sprites ? AGENT_SPRITES : AGENT_ART)[agent.kind](ctx, cx, cy, tile, agent)
       // Health bar over anyone hurt, once zoomed in enough to read it.
       if (agent.health < agent.maxHealth && tile >= CONFIG.render.linkLabelMinTilePx && agent.civ?.mode !== 'cocooned') {
         const w = tile * 0.8, h = Math.max(2, tile * 0.1)

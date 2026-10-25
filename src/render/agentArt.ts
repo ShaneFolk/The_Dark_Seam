@@ -1,5 +1,5 @@
-// How each agent kind is drawn. Like tileArt.ts, this is the one mapping the
-// Art Pass replaces with sprites.
+// How each agent kind is drawn as coloured shapes. The sprite version is
+// agentSprites.ts; press G to switch.
 
 import type { Agent, AgentKind } from '../agents/agent.ts'
 import type { Mode } from '../agents/civilian.ts'

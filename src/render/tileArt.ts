@@ -1,5 +1,6 @@
-// How each tile type is drawn. This is the ONE place that maps a tile type to
-// its look. The Art Pass swaps these draw functions for sprites; nothing else changes.
+// How each tile type is drawn as coloured shapes. The Art Pass added a second
+// mapping, tileSprites.ts, drawn from the sprite sheet; press G to switch.
+// Either way, these mappings are the only place a tile type gets its look.
 
 import { Tile } from '../world/tiles.ts'
 import type { RoomType } from '../world/level.ts'
@@ -121,7 +122,7 @@ export const drawResin: TileDraw = (ctx, x, y, s) => {
 }
 
 /** Floor colour by room type, so rooms read at a glance. */
-const ROOM_FLOOR: Partial<Record<RoomType, string>> = {
+export const ROOM_FLOOR: Partial<Record<RoomType, string>> = {
   command: '#2f3b52',
   armory: '#4a2e31',
   medbay: '#284544',

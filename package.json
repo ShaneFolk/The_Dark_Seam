@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "batch": "node scripts/batch.ts"
+    "batch": "node scripts/batch.ts",
+    "sprites": "node scripts/make-sprites.ts"
   },
   "devDependencies": {
     "typescript": "~6.0.3",

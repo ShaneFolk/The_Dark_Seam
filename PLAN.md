@@ -275,10 +275,10 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 
 ### Phase 10 — Art Pass
 Move from colored shapes to a Dwarf Fortress (Steam version) style.
-- [ ] Pixel-art sprites from a sprite sheet (16×16 or 32×32)
-- [ ] Autotiling: walls and edges connect based on their neighbours
-- [ ] Small unit sprites
-- [ ] Assets live in `assets/`. A placeholder tileset exists (`tileset.png`, `brood_mother.png`, `make_tiles.py`) and moves there for this phase.
+- [x] Pixel-art sprites from a sprite sheet (16×16; the Brood Mother 32×32), drawn by code: `npm run sprites` (scripts/make-sprites.ts) writes `assets/sprites.png`, a 4x preview, and `src/render/spriteRects.ts`
+- [x] Autotiling: rock and building walls pick one of 16 versions by which sides face open floor (outlines on open sides, a front face when the floor is to the south); doors and windows turn to match their wall
+- [x] Small unit sprites: miners, techs, staff (armed and torch versions), soldiers, medics, the Commander, people lying down (stung or carried), Takers, Spinebacks, Broodlings, cocoons, turrets, the Brood Mother; pips show hiding / fleeing / panicking
+- [x] Sprites live in `assets/`; the old Python placeholder art was replaced by the generator. G switches between sprites and the plain shapes
 
 ### Phase 11 — Player Interference
 - [ ] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)

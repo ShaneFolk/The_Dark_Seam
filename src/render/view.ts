@@ -15,6 +15,8 @@ export interface ViewState {
   /** Sim speed (times normal) and whether it's paused. */
   speed: number
   paused: boolean
+  /** Draw with the sprite sheet, or the plain coloured shapes (toggle with G). */
+  art: 'sprites' | 'shapes'
 }
 
 export function createView(levelCount: number): ViewState {
@@ -25,6 +27,7 @@ export function createView(levelCount: number): ViewState {
     showPheromones: false,
     speed: 1,
     paused: false,
+    art: 'sprites',
   }
 }
 

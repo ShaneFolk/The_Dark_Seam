@@ -9,6 +9,7 @@ import { createView } from './render/view.ts'
 import { Input } from './render/input.ts'
 import { Sidebar } from './render/sidebar.ts'
 import { showSummary } from './render/summary.ts'
+import { loadSprites } from './render/sprites.ts'
 
 /** Read ?seed=123 from the URL, or fall back to the default seed. */
 function getSeed(): number {
@@ -36,6 +37,7 @@ try {
   throw err
 }
 const renderer = new Renderer(canvas)
+void loadSprites() // the renderer switches to sprites once the sheet has loaded
 const view = createView(sim.world.levels.length)
 const selectLevel = (levelIndex: number) => { view.levelIndex = levelIndex }
 const input = new Input(canvas, view, selectLevel)
