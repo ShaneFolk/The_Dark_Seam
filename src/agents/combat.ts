@@ -40,6 +40,8 @@ export interface Shot {
   ranged: boolean
   /** A flamethrower burst (drawn orange). */
   flame?: boolean
+  /** Who attacked: a hit by a human leaves Myrr acid, a hit by a Myrr leaves human blood. */
+  side: 'human' | 'myrr'
   tick: number
 }
 
@@ -116,7 +118,7 @@ export function tryAttack(attacker: Agent, target: Agent, ctx: CombatContext): b
     w.inMag--
     makeNoise(ctx.noises, 'gunshot', attacker.levelIndex, attacker.x, attacker.y, ctx.tick, attacker.id)
   }
-  ctx.shots.push({ levelIndex: attacker.levelIndex, x0: attacker.x, y0: attacker.y, x1: target.x, y1: target.y, hit, ranged: isRanged(w), flame: w.kind === 'flamethrower', tick: ctx.tick })
+  ctx.shots.push({ levelIndex: attacker.levelIndex, x0: attacker.x, y0: attacker.y, x1: target.x, y1: target.y, hit, ranged: isRanged(w), flame: w.kind === 'flamethrower', side: attacker.side, tick: ctx.tick })
   if (hit) damage(target, spec.damage * (ambush ? CONFIG.camouflage.ambushDamage : 1), attacker, ctx)
   if (ambush) {
     ctx.stats.ambushes++

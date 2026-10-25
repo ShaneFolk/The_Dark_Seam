@@ -3,10 +3,21 @@
 //
 // People who are stung, carried or held are drawn lying down; a coloured pip
 // over a civilian's head shows when they are hiding, fleeing or panicking.
+// Moving Myrr swap between two frames, so their legs scuttle.
 
 import type { Agent, AgentKind } from '../agents/agent.ts'
 import type { SpriteName } from './spriteRects.ts'
 import { drawSprite } from './sprites.ts'
+import { isMoving } from '../agents/movement.ts'
+
+/** Milliseconds per walk frame. */
+const FRAME_MS = 140
+
+/** The walk frame to show: the second one every other step while moving (ids offset so they don't all step together). */
+function walkFrame(agent: Agent, name: 'taker' | 'spineback' | 'broodling'): SpriteName {
+  if (!isMoving(agent) && agent.state.name !== 'crossing') return name
+  return (Math.floor(performance.now() / FRAME_MS) + agent.id) % 2 ? `${name}_1` as SpriteName : name
+}
 import { CIVILIAN_MODE_COLORS, type AgentDraw } from './agentArt.ts'
 
 /** A 16x16 sprite standing on the agent's spot (a little above centre, so feet sit on the tile). */
@@ -36,7 +47,7 @@ function civilianSprite(agent: Agent): SpriteName {
   return (agent.weapon?.kind === 'pistol' ? `civ_${kind}_armed` : `civ_${kind}`) as SpriteName
 }
 
-const myrr = (name: SpriteName): AgentDraw => (ctx, cx, cy, tile) => stand(ctx, name, cx, cy, tile)
+const myrr = (name: 'taker' | 'spineback' | 'broodling'): AgentDraw => (ctx, cx, cy, tile, agent) => stand(ctx, walkFrame(agent, name), cx, cy, tile)
 
 export const AGENT_SPRITES: Record<AgentKind, AgentDraw> = {
   civilian: (ctx, cx, cy, tile, agent) => person(ctx, cx, cy, tile, agent, civilianSprite(agent)),
@@ -53,7 +64,7 @@ export const AGENT_SPRITES: Record<AgentKind, AgentDraw> = {
     }
   },
   taker: (ctx, cx, cy, tile, agent) => {
-    stand(ctx, 'taker', cx, cy, tile)
+    stand(ctx, walkFrame(agent, 'taker'), cx, cy, tile)
     // A white ring while carrying someone (or a cocoon).
     if (agent.myrr?.task === 'carry' || agent.myrr?.task === 'haulCarry') {
       ctx.beginPath()

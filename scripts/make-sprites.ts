@@ -258,21 +258,29 @@ function lying(im: Img): Img {
   return out
 }
 
-const taker = () => {
+/** Walking: frame 1 swings each pair of legs the other way. */
+const taker = (frame = 0) => {
   const im = new Img().ellipse(2, 12, 13, 15, SHADOW)
-  for (const y of [6, 9, 12]) im.line(2, y - 1, 13, y + 1, [30, 22, 26])
+  for (const [k, y] of [6, 9, 12].entries()) {
+    const swing = frame && k % 2 === 0 ? 1 : frame ? -1 : 0
+    im.line(2, y - 1 + swing, 13, y + 1 - swing, [30, 22, 26])
+  }
   im.ellipse(4, 4, 11, 13, [150, 66, 44], [60, 24, 16]).ellipse(5, 1, 10, 6, [170, 80, 54], [60, 24, 16])
   return im.set(6, 3, [255, 220, 120]).set(9, 3, [255, 220, 120])
 }
-const spineback = () => {
+const spineback = (frame = 0) => {
   const im = new Img().ellipse(1, 12, 14, 15, SHADOW)
-  for (const y of [5, 9, 13]) im.line(0, y - 1, 15, y + 1, [30, 18, 18])
+  for (const [k, y] of [5, 9, 13].entries()) {
+    const swing = frame && k % 2 === 0 ? 1 : frame ? -1 : 0
+    im.line(0, y - 1 + swing, 15, y + 1 - swing, [30, 18, 18])
+  }
   im.ellipse(3, 3, 12, 14, [160, 36, 36], [60, 10, 10])
   for (let x = 5; x < 11; x += 2) im.line(x, 5, x, 2, [230, 210, 190])
   return im.set(6, 6, [255, 230, 120]).set(9, 6, [255, 230, 120])
 }
-const broodling = () => {
-  const im = new Img().ellipse(4, 11, 11, 14, SHADOW).ellipse(4, 6, 11, 12, [220, 200, 170], [120, 90, 70])
+const broodling = (frame = 0) => {
+  // Frame 1: the grub stretches as it crawls.
+  const im = new Img().ellipse(4, 11, 11, 14, SHADOW).ellipse(frame ? 3 : 4, frame ? 7 : 6, frame ? 12 : 11, 12, [220, 200, 170], [120, 90, 70])
   for (const x of [6, 8, 10]) im.line(x, 7, x, 11, [190, 160, 130])
   return im
 }
@@ -326,6 +334,7 @@ add('medic', human({ shirt: [220, 220, 214], hat: [50, 66, 36], cross: true }))
 add('commander', human({ shirt: [44, 56, 96], hat: [220, 180, 60], beret: true, gun: true }))
 add('human_down', lying(human({ shirt: [150, 150, 150] })))
 add('taker', taker()); add('spineback', spineback()); add('broodling', broodling())
+add('taker_1', taker(1)); add('spineback_1', spineback(1)); add('broodling_1', broodling(1))
 add('cocoon', cocoon()); add('turret', turret())
 
 // ---------------------------------------------------------------- pack and write

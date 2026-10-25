@@ -95,6 +95,9 @@ export type SpriteName =
   | 'taker'
   | 'spineback'
   | 'broodling'
+  | 'taker_1'
+  | 'spineback_1'
+  | 'broodling_1'
   | 'cocoon'
   | 'turret'
   | 'brood_mother'
@@ -193,7 +196,10 @@ export const SPRITE_RECTS: Record<SpriteName, readonly [number, number, number, 
   taker: [160, 80, 16, 16],
   spineback: [176, 80, 16, 16],
   broodling: [192, 80, 16, 16],
-  cocoon: [208, 80, 16, 16],
-  turret: [224, 80, 16, 16],
-  brood_mother: [0, 96, 32, 32],
+  taker_1: [208, 80, 16, 16],
+  spineback_1: [224, 80, 16, 16],
+  broodling_1: [240, 80, 16, 16],
+  cocoon: [0, 96, 16, 16],
+  turret: [16, 96, 16, 16],
+  brood_mother: [0, 112, 32, 32],
 }

@@ -9,6 +9,7 @@ import { AGENT_ART } from './agentArt.ts'
 import { BARRIER_SPRITES, TILE_SPRITES, drawResinSprite, type TileSpot } from './tileSprites.ts'
 import { AGENT_SPRITES } from './agentSprites.ts'
 import { drawSprite, spritesReady } from './sprites.ts'
+import { Effects } from './effects.ts'
 import { isHidden } from '../systems/camouflage.ts'
 import { describeAgent } from '../agents/describe.ts'
 import { formatClock } from '../core/clock.ts'
@@ -58,6 +59,8 @@ export class Renderer {
   private changesSeen = new Map<number, number>()
   /** Drawing with sprites (the sheet has loaded and G hasn't switched to shapes). */
   private sprites = false
+  /** Fight marks, resin glints, night and flashlights (sprite mode only). */
+  private effects = new Effects()
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -97,13 +100,21 @@ export class Renderer {
     const tile = base * camera.zoom
 
     this.drawLevel(level, ox, oy, tile)
+    this.effects.update(sim)
+    if (this.sprites) {
+      this.effects.drawMarks(ctx, sim, view.levelIndex, ox, oy, tile)
+      this.effects.drawResinGlints(ctx, sim, view.levelIndex, ox, oy, tile, w, h)
+    }
     this.drawLinkMarkers(level, ox, oy, tile)
     if (view.showPheromones) this.drawPheromones(sim, view.levelIndex, ox, oy, tile)
     this.drawSensors(sim, view.levelIndex, ox, oy, tile)
     this.drawAgents(sim, view.levelIndex, ox, oy, tile)
     if (view.paused) this.drawChoices(sim, view.levelIndex, ox, oy, tile)
-    // Darkness: dim the whole level when it has no light.
-    if (!isLit(sim.power, view.levelIndex)) {
+    // Darkness: with sprites, night on the surface and flashlights on unlit levels;
+    // with shapes, just dim the whole level when it has no light.
+    if (this.sprites) {
+      this.effects.drawDarkness(ctx, sim, view.levelIndex, isLit(sim.power, view.levelIndex), ox, oy, tile, w, h)
+    } else if (!isLit(sim.power, view.levelIndex)) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
       ctx.fillRect(ox, oy, level.width * tile, level.height * tile)
     }
