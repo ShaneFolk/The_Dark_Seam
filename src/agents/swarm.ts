@@ -5,6 +5,10 @@
 // Takers and Spinebacks answer and gather at the caller. Once enough have come
 // (or they've waited long enough), they all rush the group at once, each going
 // for a different person. Humans can hear the screech too, a few seconds' warning.
+//
+// The ship swarm: when the evacuation ship is heard coming down, every Myrr not
+// guarding heads for the Landing Pad. They gather a little way short of it along
+// their route, then rush everyone on the pad.
 
 import { CONFIG } from '../config.ts'
 import type { PathNode } from '../world/pathfinding.ts'
@@ -22,6 +26,12 @@ export interface Swarm {
   callerId: number
   members: number[]
   startTick: number
+  /** Rush once gathered after this long (with at least two); give up after maxWaitSeconds; rush people this close to the rally. */
+  waitSeconds: number
+  maxWaitSeconds: number
+  preyRange: number
+  /** Called by a sound, not a sighting: they rush people they can't see yet. */
+  heard: boolean
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -35,7 +45,7 @@ export function callSwarm(caller: Agent, ctx: HiveContext): boolean {
   const hive = ctx.hive
   if (hive.swarm || ctx.tick < hive.nextSwarmTick) return false
   const rally = tileOf(caller)
-  const swarm: Swarm = { rally, callerId: caller.id, members: [caller.id], startTick: ctx.tick }
+  const swarm: Swarm = { rally, callerId: caller.id, members: [caller.id], startTick: ctx.tick, waitSeconds: W.waitSeconds, maxWaitSeconds: W.maxWaitSeconds, preyRange: W.preyRange, heard: false }
   hive.swarm = swarm
   joinSwarm(caller)
   caller.path = []
@@ -65,6 +75,41 @@ export function callSwarm(caller: Agent, ctx: HiveContext): boolean {
   return true
 }
 
+/**
+ * The ship swarm: every Myrr not guarding (and spare guards) heads for `pad`,
+ * gathering a little short of it on the way. Replaces any swarm already gathering.
+ * Returns how many answered.
+ */
+export function callShipSwarm(pad: PathNode, ctx: HiveContext): number {
+  const hive = ctx.hive
+  const S = W.ship
+  // The rally point: approachTiles short of the pad along the route up from the hive.
+  const mother = ctx.agents[hive.motherId]
+  const from = mother && !mother.dead ? tileOf(mother) : null
+  const route = from ? findPath(ctx.world, from, pad, 'myrr') : null
+  const rally = route && route.length > S.approachTiles ? route[route.length - 1 - S.approachTiles] : pad
+  const swarm: Swarm = { rally, callerId: -1, members: [], startTick: ctx.tick, waitSeconds: S.waitSeconds, maxWaitSeconds: S.maxWaitSeconds, preyRange: S.preyRange, heard: true }
+  hive.swarm = swarm
+  const guards = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'spineback' && a.myrr.task === 'guard').length
+  let spareGuards = Math.max(0, guards - CONFIG.spinebacks.homeGuards)
+  for (const a of ctx.agents) {
+    if (a.dead || !a.myrr) continue
+    const role = a.myrr.role
+    const free = (role === 'taker' || role === 'spineback') && (CAN_ANSWER.has(a.myrr.task) || a.myrr.task === 'swarm')
+    const spareGuard = role === 'spineback' && a.myrr.task === 'guard' && spareGuards > 0
+    if (!free && !spareGuard) continue
+    const path = findPath(ctx.world, tileOf(a), rally, 'myrr')
+    if (!path) continue
+    if (spareGuard && !free) spareGuards--
+    joinSwarm(a)
+    a.path = path
+    a.state = { name: 'moving' }
+    swarm.members.push(a.id)
+  }
+  if (!swarm.members.length) hive.swarm = null
+  return swarm.members.length
+}
+
 function joinSwarm(a: Agent): void {
   const m = a.myrr!
   m.task = 'swarm'
@@ -81,8 +126,10 @@ export function updateSwarm(ctx: HiveContext): void {
   const r = swarm.rally
   const gathered = members.filter((a) => a.levelIndex === r.levelIndex && Math.hypot(a.x - r.x, a.y - r.y) <= W.gatherRadius)
 
-  if (gathered.length >= W.size || (age >= W.waitSeconds && gathered.length >= 2)) return rush(swarm, gathered, ctx)
-  if (age >= W.maxWaitSeconds || !members.length) return disband(members, ctx)
+  // The ship swarm waits for most of its members; a screech swarm for a handful.
+  const enough = swarm.heard ? Math.max(W.size, Math.ceil(members.length * 0.75)) : W.size
+  if (gathered.length >= enough || (age >= swarm.waitSeconds && gathered.length >= 2)) return rush(swarm, gathered, ctx)
+  if (age >= swarm.maxWaitSeconds || !members.length) return disband(members, ctx)
 }
 
 /** Everyone gathered goes for the people near the rally point, spread across them. */
@@ -91,7 +138,7 @@ function rush(swarm: Swarm, gathered: Agent[], ctx: HiveContext): void {
   const level = ctx.world.levels[r.levelIndex]
   const prey = ctx.agents
     .filter((h) => !h.dead && h.side === 'human' && h.kind !== 'turret' && isFree(h) && h.levelIndex === r.levelIndex &&
-      Math.hypot(h.x - r.x, h.y - r.y) <= W.preyRange && gathered.some((m) => canSee(m, h, level, CONFIG.hive.sightRange + 4)))
+      Math.hypot(h.x - r.x, h.y - r.y) <= swarm.preyRange && (swarm.heard || gathered.some((m) => canSee(m, h, level, CONFIG.hive.sightRange + 4))))
     .sort((a, b) => Math.hypot(a.x - r.x, a.y - r.y) - Math.hypot(b.x - r.x, b.y - r.y))
   if (!prey.length) return disband(gathered, ctx)
   gathered.forEach((a, i) => {

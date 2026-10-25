@@ -17,8 +17,9 @@ function commanderLine(sim: SimState): string {
   const assault = sim.squads.filter((s) => s.mission === 'assault').map((s) => s.id + 1)
   if (assault.length) parts.push('assaulting the hive: squad ' + assault.join(', '))
   const tps = CONFIG.sim.ticksPerSecond
-  if (c.reinforcementsDue !== null) parts.push('reinforcements in ' + Math.ceil((c.reinforcementsDue - sim.tick) / tps) + 's')
-  parts.push(c.reinforcementsLeft + ' reinforcement calls left')
+  if (c.reinforcementsDue !== null) parts.push('drop ship in ' + Math.ceil((c.reinforcementsDue - sim.tick) / tps) + 's')
+  else if (!c.reinforcementsCalled) parts.push(`${c.missingKnown} known missing (help is called at ${CONFIG.commander.reinforcements.missingToCall})`)
+  if (c.evacuation === 'fortify') parts.push('FORTIFYING THE LANDING PAD')
   if (c.evacuation === 'called') parts.push('evacuation ship in ' + Math.ceil((c.shipLands - sim.tick) / tps) + 's')
   if (c.evacuation === 'landed') parts.push('SHIP AT THE PAD, leaves in ' + Math.ceil((c.shipLeaves - sim.tick) / tps) + 's')
   return parts.join(' · ')

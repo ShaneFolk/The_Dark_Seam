@@ -35,14 +35,14 @@ import { burnArea, nearestVisible, roundsLeft, tryAttack } from './combat.ts'
 import { roomsWith, stockIn, take } from '../systems/supplies.ts'
 import { Barrier, putBarrier, roomOpenings } from '../systems/barriers.ts'
 import { humanSight } from '../systems/power.ts'
-import { createTurret, deploySite, needsReload } from './turret.ts'
+import { createTurret, deploySite, needsReload, padSite } from './turret.ts'
 import { strongest } from '../systems/pheromones.ts'
 import { chokePoint, collapseTunnel } from '../systems/digging.ts'
 import { countResin } from '../systems/resin.ts'
 import { makeNoise } from '../systems/noise.ts'
 import { kill } from './combat.ts'
 import { logEvent } from '../core/events.ts'
-import { landingPad } from '../systems/commander.ts'
+import { hatchingSoon, landingPad } from '../systems/commander.ts'
 import { who } from './describe.ts'
 import type { CivilianContext as CombatContext } from './civilian.ts'
 
@@ -178,6 +178,8 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     } else if (cocoon && squad.order !== 'cut') {
       setOrder(squad, 'cut', tileOf(cocoon))
       squad.targetId = cocoon.id
+    } else if (squad.mission === 'escort' && ctx.commander.evacuation === 'fortify' && (squad.order === 'patrol' || squad.order === 'escort') && fortifyPad(squad, squads, ctx)) {
+      // Setting up turrets around the Landing Pad (fortifyPad gave the order).
     } else if (squad.mission && (squad.order === 'patrol' || squad.order === squad.mission)) {
       // Assaults hunt the Brood Mother wherever she is (and chase her if she flees).
       const mother = ctx.agents[ctx.hive.motherId]
@@ -192,8 +194,8 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     } else if (squad.order === 'patrol' && squad.carryingTurret) {
       const site = deploySite(ctx, reservedSites(squads))
       if (site) setOrder(squad, 'deployTurret', site)
-    } else if (squad.order === 'patrol' && !squad.carryingTurret && armoryWithTurret(ctx) && deploySite(ctx, reservedSites(squads))) {
-      setOrder(squad, 'fetchTurret', randomTileIn(ctx.world, armoryWithTurret(ctx)!, ctx.rng))
+    } else if (squad.order === 'patrol' && !squad.carryingTurret && armoryWithTurret(ctx, CONFIG.commander.evacuation.padTurrets) && deploySite(ctx, reservedSites(squads))) {
+      setOrder(squad, 'fetchTurret', randomTileIn(ctx.world, armoryWithTurret(ctx, CONFIG.commander.evacuation.padTurrets)!, ctx.rng))
     } else if (squad.order === 'patrol' && turretToReload(ctx, leader)) {
       const t = turretToReload(ctx, leader)!
       setOrder(squad, 'reload', tileOf(t))
@@ -230,6 +232,25 @@ function guardCommander(squad: Squad, leader: Agent, myrrSeen: Agent | null, ctx
     return
   }
   if (squad.order !== 'guard' || leader.levelIndex !== boss.levelIndex || dist(leader, boss) > 3) setOrder(squad, 'guard', tileOf(boss))
+}
+
+/**
+ * Fortifying the Landing Pad before the ship is called: carry a turret there and
+ * set it up on the pad's edge. Returns true if it gave the squad an order.
+ */
+function fortifyPad(squad: Squad, squads: Squad[], ctx: CombatContext): boolean {
+  const reserved = reservedSites(squads)
+  const site = padSite(ctx, reserved)
+  if (!site) return false
+  if (squad.carryingTurret) { setOrder(squad, 'deployTurret', site); return true }
+  // Squads already fetching count toward the turrets wanted.
+  const coming = squads.filter((s) => s.carryingTurret || s.order === 'fetchTurret' || s.order === 'deployTurret').length
+  const standing = ctx.agents.filter((a) => a.kind === 'turret' && !a.dead && a.levelIndex === 0 &&
+    ctx.world.levels[0].rooms[ctx.world.levels[0].roomOf[Math.floor(a.y) * ctx.world.levels[0].width + Math.floor(a.x)]]?.name === 'Landing Pad').length
+  const armory = armoryWithTurret(ctx)
+  if (!armory || standing + coming >= CONFIG.commander.evacuation.padTurrets) return false
+  setOrder(squad, 'fetchTurret', randomTileIn(ctx.world, armory, ctx.rng))
+  return true
 }
 
 /** Where a mission sends the squad: the Hive Core, or the Landing Pad. */
@@ -342,18 +363,12 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
 /** Should this squad burn resin ahead of it? The Commander skips it when someone is about to be lost. */
 function wantsToBurn(squad: Squad, ctx: CombatContext): boolean {
   if (!ctx.commander.burnResin || squad.order === 'retreat' || squad.order === 'resupply') return false
-  const urgent = squad.order === 'rescue' || ((squad.order === 'cut' || squad.mission === 'assault') && hatchingSoon(ctx))
+  const urgent = squad.order === 'rescue' || ((squad.order === 'cut' || squad.mission === 'assault') && hatchingSoon(ctx) > 0)
   if (urgent && !squad.riskTaken) {
     logEvent(ctx, 'command', `The Commander takes the risk: Squad ${squad.id + 1} goes in without burning the resin to save lives`)
   }
   squad.riskTaken = urgent
   return !urgent
-}
-
-/** Is someone in a cocoon close to hatching? */
-function hatchingSoon(ctx: CombatContext): boolean {
-  const soon = ctx.tick + CONFIG.commander.riskHatchSeconds * TPS
-  return ctx.agents.some((a) => a.civ?.mode === 'cocooned' && a.civ.infection && a.civ.infection.hatchTick < soon)
 }
 
 /** Grenades left, or a flamethrower with fuel to spare. */
@@ -513,9 +528,9 @@ function reservedSites(squads: Squad[]): PathNode[] {
   return squads.filter((s) => s.order === 'deployTurret' && s.goal).map((s) => s.goal!)
 }
 
-/** A room that still has a packed turret. */
-function armoryWithTurret(ctx: CombatContext): RoomRef | null {
-  return [...ctx.supplies.values()].find((s) => s.stock.turrets > 0)?.room ?? null
+/** A room that still has a packed turret (more than `keep`, which are held back for the Landing Pad). */
+function armoryWithTurret(ctx: CombatContext, keep = 0): RoomRef | null {
+  return [...ctx.supplies.values()].find((s) => s.stock.turrets > keep)?.room ?? null
 }
 
 /** A turret on the leader's level that needs ammo, if the squad has spare rifle magazines. */

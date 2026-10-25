@@ -117,6 +117,11 @@ export const CONFIG = {
     preyRange: 14,
     /** Seconds before the hive can call another swarm. */
     cooldownSeconds: 30,
+    /**
+     * The swarm on the Landing Pad when the ship is heard: every Myrr not guarding goes.
+     * They gather approachTiles short of the pad (along their route), then rush everyone within preyRange.
+     */
+    ship: { approachTiles: 16, waitSeconds: 25, maxWaitSeconds: 70, preyRange: 30 },
   },
 
   myrrHealing: {
@@ -247,6 +252,9 @@ export const CONFIG = {
     lossBias: 0.05,
     /** Spinebacks stay within this many tiles of the Brood Mother. */
     guardRadius: 6,
+    /** Guards that stay with the Brood Mother; the others hide in the resin by the cocoons, within cocoonGuardRadius tiles. */
+    motherGuards: 1,
+    cocoonGuardRadius: 3,
     /** Spinebacks that always stay with the Brood Mother when others answer an alarm. */
     minGuards: 1,
     /** Answering Spinebacks go back to guarding after this long without a human in sight, in seconds. */
@@ -305,7 +313,8 @@ export const CONFIG = {
   },
 
   soldiers: {
-    count: 9,
+    /** Soldiers at the start (2 squads), not counting the command squad. Reinforcements come later. */
+    count: 6,
     /** Soldiers per squad. The last member of each squad is its medic. */
     squadSize: 3,
     /** Members further than this from their leader catch up, in tiles. */
@@ -446,7 +455,7 @@ export const CONFIG = {
     /** Once humans have fought back, a resting Myrr goes looking for the Commander with this chance. */
     huntChance: 0.1,
     /** If the Commander is killed or taken, the second-in-command takes over: slower decisions, more cautious assaults, a morale blow. */
-    second: { slowerBy: 3, assaultMinMorale: 0.85, assaultSquads: 1, moraleHit: 0.3 },
+    second: { slowerBy: 3, assaultMinMorale: 0.85, moraleHit: 0.3 },
     /** The alarm (and any lockdown) clears after this long with no Myrr seen, in seconds. */
     alarmClearSeconds: 300,
     /** Health of a locked powered door (Myrr must break it; humans open it). */
@@ -459,26 +468,53 @@ export const CONFIG = {
       /** Sent when the hive is known and holds at least minCocoons cocoons, or has at least hiveSize Myrr. */
       minCocoons: 5,
       hiveSize: 20,
-      /** Up to this many squads go; each needs this morale and members. */
-      squads: 2,
+      /** Squads sent need this morale and members. */
       minMorale: 0.6,
       minMembers: 2,
+      /**
+       * The first assault is a probe: one squad. After that the Commander only attacks
+       * in force (every ready squad, at least forceMinSoldiers soldiers together)...
+       */
+      forceMinSoldiers: 8,
+      /** ...unless he deems it a must (at least mustHatching cocooned people about to hatch): then one squad goes, at most once per mustCooldownSeconds. */
+      mustHatching: 3,
+      mustCooldownSeconds: 360,
       /** At the hive with nothing to fight or cut for this long: the assault is over, in seconds. */
       quietSeconds: 10,
     },
     reinforcements: {
-      calls: 2,
-      /** Called when soldiers alive fall below this share of the starting number. */
-      belowShare: 0.6,
-      /** Seconds from the call until the squad lands at the Landing Pad. */
-      delaySeconds: 180,
+      /**
+       * One call, once the Commander realizes people are being taken: missingToCall
+       * people known to be missing. A capture is known at once if someone saw it,
+       * otherwise after noticeSeconds (they don't turn up for their shift).
+       */
+      missingToCall: 3,
+      noticeSeconds: 120,
+      /** Also called if soldiers alive fall below this share of the starting number. */
+      belowShare: 0.5,
+      /** Seconds from the call until the drop ship lands at the Landing Pad (half a colony day). */
+      delaySeconds: 360,
+      /** What it brings: this many squads of this size. */
+      squads: 2,
+      squadSize: 4,
     },
     evacuation: {
       /** Ordered when free civilians fall below this share of the starting number. */
       civiliansBelow: 0.3,
+      /**
+       * First everyone falls back to the Landing Pad and the squads set up turrets around it;
+       * the ship is called once padTurrets stand there (or none are left), or after fortifySeconds.
+       */
+      fortifySeconds: 180,
+      /** Turrets wanted around the pad. The armory keeps this many back for it (patrols don't take them). */
+      padTurrets: 3,
+      /** Turrets around the pad stand at least this many tiles apart. */
+      padTurretSpacing: 5,
       /** Seconds until the ship lands at the Landing Pad, and how long it waits there. */
       shipDelaySeconds: 240,
-      shipWaitSeconds: 60,
+      shipWaitSeconds: 90,
+      /** The hive hears the ship coming down this many seconds before it lands, and swarms the pad. */
+      swarmLeadSeconds: 60,
     },
   },
 

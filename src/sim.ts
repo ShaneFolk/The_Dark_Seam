@@ -135,7 +135,8 @@ export function step(sim: SimState): void {
   updateCommander(sim.commander, sim.squads, ctx, {
     spawnReinforcements: () => {
       const pad = landingPad(ctx)
-      if (pad) addSquad(sim, pad, CONFIG.soldiers.squadSize, BEATS[sim.squads.length % BEATS.length])
+      const R = CONFIG.commander.reinforcements
+      for (let n = 0; n < R.squads && pad; n++) addSquad(sim, pad, R.squadSize, BEATS[sim.squads.length % BEATS.length])
     },
   })
   updateSquads(sim.squads, ctx)

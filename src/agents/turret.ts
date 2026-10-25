@@ -39,6 +39,27 @@ export function deploySite(ctx: CombatContext, reserved: PathNode[] = []): PathN
   return null
 }
 
+/**
+ * Where to put a turret to defend the Landing Pad: an edge tile of the pad,
+ * nearest the Mine Head first (the way up from the mines), spaced apart.
+ */
+export function padSite(ctx: CombatContext, reserved: PathNode[] = []): PathNode | null {
+  const level = ctx.world.levels[0]
+  const pad = level.rooms.find((r) => r.name === 'Landing Pad')
+  if (!pad) return null
+  const ref = { levelIndex: 0, room: pad }
+  const from = level.rooms.find((r) => r.name === 'Mine Head') ?? pad
+  const taken: PathNode[] = [...ctx.agents.filter((a) => a.kind === 'turret' && !a.dead).map((a) => ({ levelIndex: a.levelIndex, x: a.x, y: a.y })), ...reserved]
+  const spacing = CONFIG.commander.evacuation.padTurretSpacing
+  const edge = roomTiles(ctx.world, ref).filter((t) => {
+    if (level.linksAt.has(t.y * level.width + t.x)) return false
+    // On the edge: a neighbour is outside the pad.
+    return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => level.roomOf[(t.y + dy) * level.width + t.x + dx] !== pad.index)
+  })
+  edge.sort((a, b) => Math.hypot(a.x - from.centerX, a.y - from.centerY) - Math.hypot(b.x - from.centerX, b.y - from.centerY))
+  return edge.find((p) => !taken.some((x) => x.levelIndex === 0 && Math.hypot(x.x - p.x, x.y - p.y) < spacing)) ?? null
+}
+
 /** A plain floor tile a human can stand on, close to a spot. */
 function standableNear(world: World, at: PathNode): PathNode | null {
   const level = world.levels[at.levelIndex]

@@ -169,7 +169,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       const target = ctx.agents[m.targetId]
       if (
         !target || !isFree(target) ||
-        ctx.tick - m.lastSeenTick > H.huntGiveUpSeconds * TPS ||
+        (!m.swarmHunt && ctx.tick - m.lastSeenTick > H.huntGiveUpSeconds * TPS) ||
         ctx.tick - m.huntStartTick > H.maxHuntSeconds * TPS
       ) {
         return giveUp(agent, m, ctx)
@@ -412,6 +412,11 @@ export function sting(target: Agent, ctx: HiveContext): void {
 
 function capture(agent: Agent, m: MyrrData, target: Agent, ctx: HiveContext): void {
   ctx.stats.captures++
+  // Did anyone see it? If not, the colony only notices when they go missing.
+  const level = ctx.world.levels[agent.levelIndex]
+  target.civ!.takenTick = ctx.tick
+  target.civ!.takenSeen = ctx.agents.some((h) => h !== target && isFree(h) && h.levelIndex === agent.levelIndex &&
+    canSee(h, agent, level, CONFIG.perception.sightRange))
   logEvent(ctx, 'capture', `${who(target)} was taken by a ${agent.kind === 'spineback' ? 'Spineback' : 'Taker'} on Level ${agent.levelIndex + 1}`)
   target.civ!.mode = 'captured'
   target.path = []

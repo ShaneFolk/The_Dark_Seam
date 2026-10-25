@@ -76,6 +76,9 @@ export interface CivilianData {
   /** While hiding: openings of the room still to barricade or board up (null = not started). */
   fortify: { tile: number; standX: number; standY: number; kind: BarrierKind }[] | null
   fortifyTicks: number
+  /** Tick they were taken by the hive (-1 = never), and whether anyone saw it happen. */
+  takenTick: number
+  takenSeen: boolean
 }
 
 /** What the world looks like to a civilian this tick. */
@@ -119,6 +122,8 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
     cured: false,
     fortify: null,
     fortifyTicks: 0,
+    takenTick: -1,
+    takenSeen: false,
   }
 }
 
@@ -214,7 +219,7 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   const generator = !medbay && civ.job === 'tech' ? damagedGenerators(ctx.power)[0] ?? null : null
   // Commander's orders: head for the evacuation ship, or shelter at home during an alarm.
   const cmd = ctx.commander
-  const evac = cmd.evacuation === 'called' || cmd.evacuation === 'landed' ? landingPad(ctx) : null
+  const evac = cmd.evacuation === 'fortify' || cmd.evacuation === 'called' || cmd.evacuation === 'landed' ? landingPad(ctx) : null
   // The Commander stays at their post in the Command room (until the evacuation).
   const activity: Activity = medbay ? 'treat' : generator ? 'repair' : evac ? 'evacuate'
     : civ.job === 'commander' ? 'work' : cmd.alarm ? 'shelter' : activityAt(civ, ctx.tick)
