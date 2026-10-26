@@ -171,8 +171,8 @@ Every run produces a **run summary**: the ending, how long it lasted, casualties
 ## 7. Starting Numbers (tuning targets)
 
 - Civilians: **40–60**
-- Soldiers: **2 squads of 3** at the start, plus the Commander's command squad of 3; **8 more** (2 squads of 4) arrive by drop ship once the Commander calls for help. Each squad has a medic.
-- Hive: Brood Mother + 6 Takers + 4 Spinebacks *(raised from 2 in Phase 8 so early hive assaults are not an automatic win; final tuning in Phase 9)*
+- Soldiers: **3 squads of 3** at the start, plus the Commander's command squad of 3; **8 more** (2 squads of 4) arrive by drop ship once the Commander calls for help. Each squad has a medic.
+- Hive: Brood Mother + 9 Takers + 6 Spinebacks (raised for more action once squads stopped getting stuck; seeds 1-20 gave 35% Overrun, 30% Extermination, 25% Evacuation, 5% Escape)
 
 All numbers live in one config file so balancing is just editing values.
 
@@ -274,6 +274,10 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Fix: squads that fell back to Security stayed welded in forever; they now go back on duty when morale recovers, and during an evacuation fall back to the Landing Pad
 - [x] The Commander goes with his command squad whenever it leaves its post (supplies, turrets, falling back)
 - [x] Broodlings stay where they hatched; Spineback guards share their posts between cocoons and Broodlings
+- [x] Squads search the alert spot (2 places nearby) then move on, giving up after 10 s without contact
+- [x] Cocoons are carried: the Brood Mother wraps captives where they lie and Takers carry each cocoon to the nursery; nest moves go to a nearby room
+- [x] Drop-ship soldiers come out of the ship; only engineers (about 30% of techs) repair generators, 2 per generator, and a knocked-out generator stays down until fully repaired
+- [x] Bigger start for more action: 9 Takers, 6 Spinebacks, 3 squads of 3
 - [ ] Balance passes
 
 ### Phase 10 — Art Pass

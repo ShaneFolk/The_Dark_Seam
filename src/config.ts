@@ -235,9 +235,9 @@ export const CONFIG = {
   },
 
   hive: {
-    takers: 6,
+    takers: 9,
     /** Spinebacks at the start. They guard the Brood Mother (combat comes in Phase 6). */
-    spinebacks: 4,
+    spinebacks: 6,
     /** How far Myrr see, in tiles (same blockers as for humans). */
     sightRange: 10,
     /** A human counts as "alone" with no other free human within this many tiles. */
@@ -363,8 +363,8 @@ export const CONFIG = {
   },
 
   soldiers: {
-    /** Soldiers at the start (2 squads), not counting the command squad. Reinforcements come later. */
-    count: 6,
+    /** Soldiers at the start (3 squads), not counting the command squad. Reinforcements come later. */
+    count: 9,
     /** Soldiers per squad. The last member of each squad is its medic. */
     squadSize: 3,
     /** Members further than this from their leader catch up, in tiles. */
