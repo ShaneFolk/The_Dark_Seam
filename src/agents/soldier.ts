@@ -13,6 +13,7 @@
 //   cut       a cocoon in sight: cut the person free
 //   guide     walk someone just cut free (weak, slow) to the med bay (not on an assault: they go alone)
 //   blast     heavy fighting in an Upper Mine tunnel: collapse it with a mining charge
+//   cover     a generator is knocked out: go with the engineers repairing it and guard them
 //   reload    a turret is low: feed it spare rifle magazines
 //   fetchTurret / deployTurret   carry a packed turret from the armory to a defence point
 //   packTurret  evacuation, armory empty: pack up a turret already standing to move it to the Landing Pad
@@ -39,7 +40,7 @@ import { isFree, setMode } from './civilian.ts'
 import { burnArea, nearestVisible, roundsLeft, tryAttack } from './combat.ts'
 import { roomsWith, stockIn, take } from '../systems/supplies.ts'
 import { Barrier, putBarrier, roomOpenings } from '../systems/barriers.ts'
-import { humanSight } from '../systems/power.ts'
+import { humanSight, type Generator } from '../systems/power.ts'
 import { createTurret, deploySite, needsReload, padSite } from './turret.ts'
 import { strongest } from '../systems/pheromones.ts'
 import { chokePoint, collapseTunnel } from '../systems/digging.ts'
@@ -65,7 +66,7 @@ export interface SoldierData {
   workTicks: number
 }
 
-export type Order = 'packTurret' | 'guide' | 'guard' | 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
+export type Order = 'cover' | 'packTurret' | 'guide' | 'guard' | 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
 
 export interface Squad {
   id: number
@@ -105,6 +106,9 @@ export interface Squad {
   flares: number
   /** Places searched so far on the current response. */
   searches: number
+  /** Myrr its soldiers have killed; at CONFIG.soldiers.veteran.kills the squad becomes veterans. */
+  kills: number
+  veteran: boolean
   /** Ammo left in a turret the squad packed up and is carrying (null = a fresh one from the armory). */
   turretAmmo: number | null
 }
@@ -149,8 +153,8 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       !squad.members.includes(n.sourceId) && alive.some((s) => canHear(s, n, ctx.world.levels[s.levelIndex])))
 
     // Morale drifts: down while outnumbered, back up when it's quiet.
-    if (myrrCount > alive.length) squad.morale -= S.morale.outnumberedPerSecond * seconds
-    else if (!myrrSeen) squad.morale += S.morale.recoverPerSecond * seconds
+    if (myrrCount > alive.length) squad.morale -= S.morale.outnumberedPerSecond * seconds * (squad.veteran ? S.veteran.moraleLossScale : 1)
+    else if (!myrrSeen) squad.morale += S.morale.recoverPerSecond * seconds * (squad.veteran ? S.veteran.moraleRecoverScale : 1)
     squad.morale = Math.max(0, Math.min(1, squad.morale))
     if (myrrSeen) { squad.lastContactTick = ctx.tick; ctx.commander.lastSightingTick = ctx.tick }
     if (cocoon) squad.lastContactTick = ctx.tick
@@ -216,6 +220,8 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       if (squad.mission === 'assault' && mother && !mother.dead) squad.missionGoal = tileOf(mother)
       if (!squad.missionGoal) squad.missionGoal = missionGoal(squad, ctx)
       if (squad.missionGoal) setOrder(squad, squad.mission, squad.missionGoal)
+    } else if (squad.order === 'cover' || (squad.order === 'patrol' && !squad.mission && squad.guardId < 0 && repairToCover(squad, squads, ctx) >= 0)) {
+      coverRepair(squad, squads, ctx)
     } else if (squad.order === 'patrol' && squad.charges > 0 && blastSite(ctx)) {
       setOrder(squad, 'blast', blastSite(ctx))
     } else if (heard && squad.order === 'patrol') {
@@ -238,6 +244,58 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     // The command squad never leaves the Commander: when it has to go somewhere, he goes with it.
     if (squad.guardId >= 0) ctx.commander.escortTo = STAY_WITH_COMMANDER.has(squad.order) ? null : tileOf(leader)
   }
+}
+
+// ---------------------------------------------------------------- covering repairs
+
+/** Engineers working on (or heading to) this generator. */
+function engineersOn(gen: Generator, ctx: CombatContext): Agent[] {
+  return ctx.agents.filter((a) => !a.dead && a.civ?.engineer && a.civ.activity === 'repair' && isFree(a) && sameRoom(a.civ.target, gen.room))
+}
+
+/**
+ * The knocked-out generator (its index) this squad should cover: one with
+ * engineers on it that no other squad covers, and this is the nearest free
+ * squad to it. -1 if none.
+ */
+function repairToCover(squad: Squad, squads: Squad[], ctx: CombatContext): number {
+  if (!S.coverRepairs) return -1
+  const gens = ctx.power.generators
+  for (let i = 0; i < gens.length; i++) {
+    if (!gens[i].broken || squads.some((s) => s.order === 'cover' && s.targetId === i)) continue
+    const crew = engineersOn(gens[i], ctx)
+    if (!crew.length) continue
+    // Only the nearest squad that's free (on patrol, no mission, not the command squad) goes.
+    const at = gens[i].at
+    const far = (s: Squad) => {
+      const l = members(s, ctx)[0]
+      return l ? Math.abs(l.levelIndex - at.levelIndex) * 200 + Math.hypot(l.x - at.x, l.y - at.y) : Infinity
+    }
+    const free = squads.filter((s) => s.order === 'patrol' && !s.mission && s.guardId < 0 && members(s, ctx).length)
+    free.sort((a, b) => far(a) - far(b))
+    if (free[0] === squad) return i
+  }
+  return -1
+}
+
+/** Stay with the engineers until the generator runs again (or they're gone). */
+function coverRepair(squad: Squad, squads: Squad[], ctx: CombatContext): void {
+  if (squad.order !== 'cover') {
+    const i = repairToCover(squad, squads, ctx)
+    setOrder(squad, 'cover', null)
+    squad.targetId = i
+    logEvent(ctx, 'command', `Squad ${squad.id + 1} is covering the engineers at the ${ctx.power.generators[i].room.room.name}`)
+  }
+  const gen = ctx.power.generators[squad.targetId]
+  const crew = gen ? engineersOn(gen, ctx) : []
+  if (!gen || !gen.broken || !crew.length) {
+    setOrder(squad, 'patrol', null)
+    return
+  }
+  // Walk with the nearest engineer (to the generator, then stand guard there).
+  const leader = members(squad, ctx)[0]
+  crew.sort((a, b) => dist(leader, a) - dist(leader, b))
+  squad.goal = tileOf(crew[0])
 }
 
 /** Command-squad orders done at the Commander's side; for any other, he walks along with them. */
@@ -738,10 +796,27 @@ export function members(squad: Squad, ctx: CombatContext): Agent[] {
   return squad.members.map((id) => ctx.agents[id]).filter((a) => a && !a.dead && isFree(a))
 }
 
-/** Squad morale drops when one of its soldiers is hurt or killed. */
+/** Squad morale drops when one of its soldiers is hurt or killed (less for veterans). */
 export function soldierHurt(squads: Squad[], soldier: Agent, killed: boolean): void {
   const squad = squads[soldier.soldier!.squadId]
-  squad.morale = Math.max(0, squad.morale - (killed ? S.morale.squadmateDown : S.morale.hitTaken))
+  const loss = (killed ? S.morale.squadmateDown : S.morale.hitTaken) * (squad.veteran ? S.veteran.moraleLossScale : 1)
+  squad.morale = Math.max(0, squad.morale - loss)
+}
+
+/** A soldier killed a Myrr: count it for the squad, and make them veterans at enough kills. */
+export function soldierKilled(squads: Squad[], soldier: Agent, ctx: CombatContext): void {
+  const squad = squads[soldier.soldier!.squadId]
+  if (!squad) return
+  squad.kills++
+  if (squad.veteran || squad.kills < S.veteran.kills) return
+  squad.veteran = true
+  for (const a of members(squad, ctx)) {
+    a.maxHealth += S.veteran.healthBonus
+    a.health += S.veteran.healthBonus
+    if (a.weapon) a.weapon.skill = Math.min(1, a.weapon.skill + S.veteran.skillBonus)
+  }
+  squad.morale = Math.min(1, squad.morale + 0.2)
+  logEvent(ctx, 'command', `Squad ${squad.id + 1} are veterans now (${squad.kills} Myrr killed)`)
 }
 
 function roomGoal(ctx: CombatContext, types: ('security' | 'armory')[], from: Agent): PathNode | null {

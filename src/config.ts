@@ -402,6 +402,14 @@ export const CONFIG = {
       breakAt: 0.3,
       regroupAt: 0.6,
     },
+    /**
+     * Veterans: a squad whose soldiers have killed this many Myrr between them.
+     * Its members get a little more health and weapon skill, lose less morale
+     * when hit and recover it faster.
+     */
+    veteran: { kills: 6, healthBonus: 15, skillBonus: 0.06, moraleLossScale: 0.7, moraleRecoverScale: 1.5 },
+    /** A squad on patrol goes with the engineers to a knocked-out generator and guards them until it runs again. */
+    coverRepairs: true,
   },
 
   supplies: {

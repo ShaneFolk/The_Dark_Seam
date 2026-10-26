@@ -278,6 +278,9 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Cocoons are carried: the Brood Mother wraps captives where they lie and Takers carry each cocoon to the nursery; nest moves go to a nearby room
 - [x] Drop-ship soldiers come out of the ship; only engineers (about 30% of techs) repair generators, 2 per generator, and a knocked-out generator stays down until fully repaired
 - [x] Bigger start for more action: 9 Takers, 6 Spinebacks, 3 squads of 3
+- [x] Veterans: a squad whose soldiers kill 6 Myrr gets +15 health and +0.06 weapon skill each, loses less morale and recovers it faster (★ in the sidebar)
+- [x] Engineer escort: the nearest squad on patrol goes with the engineers to a knocked-out generator and guards them until it runs again
+- [x] Sidebar shows soldiers left in each squad; squads with none left are hidden
 - [ ] Balance passes
 
 ### Phase 10 — Art Pass

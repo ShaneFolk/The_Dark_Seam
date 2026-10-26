@@ -25,6 +25,11 @@ function commanderLine(sim: SimState): string {
   return parts.join(' · ')
 }
 
+/** Soldiers of a squad still in the fight (not dead, taken or evacuated). */
+function soldiersLeft(sim: SimState, ids: number[]): number {
+  return ids.filter((id) => { const a = sim.agents[id]; return a && !a.dead && !['captive', 'cocooned', 'dead', 'evacuated'].includes(a.civ?.mode ?? 'dead') }).length
+}
+
 function stockLine(sim: SimState): string {
   const t = totalStock(sim.supplies)
   return `${t.rifleMags} rifle mags · ${t.pistolMags} pistol mags · ${t.pistols} pistols · ${t.stabilizers} stabilizers · ${t.incendiaries} incendiaries · ${t.flares} flares`
@@ -114,8 +119,8 @@ Colony: ${civilians} civilians · ${soldiers} soldiers · ${infected} infected w
       + `\nSupplies: ${stockLine(sim)}`
       + sim.medbays.map((b) => `
 Med bay: ${b.beds.length}/${CONFIG.medbay.beds} beds`).join('')
-      + sim.squads.map((s) => `
-Squad ${s.id + 1}: ${s.order} · morale ${Math.round(s.morale * 100)}%`).join('')
+      + sim.squads.map((s) => ({ s, left: soldiersLeft(sim, s.members) })).filter(({ left }) => left > 0).map(({ s, left }) => `
+Squad ${s.id + 1}${s.veteran ? ' ★' : ''} (${left} left): ${s.order} · morale ${Math.round(s.morale * 100)}%`).join('')
     if (this.hiveInfo.textContent !== hive) this.hiveInfo.textContent = hive
     // Latest events, newest first.
     if (sim.events.length !== this.logCount) {

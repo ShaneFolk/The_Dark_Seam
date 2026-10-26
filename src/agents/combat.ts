@@ -55,6 +55,8 @@ export interface CombatContext extends HiveContext {
   onSoldierHurt?: (soldier: Agent, killed: boolean) => void
   /** Motion sensors (the hive's decoys use them). */
   sensors?: readonly { levelIndex: number; x: number; y: number }[]
+  /** Called when a soldier kills a Myrr (squad kills, veterans). */
+  onMyrrKilled?: (myrr: Agent, killer: Agent) => void
   /** Called when a Myrr is hurt but not killed. */
   onMyrrHurt?: (myrr: Agent, source: Agent | null) => void
 }
@@ -182,8 +184,10 @@ export function damage(target: Agent, amount: number, source: Agent | null, ctx:
     const danger = target.health <= 0 ? CONFIG.pheromones.dangerOnDeath : CONFIG.pheromones.dangerOnHurt
     depositSpread(ctx.pheromones, 'danger', ctx.world, target.levelIndex, target.x, target.y, danger, CONFIG.pheromones.dangerSpread)
   }
-  if (target.health <= 0) kill(target, ctx)
-  else if (target.myrr) ctx.onMyrrHurt?.(target, source)
+  if (target.health <= 0) {
+    kill(target, ctx)
+    if (target.myrr && source?.soldier) ctx.onMyrrKilled?.(target, source)
+  } else if (target.myrr) ctx.onMyrrHurt?.(target, source)
 }
 
 export function kill(agent: Agent, ctx: CombatContext): void {

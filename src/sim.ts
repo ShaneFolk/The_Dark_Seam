@@ -18,7 +18,7 @@ import { planNest } from './agents/nest.ts'
 import { planDecoy } from './agents/decoy.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
-import { soldierHurt, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
+import { soldierHurt, soldierKilled, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
 import { countResin, healMyrr, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
 import { createPheromones, decayPheromones, type Pheromones } from './systems/pheromones.ts'
@@ -125,6 +125,7 @@ export function step(sim: SimState): void {
     shots: sim.shots,
     sensors: sim.sensors,
     onSoldierHurt: (soldier, killed) => soldierHurt(sim.squads, soldier, killed),
+    onMyrrKilled: (_myrr, killer) => soldierKilled(sim.squads, killer, ctx),
     onMyrrHurt: (myrr, source) => takerHurt(myrr, source, ctx),
   }
 
@@ -267,7 +268,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
     charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
     mission: null, missionGoal: null, missionReached: false,
-    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad, turretAmmo: null, searches: 0,
+    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad, turretAmmo: null, searches: 0, kills: 0, veteran: false,
   })
   for (let n = 0; n < size; n++) {
     const isMedic = n === size - 1
