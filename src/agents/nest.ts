@@ -1,10 +1,13 @@
 // The nest: where the hive keeps its cocoons, and how it adapts.
 //
-// Cocoons start along the walls of the Hive Core. Once soldiers have been in
-// among them, the hive moves them: when the soldiers have gone, it picks another
-// room on Level 3 (the "nursery"), and Takers carry the cocoons there one each,
-// coating the new spot with resin. New cocoons go to the nursery too. So a second
-// assault can't just repeat the first one; the soldiers have to find them again.
+// The Brood Mother wraps each captive in a cocoon where they lie, and a Taker
+// carries it to the "nursery" (along the walls of the Hive Core at first),
+// coating the spot with resin. Nothing teleports: every cocoon is carried.
+//
+// Once soldiers have been in among the cocoons, the hive moves the nest: when
+// the soldiers have gone, it picks a room nearby on Level 3 and Takers carry the
+// cocoons there one each; new cocoons go there too. So a second assault can't
+// just repeat the first one; the soldiers have to find them again.
 //
 // A Taker hauling a cocoon is slowed, and soldiers who see one will chase it
 // (like a Taker carrying a person). Kill it and the cocoon is left where it fell.
@@ -27,11 +30,12 @@ export function nurseryRoom(ctx: HiveContext): RoomRef {
   return ctx.hive.nursery ?? findRooms(ctx.world, ['hive'])[0]
 }
 
-/** Every few seconds: notice soldiers among the cocoons; once they've gone, move the nest. */
+/** Every few seconds: send Takers to carry cocoons that need moving; notice raids; move the nest. */
 export function planNest(ctx: HiveContext): void {
   if (ctx.tick % (5 * TPS) !== 0) return
   const hive = ctx.hive
   if (hive.collapsing) return
+  assignHaulers(ctx)
   const room = nurseryRoom(ctx)
   const inRoom = (a: Agent) => sameRoom(roomAt(ctx.world, tileOf(a)), room)
   const cocoons = ctx.agents.filter((a) => !a.dead && a.civ?.mode === 'cocooned')
@@ -42,21 +46,32 @@ export function planNest(ctx: HiveContext): void {
   if (!hive.raided || hive.nestMoves >= N.maxMoves || ctx.tick < hive.nextNestTick || !cocoons.length) return
   hive.raided = false
 
-  // Another Level 3 room the Myrr can reach (not the Brood Mother's Deep Chamber).
+  // A nearby Level 3 room the Myrr can reach (not the Brood Mother's Deep Chamber): one of the two closest.
   const from = tileOf(cocoons[0])
   const options = findRooms(ctx.world, ['other', 'hive'], room.levelIndex)
     .filter((r) => !sameRoom(r, room) && r.room.name !== 'Deep Chamber' && !r.room.outdoor)
     .filter((r) => !!findPath(ctx.world, from, randomTileIn(ctx.world, r, ctx.rng), 'myrr'))
+    .sort((a, b) => Math.hypot(a.room.centerX - room.room.centerX, a.room.centerY - room.room.centerY) -
+      Math.hypot(b.room.centerX - room.room.centerX, b.room.centerY - room.room.centerY))
   if (!options.length) return
-  hive.nursery = ctx.rng.pick(options)
+  hive.nursery = ctx.rng.pick(options.slice(0, 2))
   hive.nestMoves++
   hive.nextNestTick = ctx.tick + Math.round(N.cooldownSeconds * TPS)
   logEvent(ctx, 'hive', `The hive is moving its cocoons to the ${hive.nursery.room.name}`)
+  for (const c of cocoons) if (!hive.unplaced.includes(c.id)) hive.unplaced.push(c.id)
+  assignHaulers(ctx)
+}
 
-  // One free Taker per cocoon, nearest first.
+/** Give each cocoon waiting to be carried a free Taker (nearest first), if it doesn't have one. */
+function assignHaulers(ctx: HiveContext): void {
+  const hive = ctx.hive
+  hive.unplaced = hive.unplaced.filter((id) => ctx.agents[id] && !ctx.agents[id].dead && ctx.agents[id].civ?.mode === 'cocooned')
+  if (!hive.unplaced.length) return
+  const taken = new Set(ctx.agents.filter((a) => !a.dead && (a.myrr?.task === 'haul' || a.myrr?.task === 'haulCarry')).map((a) => a.myrr!.targetId))
   const free = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'taker' && ['rest', 'scout', 'return', 'spread'].includes(a.myrr.task))
-  for (const cocoon of cocoons) {
-    if (!free.length) break
+  for (const id of hive.unplaced) {
+    if (taken.has(id) || !free.length) continue
+    const cocoon = ctx.agents[id]
     free.sort((a, b) => distance(a, cocoon) - distance(b, cocoon))
     const taker = free.shift()!
     if (!walk(taker, tileOf(cocoon), ctx)) continue
@@ -92,6 +107,7 @@ export function updateHaul(agent: Agent, ctx: HiveContext): boolean {
   if (!arrived) return false
   // Set it down and coat the spot, so it sits on resin like the others.
   ctx.hive.resinTiles += coatResin(ctx.world, tileOf(agent), CONFIG.resin.maxTiles - ctx.hive.resinTiles)
+  ctx.hive.unplaced = ctx.hive.unplaced.filter((id) => id !== cocoon.id)
   return finish(agent)
 }
 

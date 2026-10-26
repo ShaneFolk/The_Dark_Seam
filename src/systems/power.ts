@@ -1,6 +1,8 @@
 // Power: the surface generators. While at least one works, the colony has power:
 // turrets fire, the med bay cures, and Levels 1 and 2 are lit. Takers can
-// sabotage generators; techs repair them. Darkness halves human sight.
+// sabotage generators. A generator knocked out stays down until it is fully
+// repaired, by the colony's engineers (a few of the techs), a small crew at a time.
+// Darkness halves human sight.
 
 import { CONFIG } from '../config.ts'
 import type { World } from '../world/loadWorld.ts'
@@ -13,6 +15,8 @@ export interface Generator {
   at: PathNode
   health: number
   maxHealth: number
+  /** Knocked out: no power from it until it's repaired to full health. */
+  broken: boolean
 }
 
 export interface PowerState {
@@ -24,13 +28,25 @@ export function createPower(world: World): PowerState {
     const tiles = roomTiles(world, room)
     const at = tiles.reduce((best, t) =>
       Math.hypot(t.x - room.room.centerX, t.y - room.room.centerY) < Math.hypot(best.x - room.room.centerX, best.y - room.room.centerY) ? t : best)
-    return { room, at, health: CONFIG.power.generatorHp, maxHealth: CONFIG.power.generatorHp }
+    return { room, at, health: CONFIG.power.generatorHp, maxHealth: CONFIG.power.generatorHp, broken: false }
   })
   return { generators }
 }
 
 export function hasPower(power: PowerState): boolean {
-  return power.generators.some((g) => g.health > 0)
+  return power.generators.some((g) => !g.broken)
+}
+
+/** Damage a generator; at zero it's knocked out until fully repaired. */
+export function damageGenerator(gen: Generator, amount: number): void {
+  gen.health = Math.max(0, gen.health - amount)
+  if (gen.health <= 0) gen.broken = true
+}
+
+/** Repair a generator a little; back to full, it works again. */
+export function repairGenerator(gen: Generator, amount: number): void {
+  gen.health = Math.min(gen.maxHealth, gen.health + amount)
+  if (gen.health >= gen.maxHealth) gen.broken = false
 }
 
 /** Is this level lit right now? */

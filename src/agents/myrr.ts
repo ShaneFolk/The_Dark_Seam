@@ -28,6 +28,7 @@ import { canSee } from './perception.ts'
 import { callSwarm, type Swarm } from './swarm.ts'
 import { isFree, setMode } from './civilian.ts'
 import { isRanged, tryAttack, type CombatContext } from './combat.ts'
+import { damageGenerator } from '../systems/power.ts'
 import { pickWeighted as pickByScore, ramp, scoreList, type Option } from '../core/utility.ts'
 
 export type Task =
@@ -93,6 +94,8 @@ export interface HiveState {
   nextNestTick: number
   /** Soldiers have been in among the cocoons since the last move. */
   raided: boolean
+  /** Cocoons waiting for a Taker to carry them to the nursery (new ones, or after a move). */
+  unplaced: number[]
   /** Last tick the Brood Mother called her raiders home. */
   lastRecallTick: number
   /** The diversion under way, if any, and when the next may start. */
@@ -290,7 +293,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
 
     case 'sabotage': {
       const gen = ctx.power.generators[m.targetId]
-      if (!gen || gen.health <= 0) { m.targetId = -1; return goHome(agent, m, ctx) }
+      if (!gen || gen.broken) { m.targetId = -1; return goHome(agent, m, ctx) }
       const close = agent.levelIndex === gen.at.levelIndex && Math.hypot(agent.x - (gen.at.x + 0.5), agent.y - (gen.at.y + 0.5)) <= 1.6
       if (!close) {
         if (agent.state.name === 'moving' && !followPath(agent, ctx.world)) return
@@ -300,7 +303,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       agent.path = []
       agent.state = { name: 'idle', ticksLeft: 0 }
       if (ctx.tick % (2 * TPS) === 0) makeNoise(ctx.noises, 'smash', agent.levelIndex, agent.x, agent.y, ctx.tick, agent.id)
-      gen.health = Math.max(0, gen.health - CONFIG.power.sabotageDps / TPS)
+      damageGenerator(gen, CONFIG.power.sabotageDps / TPS)
       return
     }
 
@@ -372,7 +375,7 @@ function chooseNextJob(agent: Agent, m: MyrrData, ctx: CombatContext): void {
   const nerve = ramp(ctx.tick - m.shotTick, 0, U.shakenSeconds * TPS)
   const fed = ctx.agents.filter((a) => a.civ?.mode === 'cocooned').length + hive.captives.length
   const options: Option<Job>[] = [{ action: 'scout', score: U.scoutBase + U.scoutHunger * (1 - ramp(fed, 0, U.fullAt)) }]
-  const working = ctx.power.generators.filter((g) => g.health > 0)
+  const working = ctx.power.generators.filter((g) => !g.broken)
   if (m.role === 'taker') {
     if (hive.resinTiles < CONFIG.resin.maxTiles) options.push({ action: 'spread', score: U.spreadBase * (1 - ramp(hive.resinTiles, 0, CONFIG.resin.maxTiles)) })
     if (working.length && fought > 0) {

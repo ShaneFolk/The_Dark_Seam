@@ -388,7 +388,10 @@ export const CONFIG = {
     patientRange: 12,
     unsafeRange: 6,
     /** A response is dropped when no Myrr has been seen for this long, in seconds. */
-    respondGiveUpSeconds: 20,
+    respondGiveUpSeconds: 10,
+    /** At the spot, the squad searches this many nearby places (within searchRadius tiles) before giving up. */
+    searchSpots: 2,
+    searchRadius: 6,
     /** Morale (0 to 1): changes per event or per second. */
     morale: {
       squadmateDown: 0.3,
@@ -425,8 +428,11 @@ export const CONFIG = {
     generatorHp: 300,
     /** Damage per second a Taker does to a generator. */
     sabotageDps: 10,
-    /** Health a tech restores per second when repairing. */
-    repairPerSecond: 4,
+    /** Health an engineer restores per second when repairing (a knocked-out generator needs full health to run again). */
+    repairPerSecond: 1.2,
+    /** Share of techs who are engineers (the only ones who repair generators), and how many work on one generator at once. */
+    engineerShare: 0.3,
+    repairCrew: 2,
     /** Without power (and always on Level 3), human sight is multiplied by this. */
     darkSightMultiplier: 0.5,
     /** Levels with lights (Level 3 never has any). Numbers are level indexes (0 = Level 1). */

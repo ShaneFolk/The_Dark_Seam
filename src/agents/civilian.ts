@@ -24,7 +24,7 @@ import { Tile } from '../world/tiles.ts'
 import { logEvent } from '../core/events.ts'
 import { landingPad, type CommanderState } from '../systems/commander.ts'
 import { who } from './describe.ts'
-import { damagedGenerators, humanSight, type Generator } from '../systems/power.ts'
+import { damagedGenerators, humanSight, repairGenerator, type Generator } from '../systems/power.ts'
 import { makeWeapon } from './combat.ts'
 
 export type Job = keyof typeof CONFIG.civilians.jobs | 'soldier' | 'commander'
@@ -42,6 +42,8 @@ export interface CivilianData {
   job: Job
   /** Personality (civilians only; see CONFIG.civilians.traits), or null. */
   trait: Trait | null
+  /** Techs only: an engineer, one of the few who repair generators. */
+  engineer: boolean
   /** Hour this civilian's day starts (their shift). */
   shiftStart: number
   /** Small personal offset so a whole shift doesn't move on the same tick. */
@@ -107,6 +109,7 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
   return {
     job,
     trait: job === 'soldier' || job === 'commander' ? null : pickTrait(rng),
+    engineer: job === 'tech' && rng.chance(CONFIG.power.engineerShare),
     shiftStart: rng.pick(CONFIG.civilians.shiftStartHours),
     jitterHours: (rng.next() - 0.5) * 0.5,
     home: rng.pick(homes),
@@ -228,7 +231,7 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   // Hurt, or knowingly infected: the med bay comes before the schedule.
   // Techs drop everything to fix a damaged generator.
   const medbay = needsMedBay(agent) ? medBayFor(ctx.medbays) : null
-  const generator = !medbay && civ.job === 'tech' ? damagedGenerators(ctx.power)[0] ?? null : null
+  const generator = !medbay && civ.engineer ? generatorToRepair(agent, ctx) : null
   // Commander's orders: head for the evacuation ship, or shelter at home during an alarm.
   const cmd = ctx.commander
   // Stubborn people ignore the alarm, and only head for the ship once it's on the pad.
@@ -395,7 +398,17 @@ export function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
 function repair(agent: Agent, gen: Generator): void {
   agent.path = []
   agent.state = { name: 'idle', ticksLeft: 0 }
-  gen.health = Math.min(gen.maxHealth, gen.health + CONFIG.power.repairPerSecond / TPS)
+  repairGenerator(gen, CONFIG.power.repairPerSecond / TPS)
+}
+
+/** A damaged generator this engineer should work on: one they're already on, or one with room in its crew. */
+function generatorToRepair(agent: Agent, ctx: CivilianContext): Generator | null {
+  for (const gen of damagedGenerators(ctx.power)) {
+    if (agent.civ!.activity === 'repair' && sameRoom(agent.civ!.target, gen.room)) return gen
+    const crew = ctx.agents.filter((a) => a !== agent && !a.dead && a.civ?.activity === 'repair' && isFree(a) && sameRoom(a.civ.target, gen.room)).length
+    if (crew < CONFIG.power.repairCrew) return gen
+  }
+  return null
 }
 
 // ---------------------------------------------------------------- fortifying

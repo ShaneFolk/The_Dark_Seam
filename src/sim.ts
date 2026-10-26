@@ -69,7 +69,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false, decoy: null, nextDecoyTick: 0, lastRecallTick: -1e9 },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false, unplaced: [], decoy: null, nextDecoyTick: 0, lastRecallTick: -1e9 },
     squads: [],
     shots: [],
     supplies: new Map(),
@@ -140,7 +140,9 @@ export function step(sim: SimState): void {
     spawnReinforcements: () => {
       const pad = landingPad(ctx)
       const R = CONFIG.commander.reinforcements
-      for (let n = 0; n < R.squads && pad; n++) addSquad(sim, pad, R.squadSize, BEATS[sim.squads.length % BEATS.length])
+      // They come out of the ship, which sits in the middle of the pad.
+      const ship = pad ? centreTile(sim.world, pad) : undefined
+      for (let n = 0; n < R.squads && pad; n++) addSquad(sim, pad, R.squadSize, BEATS[sim.squads.length % BEATS.length], ship)
     },
   })
   updateSquads(sim.squads, ctx)
@@ -248,8 +250,15 @@ const BEATS: { level: number; types: RoomType[] }[][] = [
   [{ level: 0, types: ['other', 'workshop', 'generator'] }, { level: 1, types: ['other'] }],
 ]
 
-/** A new squad starting in `room`. The last member is its medic. */
-function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: number; types: RoomType[] }[]): void {
+/** The walkable tile nearest a room's middle. */
+function centreTile(world: World, room: RoomRef): PathNode {
+  const tiles = roomTiles(world, room)
+  return tiles.reduce((best, t) =>
+    Math.hypot(t.x - room.room.centerX, t.y - room.room.centerY) < Math.hypot(best.x - room.room.centerX, best.y - room.room.centerY) ? t : best)
+}
+
+/** A new squad starting in `room` (all at `at` if given). The last member is its medic. */
+function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: number; types: RoomType[] }[], at?: PathNode): void {
   const { world, rng } = sim
   const squadId = sim.squads.length
   const patrol: RoomRef[] = beat.flatMap((p) => findRooms(world, p.types, p.level).filter((r) => !r.room.outdoor))
@@ -258,12 +267,12 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
     charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
     mission: null, missionGoal: null, missionReached: false,
-    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad, turretAmmo: null,
+    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad, turretAmmo: null, searches: 0,
   })
   for (let n = 0; n < size; n++) {
     const isMedic = n === size - 1
     const civ = createCivilianData(world, rng, 'soldier')!
-    const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
+    const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', at ?? randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
     agent.soldier = {
       squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, targetId: -1,

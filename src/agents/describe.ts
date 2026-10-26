@@ -24,7 +24,7 @@ export function describeAgent(agent: Agent, tick: number): string {
     const shift = `${String(civ.shiftStart).padStart(2, '0')}:00 shift`
     const doing = civ.mode === 'routine' ? `${civ.activity}${civ.target ? ` → ${civ.target.room.name}` : ''}` : civ.mode
     const inf = civ.infection ? ` · INFECTED (hatches in ${Math.max(0, Math.round((civ.infection.hatchTick - tick) / 20))}s${tick < civ.infection.stabilizedUntilTick ? ', stabilized' : ''})` : ''
-    return `Civilian #${agent.id} · ${civ.trait ? civ.trait + ' ' : ''}${civ.job} (${shift}) · ${doing}${inf} · health ${Math.round(agent.health)} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
+    return `Civilian #${agent.id} · ${civ.trait ? civ.trait + ' ' : ''}${civ.engineer ? 'engineer ' : ''}${civ.job} (${shift}) · ${doing}${inf} · health ${Math.round(agent.health)} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
   }
   const m = agent.myrr
   if (m?.role === 'mother') return `Brood Mother #${agent.id} · ${m.task === 'inject' ? `injecting #${m.targetId}` : m.task} · health ${Math.round(agent.health)}${m.lastChoice ? ` · last chose ${m.lastChoice}` : ''}`

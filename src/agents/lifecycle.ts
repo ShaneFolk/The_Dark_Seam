@@ -24,7 +24,6 @@ import { logEvent } from '../core/events.ts'
 import { who } from './describe.ts'
 import { kill } from './combat.ts'
 import { isHidden } from '../systems/camouflage.ts'
-import { nurserySpot } from './nest.ts'
 import { makeNoise } from '../systems/noise.ts'
 import { choose, ramp, scoreList, type Option } from '../core/utility.ts'
 
@@ -256,16 +255,13 @@ function bite(mother: Agent, ctx: CombatContext): void {
   if (foe) tryAttack(mother, foe, ctx)
 }
 
-/** Infect and wrap a captive in a cocoon along the wall of the nursery (the Hive Core at first). */
+/** Infect and wrap a captive in a cocoon where they lie; a Taker will carry it to the nursery (nest.ts). */
 function cocoon(captive: Agent, ctx: HiveContext): void {
-  const spot = nurserySpot(ctx)
   const civ = captive.civ!
   setMode(captive, civ, 'cocooned')
   civ.infection = { hatchTick: ctx.tick + Math.round(L.incubationSeconds * TPS), stabilizedUntilTick: 0 }
   captive.state = { name: 'idle', ticksLeft: 1e9 }
-  captive.levelIndex = spot.levelIndex
-  captive.x = spot.x + 0.5
-  captive.y = spot.y + 0.5
+  ctx.hive.unplaced.push(captive.id)
   logEvent(ctx, 'injected', `${who(captive)} was injected and cocooned in the hive`)
 }
 

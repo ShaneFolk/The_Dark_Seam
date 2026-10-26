@@ -9,6 +9,7 @@
 //   chase     on an assault, the Brood Mother is fleeing: run her down
 //   rescue    a Taker is carrying someone: chase it and shoot it
 //   respond   Myrr in sight, or screams, gunfire, digging, smashing or chewing heard
+//             (at the spot they search a couple of places nearby, then go back to patrol)
 //   cut       a cocoon in sight: cut the person free
 //   guide     walk someone just cut free (weak, slow) to the med bay (not on an assault: they go alone)
 //   blast     heavy fighting in an Upper Mine tunnel: collapse it with a mining charge
@@ -102,6 +103,8 @@ export interface Squad {
   guardId: number
   /** Flares left (they show hidden Myrr nearby). */
   flares: number
+  /** Places searched so far on the current response. */
+  searches: number
   /** Ammo left in a turret the squad packed up and is carrying (null = a fresh one from the armory). */
   turretAmmo: number | null
 }
@@ -319,6 +322,17 @@ export function movableTurret(squad: Squad | null, squads: Squad[], ctx: CombatC
   return best
 }
 
+/** A walkable spot within searchRadius tiles of the leader, to look around. */
+function searchSpot(leader: Agent, ctx: CombatContext): PathNode | null {
+  const level = ctx.world.levels[leader.levelIndex]
+  const r = S.searchRadius
+  for (let tries = 0; tries < 12; tries++) {
+    const x = Math.floor(leader.x) + ctx.rng.int(-r, r), y = Math.floor(leader.y) + ctx.rng.int(-r, r)
+    if (canWalk(level, x, y, 'human')) return { levelIndex: leader.levelIndex, x, y }
+  }
+  return null
+}
+
 /** Where a mission sends the squad: the Hive Core, or the Landing Pad. */
 function missionGoal(squad: Squad, ctx: CombatContext): PathNode | null {
   if (squad.mission === 'assault') {
@@ -330,7 +344,7 @@ function missionGoal(squad: Squad, ctx: CombatContext): PathNode | null {
 }
 
 function setOrder(squad: Squad, order: Order, goal: PathNode | null): void {
-  if (squad.order !== order) { squad.ticksLeft = 0; squad.welded = false }
+  if (squad.order !== order) { squad.ticksLeft = 0; squad.welded = false; squad.searches = 0 }
   squad.order = order
   if (goal) squad.goal = goal
   if (order === 'patrol') { squad.goal = null; squad.targetId = -1 }
@@ -405,7 +419,12 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     if (squad.order === 'deployTurret') squad.ticksLeft = Math.round(CONFIG.turrets.setupSeconds * TPS)
     if (squad.order === 'blast') squad.ticksLeft = Math.round(CONFIG.charges.setSeconds * TPS)
     if (squad.order === 'cut') squad.ticksLeft = Math.round(S.cutSeconds * TPS)
-    if (squad.order === 'respond' || squad.order === 'guide') squad.goal = null
+    if (squad.order === 'guide') squad.goal = null
+    // Responding: nothing here, so search a couple of places nearby before giving up.
+    if (squad.order === 'respond') {
+      squad.goal = squad.searches < S.searchSpots ? searchSpot(agent, ctx) : null
+      squad.searches++
+    }
     if (squad.order === 'assault' || squad.order === 'escort') squad.missionReached = true
     if (squad.order === 'assault') squad.goal = null // keep closing in on the target
     return
