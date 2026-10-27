@@ -12,7 +12,7 @@ import { CONFIG } from '../config.ts'
 import type { Rng } from '../core/rng.ts'
 import type { World } from '../world/loadWorld.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
-import { findRooms, roomTiles, type RoomRef } from '../world/rooms.ts'
+import { findRooms, randomTileIn, roomTiles, type RoomRef } from '../world/rooms.ts'
 import { carryCocoon, updateHaul } from './nest.ts'
 import { updateDecoy, type Decoy } from './decoy.ts'
 import { depositTrail, strongestTrail, type Pheromones } from '../systems/pheromones.ts'
@@ -28,11 +28,12 @@ import { canSee } from './perception.ts'
 import { callSwarm, type Swarm } from './swarm.ts'
 import { isFree, setMode } from './civilian.ts'
 import { isRanged, tryAttack, type CombatContext } from './combat.ts'
-import { damageGenerator } from '../systems/power.ts'
+import { damageGenerator, type Generator } from '../systems/power.ts'
 import { pickWeighted as pickByScore, ramp, scoreList, type Option } from '../core/utility.ts'
 
 export type Task =
   | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
+  | 'lurk' // a Taker lying in wait by a generator it knocked out, for the engineers
   | 'swarm' // Takers and raiding Spinebacks gathering for a swarm
   | 'haul' | 'haulCarry' // Takers moving a cocoon to a new nursery (nest.ts)
   | 'decoy' // a Taker making a diversion at a motion sensor (decoy.ts)
@@ -96,6 +97,9 @@ export interface HiveState {
   raided: boolean
   /** Cocoons waiting for a Taker to carry them to the nursery (new ones, or after a move). */
   unplaced: number[]
+  /** Times engineers were seen coming to fix a generator the hive broke; at CONFIG.power.ambush.learnAfter it starts lying in wait. */
+  repairsSeen: number
+  ambushLearned: boolean
   /** Last tick the Brood Mother called her raiders home. */
   lastRecallTick: number
   /** The diversion under way, if any, and when the next may start. */
@@ -143,7 +147,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
     return
   }
 
-  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage' && m.task !== 'swarm' && m.task !== 'haul' && m.task !== 'haulCarry' && m.task !== 'decoy') {
+  if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0 && m.task !== 'carry' && m.task !== 'attack' && m.task !== 'dig' && m.task !== 'sabotage' && m.task !== 'swarm' && m.task !== 'haul' && m.task !== 'haulCarry' && m.task !== 'decoy' && m.task !== 'lurk') {
     lookForPrey(agent, m, ctx)
   }
 
@@ -304,6 +308,30 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       agent.state = { name: 'idle', ticksLeft: 0 }
       if (ctx.tick % (2 * TPS) === 0) makeNoise(ctx.noises, 'smash', agent.levelIndex, agent.x, agent.y, ctx.tick, agent.id)
       damageGenerator(gen, CONFIG.power.sabotageDps / TPS)
+      // Knocked out: once the hive has learned that engineers come, wait for them here.
+      if (gen.broken && ctx.hive.ambushLearned) startLurk(agent, m, gen, ctx)
+      return
+    }
+
+    case 'lurk': {
+      const gen = ctx.power.generators[m.targetId]
+      if (!gen || !gen.broken || --m.ticksLeft <= 0) { m.targetId = -1; return goHome(agent, m, ctx) }
+      if (agent.state.name === 'moving') {
+        // At the hiding spot: coat it, so it can blend in, and hold still.
+        if (followPath(agent, ctx.world)) ctx.hive.resinTiles += coatResin(ctx.world, tileOf(agent), CONFIG.resin.maxTiles - ctx.hive.resinTiles)
+        return
+      }
+      if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks !== 0) return
+      // Someone close: strike (from hiding, the first blow is an ambush).
+      const level = ctx.world.levels[agent.levelIndex]
+      const R = CONFIG.power.ambush.strikeRange
+      const prey = ctx.agents.find((h) => !h.dead && isFree(h) && h.kind !== 'turret' && h.levelIndex === agent.levelIndex &&
+        Math.hypot(h.x - agent.x, h.y - agent.y) <= R && canSee(agent, h, level, R))
+      if (prey) {
+        m.task = 'hunt'
+        m.targetId = prey.id
+        m.lastSeenTick = m.repathTick = m.huntStartTick = ctx.tick
+      }
       return
     }
 
@@ -314,6 +342,15 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       return rest(agent, m, ctx, 0.3)
     }
   }
+}
+
+/** Lie in wait in the generator's room for the engineers who'll come to fix it. */
+function startLurk(agent: Agent, m: MyrrData, gen: Generator, ctx: CombatContext): void {
+  const spot = randomTileIn(ctx.world, gen.room, ctx.rng)
+  if (!goTo(agent, ctx, spot)) return
+  m.task = 'lurk'
+  m.ticksLeft = Math.round(CONFIG.power.ambush.lurkSeconds * TPS)
+  logEvent(ctx, 'hive', `A Taker is lying in wait at the ${gen.room.room.name} for the engineers`)
 }
 
 // ---------------------------------------------------------------- digging

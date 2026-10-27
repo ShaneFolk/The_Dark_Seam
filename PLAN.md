@@ -281,6 +281,9 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] Veterans: a squad whose soldiers kill 6 Myrr gets +15 health and +0.06 weapon skill each, loses less morale and recovers it faster (★ in the sidebar)
 - [x] Engineer escort: the nearest squad on patrol goes with the engineers to a knocked-out generator and guards them until it runs again
 - [x] Sidebar shows soldiers left in each squad; squads with none left are hidden
+- [x] Engineers wait for cover: they hold back from a knocked-out generator while Myrr are in sight there or an escort squad is coming, until soldiers are within 5 tiles (60 s at most)
+- [x] Repair ambush: once the hive has seen engineers come to fix a generator it broke, the Taker that knocks one out stays behind on fresh resin, hidden, and jumps whoever comes close
+- [x] Squad merging: a squad down to 1-2 soldiers joins the nearest squad with room (5 at most), bringing its gear
 - [ ] Balance passes
 
 ### Phase 10 — Art Pass

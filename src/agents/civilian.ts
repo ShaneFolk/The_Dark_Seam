@@ -12,6 +12,7 @@ import { hourOfDay } from '../core/clock.ts'
 import type { World } from '../world/loadWorld.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
 import { cornerTiles, findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
+import { isHidden } from '../systems/camouflage.ts'
 import { makeNoise } from '../systems/noise.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
@@ -44,6 +45,8 @@ export interface CivilianData {
   trait: Trait | null
   /** Techs only: an engineer, one of the few who repair generators. */
   engineer: boolean
+  /** Tick this engineer started waiting for an escort to a generator, or -1. */
+  coverWaitTick: number
   /** Hour this civilian's day starts (their shift). */
   shiftStart: number
   /** Small personal offset so a whole shift doesn't move on the same tick. */
@@ -110,6 +113,7 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
     job,
     trait: job === 'soldier' || job === 'commander' ? null : pickTrait(rng),
     engineer: job === 'tech' && rng.chance(CONFIG.power.engineerShare),
+    coverWaitTick: -1,
     shiftStart: rng.pick(CONFIG.civilians.shiftStartHours),
     jitterHours: (rng.next() - 0.5) * 0.5,
     home: rng.pick(homes),
@@ -241,7 +245,15 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   const activity: Activity = medbay ? 'treat' : generator ? 'repair' : evac ? 'evacuate'
     : civ.job === 'commander' ? 'work' : cmd.alarm && !stubborn ? 'shelter' : activityAt(civ, ctx.tick)
   if (generator && Math.hypot(agent.x - (generator.at.x + 0.5), agent.y - (generator.at.y + 0.5)) <= 1.6 && agent.levelIndex === generator.at.levelIndex) {
-    repair(agent, generator)
+    civ.coverWaitTick = -1
+    repair(agent, generator, ctx)
+    return
+  }
+  if (generator && waitForCover(agent, civ, generator, ctx)) {
+    civ.activity = 'repair'
+    civ.target = generator.room
+    agent.path = []
+    agent.state = { name: 'idle', ticksLeft: 0 }
     return
   }
   if (activity !== civ.activity || !civ.target) {
@@ -394,8 +406,36 @@ export function setMode(agent: Agent, civ: CivilianData, mode: Mode): void {
   }
 }
 
-/** Work on a damaged generator. */
-function repair(agent: Agent, gen: Generator): void {
+/**
+ * Hold back from a knocked-out generator while Myrr are in sight in its room, or
+ * while an escort squad is coming, until soldiers are close (or for maxSeconds).
+ */
+function waitForCover(agent: Agent, civ: CivilianData, gen: Generator, ctx: CivilianContext): boolean {
+  const W = CONFIG.power.waitForCover
+  const reset = () => { civ.coverWaitTick = -1; return false }
+  if (!gen.broken) return reset()
+  const level = ctx.world.levels[gen.at.levelIndex]
+  const sight = humanSight(ctx.power, agent.levelIndex)
+  const myrrThere = ctx.agents.some((a) => !a.dead && a.side === 'myrr' && a.levelIndex === gen.at.levelIndex &&
+    !isHidden(a, level) && sameRoom(roomAt(ctx.world, tileOf(a)), gen.room) && canSee(agent, a, level, sight * 2))
+  if (!myrrThere && gen.coverSquad < 0) return reset()
+  const covered = ctx.agents.some((a) => !a.dead && a.soldier && isFree(a) && a.levelIndex === agent.levelIndex &&
+    Math.hypot(a.x - agent.x, a.y - agent.y) <= W.coverNear)
+  if (covered) return reset()
+  if (civ.coverWaitTick < 0) civ.coverWaitTick = ctx.tick
+  return ctx.tick - civ.coverWaitTick < W.maxSeconds * TPS
+}
+
+/** Work on a damaged generator. The first engineer at one the hive broke teaches the hive that they come. */
+function repair(agent: Agent, gen: Generator, ctx: CivilianContext): void {
+  if (gen.sabotaged) {
+    gen.sabotaged = false
+    const hive = ctx.hive
+    if (++hive.repairsSeen >= CONFIG.power.ambush.learnAfter && !hive.ambushLearned) {
+      hive.ambushLearned = true
+      logEvent(ctx, 'hive', 'The hive has learned that engineers come to fix broken generators')
+    }
+  }
   agent.path = []
   agent.state = { name: 'idle', ticksLeft: 0 }
   repairGenerator(gen, CONFIG.power.repairPerSecond / TPS)

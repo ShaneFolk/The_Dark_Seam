@@ -17,6 +17,10 @@ export interface Generator {
   maxHealth: number
   /** Knocked out: no power from it until it's repaired to full health. */
   broken: boolean
+  /** Knocked out by the hive, and no engineer has come to fix it yet (the hive learns from this). */
+  sabotaged: boolean
+  /** The squad covering its repair, or -1. */
+  coverSquad: number
 }
 
 export interface PowerState {
@@ -28,7 +32,7 @@ export function createPower(world: World): PowerState {
     const tiles = roomTiles(world, room)
     const at = tiles.reduce((best, t) =>
       Math.hypot(t.x - room.room.centerX, t.y - room.room.centerY) < Math.hypot(best.x - room.room.centerX, best.y - room.room.centerY) ? t : best)
-    return { room, at, health: CONFIG.power.generatorHp, maxHealth: CONFIG.power.generatorHp, broken: false }
+    return { room, at, health: CONFIG.power.generatorHp, maxHealth: CONFIG.power.generatorHp, broken: false, sabotaged: false, coverSquad: -1 }
   })
   return { generators }
 }
@@ -40,13 +44,13 @@ export function hasPower(power: PowerState): boolean {
 /** Damage a generator; at zero it's knocked out until fully repaired. */
 export function damageGenerator(gen: Generator, amount: number): void {
   gen.health = Math.max(0, gen.health - amount)
-  if (gen.health <= 0) gen.broken = true
+  if (gen.health <= 0 && !gen.broken) { gen.broken = true; gen.sabotaged = true }
 }
 
 /** Repair a generator a little; back to full, it works again. */
 export function repairGenerator(gen: Generator, amount: number): void {
   gen.health = Math.min(gen.maxHealth, gen.health + amount)
-  if (gen.health >= gen.maxHealth) gen.broken = false
+  if (gen.health >= gen.maxHealth) { gen.broken = false; gen.coverSquad = -1 }
 }
 
 /** Is this level lit right now? */

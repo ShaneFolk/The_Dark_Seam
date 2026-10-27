@@ -410,6 +410,8 @@ export const CONFIG = {
     veteran: { kills: 6, healthBonus: 15, skillBonus: 0.06, moraleLossScale: 0.7, moraleRecoverScale: 1.5 },
     /** A squad on patrol goes with the engineers to a knocked-out generator and guards them until it runs again. */
     coverRepairs: true,
+    /** A squad down to `at` soldiers or fewer joins the nearest other squad, if together they're no more than maxSize. */
+    merge: { at: 2, maxSize: 5 },
   },
 
   supplies: {
@@ -432,6 +434,18 @@ export const CONFIG = {
   },
 
   power: {
+    /**
+     * Engineers hold back from a knocked-out generator while Myrr are in sight in its
+     * room, or while an escort squad is on its way, until soldiers are within
+     * coverNear tiles (or they've waited maxSeconds).
+     */
+    waitForCover: { maxSeconds: 60, coverNear: 5 },
+    /**
+     * Repair ambush: once the hive has seen engineers come to fix a generator it broke
+     * (learnAfter times), the Taker that knocks one out stays behind on fresh resin,
+     * hidden, for lurkSeconds, and jumps any human who comes within strikeRange tiles.
+     */
+    ambush: { learnAfter: 1, lurkSeconds: 240, strikeRange: 5 },
     /** Health of each generator. 0 = broken; power is on while any generator works. */
     generatorHp: 300,
     /** Damage per second a Taker does to a generator. */

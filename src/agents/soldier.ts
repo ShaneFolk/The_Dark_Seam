@@ -122,6 +122,7 @@ const S = CONFIG.soldiers
 export function updateSquads(squads: Squad[], ctx: CombatContext): void {
   if (ctx.tick % CONFIG.perception.intervalTicks !== 0) return
   const seconds = CONFIG.perception.intervalTicks / TPS
+  if (ctx.tick % (5 * TPS) === 0) mergeSquads(squads, ctx)
   for (const squad of squads) {
     const alive = members(squad, ctx)
     if (squad.guardId >= 0 && !alive.length) ctx.commander.escortTo = null
@@ -246,6 +247,47 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
   }
 }
 
+// ---------------------------------------------------------------- merging
+
+/** Busy with something that can't just be handed over (carrying or setting up a turret). */
+const NO_MERGE = new Set<Order>(['fetchTurret', 'deployTurret', 'packTurret'])
+
+/**
+ * A squad down to a soldier or two joins the nearest other squad (not the command
+ * squad) with room, so nobody is left wandering alone. They bring their gear.
+ */
+function mergeSquads(squads: Squad[], ctx: CombatContext): void {
+  const G = S.merge
+  for (const small of squads) {
+    const mine = members(small, ctx)
+    if (!mine.length || mine.length > G.at || small.guardId >= 0 || small.carryingTurret || NO_MERGE.has(small.order)) continue
+    let best: Squad | null = null, bestD = Infinity
+    for (const other of squads) {
+      if (other === small || other.guardId >= 0) continue
+      const theirs = members(other, ctx)
+      if (!theirs.length || theirs.length + mine.length > G.maxSize) continue
+      const d = Math.abs(theirs[0].levelIndex - mine[0].levelIndex) * 200 + dist(theirs[0], mine[0])
+      if (d < bestD) { best = other; bestD = d }
+    }
+    if (!best) continue
+    for (const id of small.members) {
+      const a = ctx.agents[id]
+      if (!a || a.dead) continue
+      a.soldier!.squadId = best.id
+      best.members.push(id)
+    }
+    small.members = []
+    best.flares += small.flares
+    best.charges += small.charges
+    best.incendiaries += small.incendiaries
+    best.kills += small.kills
+    small.flares = small.charges = small.incendiaries = 0
+    small.mission = null
+    setOrder(small, 'patrol', null)
+    logEvent(ctx, 'command', `Squad ${small.id + 1} (${mine.length} left) joins Squad ${best.id + 1}`)
+  }
+}
+
 // ---------------------------------------------------------------- covering repairs
 
 /** Engineers working on (or heading to) this generator. */
@@ -284,11 +326,13 @@ function coverRepair(squad: Squad, squads: Squad[], ctx: CombatContext): void {
     const i = repairToCover(squad, squads, ctx)
     setOrder(squad, 'cover', null)
     squad.targetId = i
+    ctx.power.generators[i].coverSquad = squad.id
     logEvent(ctx, 'command', `Squad ${squad.id + 1} is covering the engineers at the ${ctx.power.generators[i].room.room.name}`)
   }
   const gen = ctx.power.generators[squad.targetId]
   const crew = gen ? engineersOn(gen, ctx) : []
   if (!gen || !gen.broken || !crew.length) {
+    if (gen?.coverSquad === squad.id) gen.coverSquad = -1
     setOrder(squad, 'patrol', null)
     return
   }

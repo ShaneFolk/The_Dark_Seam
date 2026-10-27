@@ -269,7 +269,9 @@ function isVolunteer(a: Agent): boolean {
 
 /** Put a volunteer in the smallest squad (not the command squad), with a rifle. */
 function enlist(a: Agent, squads: Squad[], ctx: CivilianContext): void {
-  const open = squads.filter((s) => s.guardId < 0)
+  const all = squads.filter((s) => s.guardId < 0)
+  const manned = all.filter((s) => members(s, ctx).length > 0)
+  const open = manned.length ? manned : all
   if (!open.length) return
   const squad = open.reduce((best, s) => (members(s, ctx).length < members(best, ctx).length ? s : best))
   const wasEmpty = members(squad, ctx).length === 0
