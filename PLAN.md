@@ -304,9 +304,15 @@ Move from colored shapes to a Dwarf Fortress (Steam version) style.
 - **Run timeline** on the end screen: a graph of humans vs Myrr over time, so you can see where a run turned. Needs the sim to record a few numbers every colony hour, plus a small chart on the summary screen.
 - **Watch the pad** *(only once there are later reinforcement drops)*: after the first drop ship, the Myrr watch the Landing Pad and ambush the next landings.
 - **Wait out the batteries:** once the Myrr notice turrets on battery, they hang back and rush when the batteries die.
-- **Escorted repairs:** with the power down, a squad guards the tech fixing the generator.
 - **Lights out at night:** dimmer surface lights on the night shift, so Takers find it easier to grab people.
 - **Guards learn flares:** cocoon guards exposed by a flare move to darker resin.
+- **Hive alarm:** when soldiers reach the nursery, Takers grab cocoons and run, so a raid becomes a chase.
+- **Drop ship under fire:** the Myrr hear the drop ship too and sometimes meet it at the pad.
+- **Last stand:** a lone soldier with no squad to join holds a doorway with a morale boost instead of retreating.
+- **Engineer toolkits:** engineers place a motion sensor at the generator door after a repair, so the next sabotage sets off an alert.
+- **Hive forgets:** if repair ambushes keep getting Takers killed, the hive stops lying in wait for a while (like the Commander's memory).
+- **Squad names:** a squad that absorbs another gets a "combined" tag, so the log reads more like a story.
+- *(Declined by Shane: Takers avoiding veteran squads.)*
 
 ## 9. Open Questions
 - Self-destruct: in or out?
