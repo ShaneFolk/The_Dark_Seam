@@ -52,6 +52,7 @@ import { logEvent } from '../core/events.ts'
 import { hatchingSoon, landingPad } from '../systems/commander.ts'
 import { who } from './describe.ts'
 import type { CivilianContext as CombatContext } from './civilian.ts'
+import { landingCost, startScouting, updateScout, waitForScout, type Scouting } from './scout.ts'
 
 export interface SoldierData {
   squadId: number
@@ -111,6 +112,8 @@ export interface Squad {
   veteran: boolean
   /** Ammo left in a turret the squad packed up and is carrying (null = a fresh one from the armory). */
   turretAmmo: number | null
+  /** A scout sent down an elevator ahead of the squad (scout.ts), or null. */
+  scouting: Scouting | null
 }
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -150,7 +153,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     }
     // Sensor alerts go to the nearest squad; other noises only if a member hears them.
     const alert = ctx.noises.find((n) => n.kind === 'sensor' && n.tick === ctx.tick && nearestSquad(squads, n, ctx) === squad)
-    const heard = alert ?? ctx.noises.find((n) => n.kind !== 'skitter' && n.kind !== 'sensor' && n.sourceId >= 0 &&
+    const heard = alert ?? ctx.noises.find((n) => n.kind !== 'skitter' && n.kind !== 'sensor' && n.kind !== 'elevator' && n.sourceId >= 0 &&
       !squad.members.includes(n.sourceId) && alive.some((s) => canHear(s, n, ctx.world.levels[s.levelIndex])))
 
     // Morale drifts: down while outnumbered, back up when it's quiet.
@@ -464,6 +467,7 @@ export function updateSoldier(agent: Agent, squads: Squad[], ctx: CombatContext)
   }
   const alive = members(squad, ctx)
   const leader = alive[0]
+  if (squad.scouting?.scoutId === agent.id && agent !== leader) return updateScout(agent, squad, leader, ctx)
   if (agent.soldier!.role === 'medic' && treatPatients(agent, ctx)) return
   if (agent === leader) leadSquad(agent, squad, alive, ctx)
   else follow(agent, leader, alive.indexOf(agent), ctx)
@@ -485,6 +489,8 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
   const s = agent.soldier!
   // Carrying a packed turret slows the leader (and so the squad).
   agent.speed = agent.baseSpeed * (squad.carryingTurret ? CONFIG.turrets.carrySpeedMultiplier : 1)
+  // A scout is checking the landing below: wait at the top of the elevator.
+  if (waitForScout(squad, agent, ctx)) return
 
   // Timed work at the goal: restocking, cutting a cocoon, pausing on patrol.
   if (squad.ticksLeft > 0) {
@@ -535,6 +541,7 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], ctx: CombatContex
     s.repathTick = ctx.tick + TPS
     walkTo(agent, goal, ctx)
   }
+  if (startScouting(squad, agent, alive, ctx)) return
   // Deep in the mines with resin ahead: light a flare to show anything hiding in it.
   if (squad.flares > 0 && agent.levelIndex > 0 && (ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) lightFlareAhead(squad, agent, ctx)
   // Burn the resin ahead before walking into it (after an ambush), unless lives are at stake.
@@ -876,7 +883,8 @@ function isCocooned(ctx: CombatContext, id: number): boolean {
 }
 
 function walkTo(agent: Agent, to: PathNode, ctx: CombatContext): void {
-  const path = findPath(ctx.world, tileOf(agent), to, 'human')
+  // Squads steer clear of an elevator whose landing a scout found watched.
+  const path = findPath(ctx.world, tileOf(agent), to, 'human', { linkCost: landingCost(ctx) })
   if (path?.length) {
     agent.path = path
     agent.state = { name: 'moving' }

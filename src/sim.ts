@@ -15,6 +15,7 @@ import { checkEnding, type Ending } from './systems/endings.ts'
 import { pruneFlares, updateCamouflage } from './systems/camouflage.ts'
 import { updateSwarm } from './agents/swarm.ts'
 import { planNest } from './agents/nest.ts'
+import { createLandingWatch, elevatorRide, noteArrival, planListening, planStakeout } from './agents/landing.ts'
 import { planDecoy } from './agents/decoy.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
@@ -69,7 +70,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false, unplaced: [], repairsSeen: 0, ambushLearned: false, decoy: null, nextDecoyTick: 0, lastRecallTick: -1e9 },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false, unplaced: [], repairsSeen: 0, ambushLearned: false, decoy: null, nextDecoyTick: 0, lastRecallTick: -1e9, landing: createLandingWatch() },
     squads: [],
     shots: [],
     supplies: new Map(),
@@ -130,6 +131,8 @@ export function step(sim: SimState): void {
   }
 
   movementHooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
+  movementHooks.onRide = (agent, kind, from, to, ticksLeft) => elevatorRide(agent, kind, from, to, ticksLeft, ctx)
+  movementHooks.onArrive = (agent, kind, from, to) => noteArrival(agent, kind, from, to, ctx)
   updateInfections(ctx)
   updateMedBays(sim.medbays, sim.agents, sim.world, hasPower(sim.power), ctx)
   updateCollapse(ctx)
@@ -150,6 +153,8 @@ export function step(sim: SimState): void {
   planDigging(ctx)
   planNest(ctx)
   planDecoy(ctx)
+  planListening(ctx)
+  planStakeout(ctx)
 
   updateSwarm(ctx)
   // Only agents that existed at the start of the tick act (new Broodlings wait a tick).
@@ -268,7 +273,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
     charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
     mission: null, missionGoal: null, missionReached: false,
-    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad, turretAmmo: null, searches: 0, kills: 0, veteran: false,
+    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad, turretAmmo: null, scouting: null, searches: 0, kills: 0, veteran: false,
   })
   for (let n = 0; n < size; n++) {
     const isMedic = n === size - 1

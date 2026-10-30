@@ -15,6 +15,7 @@
 //                  around it, then the ship is called. The hive hears it coming and swarms the pad;
 //                  whoever is on the pad when it leaves gets away
 
+import type { LandingNotes } from '../agents/scout.ts'
 import { CONFIG } from '../config.ts'
 import type { Agent } from '../agents/agent.ts'
 import { isFree } from '../agents/civilian.ts'
@@ -71,12 +72,14 @@ export interface CommanderState {
   second: boolean
   /** While the command squad goes somewhere (for supplies, turrets, or falling back), the Commander goes with them: where to. */
   escortTo: PathNode | null
+  /** What scouts found at the elevator landings (scout.ts). */
+  landings: LandingNotes
 }
 
 export function createCommander(agents: Agent[]): CommanderState {
   return {
     alarm: false, lockdown: false, locked: false, hiveKnown: false, lastSightingTick: -1e9,
-    reinforcementsCalled: false, reinforcementsDue: null, missingKnown: 0, probed: false, lastMustTick: -1e9, lastFailTick: -1e9,
+    reinforcementsCalled: false, reinforcementsDue: null, missingKnown: 0, probed: false, lastMustTick: -1e9, lastFailTick: -1e9, landings: {},
     evacuation: 'none', fortifyUntil: 0, shipLands: 0, shipLeaves: 0, shipHeard: false,
     burnResin: false,
     commanderId: agents.find((a) => a.kind === 'commander')?.id ?? -1,

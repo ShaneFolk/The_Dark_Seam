@@ -10,7 +10,7 @@
 import { CONFIG } from '../config.ts'
 import { MinHeap } from '../core/heap.ts'
 import { TILE_INFO, type Tile } from './tiles.ts'
-import { otherEnd } from './links.ts'
+import { otherEnd, type Link } from './links.ts'
 import type { World } from './loadWorld.ts'
 import type { Level } from './level.ts'
 import { breakSeconds, isObstacle } from '../systems/barriers.ts'
@@ -68,6 +68,8 @@ export interface PathOptions {
   avoidCost?: number
   /** Myrr only: may chew through building walls (Takers). */
   breakWalls?: boolean
+  /** Extra seconds for taking a link (humans steer around an elevator they think is watched). */
+  linkCost?: (link: Link, fromLevelId: number) => number
 }
 
 export function findPath(world: World, from: PathNode, to: PathNode, side: Side, opts: PathOptions = {}): PathNode[] | null {
@@ -143,7 +145,7 @@ export function findPath(world: World, from: PathNode, to: PathNode, side: Side,
         const end = otherEnd(link, level.id)
         const endIndex = levels.findIndex((l) => l.id === end.level)
         if (endIndex < 0) continue
-        relax(node, endIndex * perLevel + i, cost[node] + CONFIG.movement.linkSeconds[link.kind], endIndex, x, y)
+        relax(node, endIndex * perLevel + i, cost[node] + CONFIG.movement.linkSeconds[link.kind] + (opts.linkCost?.(link, level.id) ?? 0), endIndex, x, y)
       }
     }
   }

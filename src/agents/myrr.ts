@@ -29,6 +29,7 @@ import { callSwarm, type Swarm } from './swarm.ts'
 import { isFree, setMode } from './civilian.ts'
 import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 import { damageGenerator, type Generator } from '../systems/power.ts'
+import type { LandingWatch } from './landing.ts'
 import { pickWeighted as pickByScore, ramp, scoreList, type Option } from '../core/utility.ts'
 
 export type Task =
@@ -39,7 +40,7 @@ export type Task =
   | 'decoy' // a Taker making a diversion at a motion sensor (decoy.ts)
   | 'inject' | 'uproot' | 'root' | 'burrow' // Brood Mother (she also uses 'rest', 'hunt' and 'return')
   | 'grow' // Broodlings
-  | 'guard' | 'respond' // Spinebacks
+  | 'guard' | 'respond' | 'stakeout' // Spinebacks (stakeout: hiding by an elevator landing, landing.ts)
 
 export interface MyrrData {
   role: 'taker' | 'mother' | 'broodling' | 'spineback'
@@ -100,6 +101,8 @@ export interface HiveState {
   /** Times engineers were seen coming to fix a generator the hive broke; at CONFIG.power.ambush.learnAfter it starts lying in wait. */
   repairsSeen: number
   ambushLearned: boolean
+  /** What it knows about soldiers coming down the elevators (landing.ts). */
+  landing: LandingWatch
   /** Last tick the Brood Mother called her raiders home. */
   lastRecallTick: number
   /** The diversion under way, if any, and when the next may start. */

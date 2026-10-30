@@ -10,6 +10,7 @@
 // They kill humans who come near, and answer alarm scent wherever it goes up. Spare Spinebacks go raiding: they hunt
 // and carry people home like Takers, and only kill when they must.
 
+import { updateStakeout } from './landing.ts'
 import { CONFIG } from '../config.ts'
 import { canWalk, findPath } from '../world/pathfinding.ts'
 import { findRooms, roomAt, sameRoom } from '../world/rooms.ts'
@@ -138,7 +139,7 @@ function considerRecall(mother: Agent, ctx: HiveContext): void {
 }
 
 /** Free humans in her room. */
-function intruderCount(ctx: HiveContext): number {
+export function intruderCount(ctx: HiveContext): number {
   const home = ctx.hive.motherHome
   const room = (home && roomAt(ctx.world, home)) || findRooms(ctx.world, ['hive'])[0]
   if (!room) return 0
@@ -390,6 +391,7 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
   const m = agent.myrr!
   // Raiding: hunt and carry people home, like a Taker (only stronger).
   if (RAID_TASKS.has(m.task)) return updateTaker(agent, ctx)
+  if (m.task === 'stakeout') return updateStakeout(agent, ctx)
   const post = guardPost(agent, ctx)
   const chaseRange = L.guardRadius + 10
   const responding = m.task === 'respond'

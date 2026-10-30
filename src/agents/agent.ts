@@ -1,6 +1,7 @@
 // The base agent: anything that moves around the map.
 
 import type { PathNode, Side } from '../world/pathfinding.ts'
+import type { LinkKind } from '../world/links.ts'
 import type { CivilianData } from './civilian.ts'
 import type { MyrrData } from './myrr.ts'
 import type { WeaponState } from './combat.ts'
@@ -13,7 +14,7 @@ export type AgentState =
   | { name: 'idle'; ticksLeft: number }
   | { name: 'moving' }
   /** Climbing / riding a link; arrives on the next level when ticksLeft hits 0. */
-  | { name: 'crossing'; ticksLeft: number; to: PathNode }
+  | { name: 'crossing'; ticksLeft: number; to: PathNode; from: PathNode; kind: LinkKind | null }
 
 export interface Agent {
   id: number

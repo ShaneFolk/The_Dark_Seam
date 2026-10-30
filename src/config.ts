@@ -194,7 +194,7 @@ export const CONFIG = {
 
   noise: {
     /** How far each kind of noise carries, in tiles. */
-    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14, smash: 14, chew: 10, blast: 30, sensor: 0, screech: 22 },
+    radius: { skitter: 5, scream: 12, gunshot: 16, dig: 14, smash: 14, chew: 10, blast: 30, sensor: 0, screech: 22, elevator: 40 },
     /** Myrr make a skittering noise this often while moving, in seconds. */
     skitterEverySeconds: 2,
     /** Panicking humans scream this often, in seconds. */
@@ -214,6 +214,7 @@ export const CONFIG = {
     blast: 0.1,
     sensor: 0,
     screech: 0.1,
+    elevator: 0,
     /** Hearing alone never raises fear above this (enough to hide, not to flee). */
     hearingCap: 0.35,
     /** Fear lost per second when nothing scary is sensed. */
@@ -554,6 +555,31 @@ export const CONFIG = {
     cooldownSeconds: 600,
     /** Carrying a cocoon slows a Taker to this share of its speed. */
     haulSpeedMultiplier: 0.7,
+  },
+
+  landing: {
+    /** A human riding the elevator makes it clank this often, heard at both ends (the ladder is quiet). */
+    noiseEverySeconds: 2,
+    /** At most this many Myrr come to look when they hear the elevator. */
+    listeners: 3,
+    /** After Myrr were sent to look at an elevator end, the next clank there draws nobody new for this long. */
+    listenCooldownSeconds: 30,
+    /**
+     * Landing scouts: a squad of at least minSquad heading down by elevator stops at the top and
+     * sends one soldier down to look around for lookSeconds, then back up. If the scout sees Myrr,
+     * dies, or isn't back within maxSeconds, that elevator is "hot" for hotSeconds and squads
+     * take a ladder instead (hotPenaltySeconds is added to the elevator in their route planning).
+     * A clean look keeps the landing "clear" (no more scouting there) for clearSeconds.
+     */
+    scout: { minSquad: 3, startTiles: 2, lookSeconds: 6, maxSeconds: 45, hotSeconds: 300, clearSeconds: 120, hotPenaltySeconds: 600 },
+    /**
+     * Stakeouts: after seeing squads come down an elevator learnAfter times (rides at least
+     * rideGapSeconds apart), the hive has up to maxLurkers spare Spinebacks hide on resin near the
+     * bottom for lurkSeconds, every everySeconds. They strike at anyone within strikeRange.
+     * Hiding spots are hideMinTiles to hideMaxTiles from the elevator. Raiding Spinebacks and guards beyond
+     * homeGuards + keepGuards are sent, only within activeSeconds of the elevator being heard, and they hurry home when soldiers get into the Brood Mother's chamber.
+     */
+    stakeout: { keepGuards: 1, activeSeconds: 180, learnAfter: 2, rideGapSeconds: 20, maxLurkers: 2, lurkSeconds: 240, everySeconds: 60, strikeRange: 7, hideMinTiles: 3, hideMaxTiles: 6 },
   },
 
   charges: {

@@ -3,7 +3,8 @@
 import { CONFIG } from '../config.ts'
 import type { World } from '../world/loadWorld.ts'
 import { speedFactor } from '../world/pathfinding.ts'
-import { otherEnd } from '../world/links.ts'
+import { otherEnd, type LinkKind } from '../world/links.ts'
+import type { PathNode } from '../world/pathfinding.ts'
 import { Tile } from '../world/tiles.ts'
 import { breakRate, hitObstacle, isObstacle } from '../systems/barriers.ts'
 import type { Agent } from './agent.ts'
@@ -11,8 +12,14 @@ import type { Agent } from './agent.ts'
 const SECONDS_PER_TICK = 1 / CONFIG.sim.ticksPerSecond
 const TPS = CONFIG.sim.ticksPerSecond
 
-/** Hooks the sim sets each tick so movement can make noise when breaking things. */
-export const movementHooks: { onBreak?: (agent: Agent, kind: 'smash' | 'chew') => void } = {}
+/** Hooks the sim sets each tick so movement can make noise (breaking things, riding the elevator) and the hive can notice arrivals. */
+export const movementHooks: {
+  onBreak?: (agent: Agent, kind: 'smash' | 'chew') => void
+  /** Every tick of a ride or climb between levels. */
+  onRide?: (agent: Agent, kind: LinkKind | null, from: PathNode, to: PathNode, ticksLeft: number) => void
+  /** Just arrived on the new level. */
+  onArrive?: (agent: Agent, kind: LinkKind | null, from: PathNode, to: PathNode) => void
+} = {}
 
 /** Advance one tick. Returns true when the path is finished. */
 /** Actually on the move (some agents keep the 'moving' state after arriving). */
@@ -22,13 +29,16 @@ export function isMoving(agent: Agent): boolean {
 
 export function followPath(agent: Agent, world: World): boolean {
   if (agent.state.name === 'crossing') {
-    agent.state.ticksLeft--
-    if (agent.state.ticksLeft > 0) return false
-    const to = agent.state.to
+    const ride = agent.state
+    ride.ticksLeft--
+    movementHooks.onRide?.(agent, ride.kind, ride.from, ride.to, ride.ticksLeft)
+    if (ride.ticksLeft > 0) return false
+    const to = ride.to
     agent.levelIndex = to.levelIndex
     agent.x = to.x + 0.5
     agent.y = to.y + 0.5
     agent.state = { name: 'moving' }
+    movementHooks.onArrive?.(agent, ride.kind, ride.from, to)
     return agent.path.length === 0
   }
 
@@ -45,7 +55,8 @@ export function followPath(agent: Agent, world: World): boolean {
         return world.levels[next.levelIndex].id === end.level
       })
       const seconds = link ? CONFIG.movement.linkSeconds[link.kind] : 0
-      agent.state = { name: 'crossing', ticksLeft: Math.max(1, Math.round(seconds / SECONDS_PER_TICK)), to: next }
+      const from = { levelIndex: agent.levelIndex, x: next.x, y: next.y }
+      agent.state = { name: 'crossing', ticksLeft: Math.max(1, Math.round(seconds / SECONDS_PER_TICK)), to: next, from, kind: link?.kind ?? null }
       return false
     }
 

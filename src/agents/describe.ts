@@ -29,7 +29,7 @@ export function describeAgent(agent: Agent, tick: number): string {
   const m = agent.myrr
   if (m?.role === 'mother') return `Brood Mother #${agent.id} · ${m.task === 'inject' ? `injecting #${m.targetId}` : m.task} · health ${Math.round(agent.health)}${m.lastChoice ? ` · last chose ${m.lastChoice}` : ''}`
   if (m?.role === 'broodling') return `Broodling #${agent.id} · grows up in ${Math.ceil(m.ticksLeft / 20)}s`
-  if (m?.role === 'spineback') return `Spineback #${agent.id} · ${m.task === 'respond' ? 'answering alarm' : 'guarding'} · health ${Math.round(agent.health)}`
+  if (m?.role === 'spineback') return `Spineback #${agent.id} · ${m.task === 'respond' ? 'answering alarm' : m.task === 'stakeout' ? 'lying in wait by the elevator' : 'guarding'} · health ${Math.round(agent.health)}`
   if (agent.dead) return `${agent.kind} #${agent.id} · dead`
   if (m) return `Taker #${agent.id}${m.task === 'dig' ? ' · DIGGING' : m.task === 'haulCarry' ? ' · CARRYING A COCOON' : m.task === 'decoy' ? ' · DECOY' : ''} · health ${Math.round(agent.health)} · ${m.task}${m.targetId >= 0 ? ` · target #${m.targetId}` : ''}${m.lastChoice ? ` · last chose ${m.lastChoice}` : ''}`
   return `Myrr #${agent.id} · ${agent.state.name}`
