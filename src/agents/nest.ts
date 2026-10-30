@@ -8,13 +8,16 @@
 // the soldiers have gone, it picks a room nearby on Level 3 and Takers carry the
 // cocoons there one each; new cocoons go there too. So a second assault can't
 // just repeat the first one; the soldiers have to find them again.
+// It never picks a room where an elevator or ladder comes down (like the Lower
+// Landing): soldiers arriving there would step straight into the nest.
 //
 // A Taker hauling a cocoon is slowed, and soldiers who see one will chase it
 // (like a Taker carrying a person). Kill it and the cocoon is left where it fell.
 
 import { CONFIG } from '../config.ts'
 import { findPath, type PathNode } from '../world/pathfinding.ts'
-import { cornerTiles, findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
+import { cornerTiles, findRooms, randomTileIn, roomAt, roomTiles, sameRoom, type RoomRef } from '../world/rooms.ts'
+import { Tile } from '../world/tiles.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { isFree } from './civilian.ts'
 import { followPath } from './movement.ts'
@@ -49,7 +52,7 @@ export function planNest(ctx: HiveContext): void {
   // A nearby Level 3 room the Myrr can reach (not the Brood Mother's Deep Chamber): one of the two closest.
   const from = tileOf(cocoons[0])
   const options = findRooms(ctx.world, ['other', 'hive'], room.levelIndex)
-    .filter((r) => !sameRoom(r, room) && r.room.name !== 'Deep Chamber' && !r.room.outdoor)
+    .filter((r) => !sameRoom(r, room) && r.room.name !== 'Deep Chamber' && !r.room.outdoor && !hasHumanArrival(ctx, r))
     .filter((r) => !!findPath(ctx.world, from, randomTileIn(ctx.world, r, ctx.rng), 'myrr'))
     .sort((a, b) => Math.hypot(a.room.centerX - room.room.centerX, a.room.centerY - room.room.centerY) -
       Math.hypot(b.room.centerX - room.room.centerX, b.room.centerY - room.room.centerY))
@@ -60,6 +63,15 @@ export function planNest(ctx: HiveContext): void {
   logEvent(ctx, 'hive', `The hive is moving its cocoons to the ${hive.nursery.room.name}`)
   for (const c of cocoons) if (!hive.unplaced.includes(c.id)) hive.unplaced.push(c.id)
   assignHaulers(ctx)
+}
+
+/** Does a human elevator or ladder come down into this room? */
+function hasHumanArrival(ctx: HiveContext, ref: RoomRef): boolean {
+  const level = ctx.world.levels[ref.levelIndex]
+  return roomTiles(ctx.world, ref).some(({ x, y }) => {
+    const t = level.tiles[y * level.width + x]
+    return t === Tile.Elevator || t === Tile.Ladder
+  })
 }
 
 /** Give each cocoon waiting to be carried a free Taker (nearest first), if it doesn't have one. */

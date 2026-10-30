@@ -275,7 +275,7 @@ Each phase ends with something runnable. Don't start the next phase until the cu
 - [x] The Commander goes with his command squad whenever it leaves its post (supplies, turrets, falling back)
 - [x] Broodlings stay where they hatched; Spineback guards share their posts between cocoons and Broodlings
 - [x] Squads search the alert spot (2 places nearby) then move on, giving up after 10 s without contact
-- [x] Cocoons are carried: the Brood Mother wraps captives where they lie and Takers carry each cocoon to the nursery; nest moves go to a nearby room
+- [x] Cocoons are carried: the Brood Mother wraps captives where they lie and Takers carry each cocoon to the nursery; nest moves go to a nearby room, never one where an elevator or ladder comes down (no nest at the Lower Landing)
 - [x] Drop-ship soldiers come out of the ship; only engineers (about 30% of techs) repair generators, 2 per generator, and a knocked-out generator stays down until fully repaired
 - [x] Bigger start for more action: 9 Takers, 6 Spinebacks, 3 squads of 3
 - [x] Veterans: a squad whose soldiers kill 6 Myrr gets +15 health and +0.06 weapon skill each, loses less morale and recovers it faster (★ in the sidebar)
