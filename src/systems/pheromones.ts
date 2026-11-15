@@ -59,8 +59,28 @@ export function decayPheromones(ph: Pheromones): void {
   }
 }
 
-/** The strongest spots of one scent across all levels, strongest first. */
-export function strongest(ph: Pheromones, kind: ScentKind, world: World, count: number, min: number): { at: PathNode; strength: number }[] {
+type Spot = { at: PathNode; strength: number }
+
+/** Recent strongest() answers, so many Myrr asking within a moment don't each scan every map. */
+const recent = new WeakMap<Pheromones, Map<string, { tick: number; spots: Spot[] }>>()
+
+/**
+ * The strongest spots of one scent across all levels, strongest first. With `tick`,
+ * an answer up to CONFIG.pheromones.cacheTicks old is reused (scent changes slowly).
+ */
+export function strongest(ph: Pheromones, kind: ScentKind, world: World, count: number, min: number, tick?: number): Spot[] {
+  if (tick === undefined) return scanStrongest(ph, kind, world, count, min)
+  let cache = recent.get(ph)
+  if (!cache) recent.set(ph, (cache = new Map()))
+  const key = `${kind}|${count}|${min}`
+  const hit = cache.get(key)
+  if (hit && tick >= hit.tick && tick - hit.tick < CONFIG.pheromones.cacheTicks) return hit.spots
+  const spots = scanStrongest(ph, kind, world, count, min)
+  cache.set(key, { tick, spots })
+  return spots
+}
+
+function scanStrongest(ph: Pheromones, kind: ScentKind, world: World, count: number, min: number): Spot[] {
   const best: { at: PathNode; strength: number }[] = []
   ph[kind].forEach((map, levelIndex) => {
     const w = world.levels[levelIndex].width

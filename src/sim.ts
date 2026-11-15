@@ -19,7 +19,7 @@ import { createLandingWatch, elevatorRide, noteArrival, planListening, planStake
 import { planDecoy } from './agents/decoy.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
-import { soldierHurt, soldierKilled, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
+import { newSquad, soldierHurt, soldierKilled, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
 import { countResin, healMyrr, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
 import { createPheromones, decayPheromones, type Pheromones } from './systems/pheromones.ts'
@@ -268,20 +268,18 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
   const { world, rng } = sim
   const squadId = sim.squads.length
   const patrol: RoomRef[] = beat.flatMap((p) => findRooms(world, p.types, p.level).filter((r) => !r.room.outdoor))
-  sim.squads.push({
-    id: squadId, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
-    lastContactTick: sim.tick, patrol, patrolIndex: rng.int(0, Math.max(0, patrol.length - 1)), ticksLeft: 0, welded: false,
-    charges: squadId < CONFIG.charges.count ? 1 : 0, carryingTurret: false,
-    mission: null, missionGoal: null, missionReached: false,
-    incendiaries: CONFIG.incendiaries.perSquad, burnAt: null, riskTaken: false, guardId: -1, flares: CONFIG.flares.perSquad, turretAmmo: null, scouting: null, searches: 0, kills: 0, veteran: false,
-  })
+  const squad = newSquad(squadId, patrol, rng.int(0, Math.max(0, patrol.length - 1)), sim.tick)
+  squad.charges = squadId < CONFIG.charges.count ? 1 : 0
+  squad.incendiaries = CONFIG.incendiaries.perSquad
+  squad.flares = CONFIG.flares.perSquad
+  sim.squads.push(squad)
   for (let n = 0; n < size; n++) {
     const isMedic = n === size - 1
     const civ = createCivilianData(world, rng, 'soldier')!
     const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', at ?? randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
     agent.soldier = {
-      squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, targetId: -1,
+      squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, pathGoal: -1, samePathUntil: 0, targetId: -1,
       stabilizers: isMedic ? CONFIG.soldiers.stabilizers : 0, patientId: -1, workTicks: 0,
     }
     // The second soldier of the first squads carries a flamethrower instead of a rifle.

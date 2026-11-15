@@ -7,6 +7,8 @@
 //   npm run batch -- --set hive.spinebacks=6 --set commander.assault.minCocoons=3
 //                                          try different tuning without editing config.ts
 //   npm run batch -- --json results.json   also save every run's numbers to a file
+//   npm run batch -- --seeds 7 --events    print each run's event log as it went
+//   npm run batch -- --events rescue,cure  ...only events of these kinds
 //
 // The sim never touches the screen, so it runs here exactly as it does in the
 // browser: the same seed gives the same run.
@@ -31,12 +33,17 @@ const args = process.argv.slice(2)
 let seeds: number[] = range(1, 20)
 let maxDays = 6
 let jsonPath: string | null = null
+/** Print event logs: null = no, [] = every kind, else only these kinds. */
+let eventKinds: string[] | null = null
 for (let i = 0; i < args.length; i++) {
   const a = args[i], v = args[i + 1]
   if (a === '--seeds') { seeds = parseSeeds(v); i++ }
   else if (a === '--days') { maxDays = Number(v); i++ }
   else if (a === '--json') { jsonPath = v; i++ }
   else if (a === '--set') { setConfig(v); i++ }
+  else if (a === '--events') {
+    if (v && !v.startsWith('--')) { eventKinds = v.split(','); i++ } else eventKinds = []
+  }
   else throw new Error(`Unknown option ${a}`)
 }
 
@@ -57,6 +64,11 @@ for (const seed of seeds) {
     ms: performance.now() - started,
   }
   results.push(r)
+  if (eventKinds) {
+    for (const ev of sim.events) {
+      if (!eventKinds.length || eventKinds.includes(ev.kind)) console.log(`    ${formatClock(ev.tick).padEnd(15)} ${ev.kind.padEnd(8)} ${ev.text}`)
+    }
+  }
   const when = sim.ending ? formatClock(sim.ending.tick) : `still going after ${maxDays} days`
   console.log(`seed ${String(seed).padStart(4)}  ${r.ending.padEnd(13)} ${when.padEnd(26)} taken ${pad(r.stats.captures)}  killed ${pad(myrrKilled(r.stats))} Myrr / ${pad(r.stats.civiliansKilled + r.stats.soldiersKilled)} humans  (${(r.ms / 1000).toFixed(1)}s)`)
 }

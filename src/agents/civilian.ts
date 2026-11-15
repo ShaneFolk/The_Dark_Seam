@@ -350,7 +350,8 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   let company = 0
 
   for (const other of ctx.agents) {
-    if (other === agent || other.levelIndex !== agent.levelIndex) continue
+    // Corpses stay in the agent list; a dead Myrr is no threat.
+    if (other === agent || other.dead || other.levelIndex !== agent.levelIndex) continue
     if (other.side === 'myrr') {
       if (!canSee(agent, other, level, humanSight(ctx.power, agent.levelIndex))) continue
       const dist = Math.hypot(other.x - agent.x, other.y - agent.y)

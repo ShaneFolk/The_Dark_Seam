@@ -441,7 +441,9 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
     }
   }
   const far = post.at && (agent.levelIndex !== post.at.levelIndex || Math.hypot(post.at.x - agent.x, post.at.y - agent.y) > post.radius + 0.5)
-  if (far || ctx.rng.chance(1 / (L.guardWanderSeconds * TPS))) guardSpot(agent, post, ctx)
+  // A guard that couldn't find a way to its post waits a moment before trying again.
+  if (ctx.tick < m.repathTick) return
+  if ((far || ctx.rng.chance(1 / (L.guardWanderSeconds * TPS))) && !guardSpot(agent, post, ctx)) m.repathTick = ctx.tick + Math.round(L.guardRetrySeconds * TPS)
 }
 
 /**
@@ -463,7 +465,7 @@ function guardPost(agent: Agent, ctx: HiveContext): { at: Agent | null; radius: 
 
 /** Go to the strongest alarm, if it's loud enough and enough guards stay behind. */
 function answerAlarm(agent: Agent, ctx: CombatContext): void {
-  const alarm = strongest(ctx.pheromones, 'alarm', ctx.world, 8, CONFIG.pheromones.alarmRespond).find(({ at }) =>
+  const alarm = strongest(ctx.pheromones, 'alarm', ctx.world, 8, CONFIG.pheromones.alarmRespond, ctx.tick).find(({ at }) =>
     (at.levelIndex === agent.levelIndex || at.levelIndex === agent.levelIndex - 1) &&
     Math.hypot(at.x - agent.x, at.y - agent.y) <= CONFIG.pheromones.alarmRange)
   if (!alarm) return
@@ -478,9 +480,9 @@ function answerAlarm(agent: Agent, ctx: CombatContext): void {
   agent.state = { name: 'moving' }
 }
 
-/** Walk to a spot near the post, on resin if there is any (to hide there). */
-function guardSpot(agent: Agent, post: { at: Agent | null; radius: number }, ctx: HiveContext): void {
-  if (!post.at) return
+/** Walk to a spot near the post, on resin if there is any (to hide there). False if there's no way there. */
+function guardSpot(agent: Agent, post: { at: Agent | null; radius: number }, ctx: HiveContext): boolean {
+  if (!post.at) return true
   const level = ctx.world.levels[post.at.levelIndex]
   const cx = Math.floor(post.at.x), cy = Math.floor(post.at.y), r = Math.floor(post.radius)
   const spots: PathNode[] = []
@@ -493,10 +495,10 @@ function guardSpot(agent: Agent, post: { at: Agent | null; radius: number }, ctx
   const pool = onResin.length ? onResin : spots
   const goal = pool.length ? ctx.rng.pick(pool) : tileOf(post.at)
   const path = findPath(ctx.world, tileOf(agent), goal, 'myrr')
-  if (path?.length) {
-    agent.path = path
-    agent.state = { name: 'moving' }
-  }
+  if (!path?.length) return false
+  agent.path = path
+  agent.state = { name: 'moving' }
+  return true
 }
 
 /** A short crawl to a spot within broodlingRoam tiles of where it hatched. */

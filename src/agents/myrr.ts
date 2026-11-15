@@ -12,7 +12,7 @@ import { CONFIG } from '../config.ts'
 import type { Rng } from '../core/rng.ts'
 import type { World } from '../world/loadWorld.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
-import { findRooms, randomTileIn, roomTiles, type RoomRef } from '../world/rooms.ts'
+import { findRooms, randomTileIn, roomAt, roomTiles, type RoomRef } from '../world/rooms.ts'
 import { carryCocoon, updateHaul } from './nest.ts'
 import { updateDecoy, type Decoy } from './decoy.ts'
 import { depositTrail, strongestTrail, type Pheromones } from '../systems/pheromones.ts'
@@ -559,10 +559,11 @@ function deliver(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   const captive = ctx.agents[m.targetId]
   const mother = ctx.agents[ctx.hive.motherId]
   // Not home yet (e.g. the first route failed): try again.
-  if (mother && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > 4)) {
+  if (mother && !mother.dead && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > 4)) {
     if (goTo(agent, ctx, nearMother(ctx))) return
   }
-  if (captive?.civ) {
+  // A captive that hatched on the way is already dead: nothing to hand over.
+  if (captive?.civ && !captive.dead) {
     captive.civ.mode = 'captive'
     const spot = nearMother(ctx)
     captive.levelIndex = spot.levelIndex
@@ -651,12 +652,13 @@ function goTo(agent: Agent, ctx: HiveContext, to: PathNode): boolean {
   return true
 }
 
-/** A hive-core tile close to the Brood Mother. */
+/** A tile in the Brood Mother's room (Hive Core, or Deep Chamber after she retreats) close to her. */
 function nearMother(ctx: HiveContext): PathNode {
   const mother = ctx.agents[ctx.hive.motherId]
-  const hive = findRooms(ctx.world, ['hive'])[0]
+  const home = ctx.hive.motherHome
+  const hive = (home && roomAt(ctx.world, home)) ?? findRooms(ctx.world, ['hive'])[0]
   const tiles = roomTiles(ctx.world, hive).filter(
-    (t) => !mother || Math.hypot(t.x + 0.5 - mother.x, t.y + 0.5 - mother.y) <= 4,
+    (t) => !mother || mother.dead || Math.hypot(t.x + 0.5 - mother.x, t.y + 0.5 - mother.y) <= 4,
   )
   return ctx.rng.pick(tiles.length ? tiles : roomTiles(ctx.world, hive))
 }

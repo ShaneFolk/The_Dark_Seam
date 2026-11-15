@@ -22,6 +22,7 @@ import { isFree } from '../agents/civilian.ts'
 import type { CivilianContext } from '../agents/civilian.ts'
 import { members, movableTurret, type Squad } from '../agents/soldier.ts'
 import { logEvent } from '../core/events.ts'
+import { formatDuration } from '../core/clock.ts'
 import { findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 import { Tile } from '../world/tiles.ts'
@@ -163,7 +164,7 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
     cmd.reinforcementsCalled = true
     cmd.reinforcementsDue = ctx.tick + Math.round(R.delaySeconds * TPS)
     const why = cmd.missingKnown >= R.missingToCall ? `${cmd.missingKnown} people are missing` : 'too many soldiers are down'
-    logEvent(ctx, 'command', `The Commander realizes ${why} and radios for help: a drop ship with ${R.squads} squads lands in ${Math.round(R.delaySeconds / 60)} minutes`)
+    logEvent(ctx, 'command', `The Commander realizes ${why} and radios for help: a drop ship with ${R.squads} squads lands in ${formatDuration(R.delaySeconds * TPS)}`)
   }
 
   // Evacuation when few civilians are left free.
@@ -179,7 +180,7 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
     cmd.shipLands = ctx.tick + Math.round(C.evacuation.shipDelaySeconds * TPS)
     const turrets = padTurrets(ctx)
     const state = turrets >= C.evacuation.padTurrets ? `fortified with ${turrets} turrets` : turrets ? `only ${turrets} turret${turrets === 1 ? '' : 's'} could be set up` : 'no turrets left to set up; the squads hold the pad'
-    logEvent(ctx, 'command', `Landing Pad: ${state}. The ship is called, landing in ${Math.round(C.evacuation.shipDelaySeconds / 60)} minutes`)
+    logEvent(ctx, 'command', `Landing Pad: ${state}. The ship is called, landing in ${formatDuration(C.evacuation.shipDelaySeconds * TPS)}`)
   }
 }
 
@@ -280,7 +281,7 @@ function enlist(a: Agent, squads: Squad[], ctx: CivilianContext): void {
   const wasEmpty = members(squad, ctx).length === 0
   const before = who(a).toLowerCase()
   a.kind = 'soldier'
-  a.soldier = { squadId: squad.id, role: 'soldier', repathTick: 0, targetId: -1, stabilizers: 0, patientId: -1, workTicks: 0 }
+  a.soldier = { squadId: squad.id, role: 'soldier', repathTick: 0, pathGoal: -1, samePathUntil: 0, targetId: -1, stabilizers: 0, patientId: -1, workTicks: 0 }
   a.weapon = makeWeapon('rifle', CONFIG.soldiers.volunteerSkill)
   a.baseSpeed = a.speed = CONFIG.movement.humanSpeed
   a.path = []

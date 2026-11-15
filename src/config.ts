@@ -331,6 +331,8 @@ export const CONFIG = {
     chamberRadius: 7,
     /** Guards shift position about this often when nothing is happening, in seconds. */
     guardWanderSeconds: 30,
+    /** A guard with no way to its post tries again after this long, in seconds. */
+    guardRetrySeconds: 2,
     /** After she dies, the other Myrr lose this much health per second. */
     collapseDecayPerSecond: 2,
   },
@@ -377,6 +379,12 @@ export const CONFIG = {
     /** Someone cut from a cocoon is weak: health at most this, walking at this share of normal speed until cured. */
     rescuedHealth: 30,
     rescuedSpeed: 0.6,
+    /** On an assault, up to this many members split off to walk a freed person to the med bay. */
+    escortSize: 2,
+    /** A squad leader re-plans its route to an unchanged goal only this often, in seconds. */
+    repathSameGoalSeconds: 5,
+    /** "The Commander takes the risk…" is logged at most once per squad in this many seconds. */
+    riskLogCooldownSeconds: 120,
     /** A brave civilian who survives being taken (free again, not infected) volunteers: joins the smallest squad with a rifle, at this skill. */
     volunteerSkill: 0.45,
     /** Medics: stabilizers carried (refilled at the armory for now), and how long each job takes. */
@@ -713,6 +721,8 @@ export const CONFIG = {
     alarmHalfLifeSeconds: 30,
     /** Spinebacks answer alarm at least this strong. */
     alarmRespond: 1.5,
+    /** "Where is the strongest scent?" answers are reused for this many ticks (saves scanning every map each time). */
+    cacheTicks: 20,
     /** Spinebacks only answer alarms within this many tiles, on their level or the one above. */
     alarmRange: 45,
     /** Danger scent: laid where a Myrr is shot or killed (spread over a small area); fades slowly. */
@@ -759,5 +769,14 @@ export const CONFIG = {
     zoomStep: 1.15,
     /** Keyboard pan speed, in screen pixels per second. */
     panSpeed: 900,
+    /** A press that moves less than this (CSS pixels) is a tap/click, not a drag. */
+    tapSlopPx: 8,
+    /** Clicking picks an agent within this many tiles; a finger is less precise, so taps reach further. */
+    pickRadiusMouse: 0.75,
+    pickRadiusTouch: 1.5,
+    /** Canvas resolution is capped at this many pixels per CSS pixel (phones report 3+, which costs a lot). */
+    maxPixelRatio: 2,
+    /** Screens narrower than this (CSS pixels) use the phone layout; keep in sync with style.css. */
+    phoneWidth: 700,
   },
 } as const

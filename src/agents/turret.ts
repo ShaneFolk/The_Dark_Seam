@@ -25,7 +25,7 @@ export function deploySite(ctx: CombatContext, reserved: PathNode[] = []): PathN
   const taken: PathNode[] = [...ctx.agents.filter((a) => a.kind === 'turret' && !a.dead).map((a) => ({ levelIndex: a.levelIndex, x: a.x, y: a.y })), ...reserved]
   const free = (p: PathNode) => !taken.some((x) => x.levelIndex === p.levelIndex && Math.hypot(x.x - p.x, x.y - p.y) < C.spacing)
 
-  for (const hot of strongest(ctx.pheromones, 'danger', ctx.world, 10, C.deployDanger)) {
+  for (const hot of strongest(ctx.pheromones, 'danger', ctx.world, 10, C.deployDanger, ctx.tick)) {
     if (hot.at.levelIndex > 1) continue
     const spot = standableNear(ctx.world, hot.at)
     if (spot && free(spot)) return spot

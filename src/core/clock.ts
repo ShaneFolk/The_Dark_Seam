@@ -22,3 +22,11 @@ export function formatClock(tick: number): string {
   const m = Math.floor((total % 1) * 60)
   return `Day ${day} · ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
+
+/** A span of sim ticks in colony time, e.g. "40 minutes" or "3 hours". */
+export function formatDuration(ticks: number): string {
+  const minutes = Math.round((ticks / TICKS_PER_HOUR) * 60)
+  if (minutes < 90) return `${minutes} minute${minutes === 1 ? '' : 's'}`
+  const hours = Math.round(minutes / 60)
+  return `${hours} hours`
+}
