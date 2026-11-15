@@ -28,6 +28,7 @@ const COLORS = {
   choiceBack: 'rgba(10, 12, 16, 0.75)',
   choiceText: '#ffe08a',
   hover: 'rgba(255, 255, 255, 0.35)',
+  selected: '#38b2c9',
 }
 
 /** Tiles that count as wall when choosing a wall's edges and a door's direction. */
@@ -61,6 +62,8 @@ export class Renderer {
   private sprites = false
   /** Fight marks, resin glints, night and flashlights (sprite mode only). */
   private effects = new Effects()
+  /** Was the screen taller than wide last frame (to refit the map when a phone is turned). */
+  private portrait: boolean | null = null
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -89,6 +92,10 @@ export class Renderer {
     const worldW = level.width * base
     const worldH = level.height * base
 
+    // Turning a phone: fit every level to the new shape again.
+    const portrait = h > w
+    if (this.portrait !== null && portrait !== this.portrait) for (const c of view.cameras) c.fitted = false
+    this.portrait = portrait
     if (!camera.fitted) camera.fit(worldW, worldH, w, h)
     camera.clamp(worldW, worldH)
 
@@ -128,7 +135,26 @@ export class Renderer {
       ctx.lineWidth = 2
       ctx.strokeRect(ox + hovered.x * tile, oy + hovered.y * tile, tile, tile)
     }
-    this.drawDebug(sim, level, camera, hovered)
+    this.drawSelection(sim, view, ox, oy, tile)
+    // The readout would cover most of a phone screen; the inspector does that job there.
+    if (w > CONFIG.render.phoneWidth) this.drawDebug(sim, level, camera, hovered)
+  }
+
+  /** A ring around the selected agent (or a box around the selected tile). */
+  private drawSelection(sim: SimState, view: ViewState, ox: number, oy: number, tile: number): void {
+    const sel = view.selected
+    if (!sel || sel.levelIndex !== view.levelIndex) return
+    const { ctx } = this
+    ctx.strokeStyle = COLORS.selected
+    ctx.lineWidth = 2
+    const agent = sel.agentId !== undefined ? sim.agents[sel.agentId] : null
+    if (agent) {
+      ctx.beginPath()
+      ctx.arc(ox + agent.x * tile, oy + agent.y * tile, Math.max(6, tile * 0.75), 0, Math.PI * 2)
+      ctx.stroke()
+    } else {
+      ctx.strokeRect(ox + sel.x * tile, oy + sel.y * tile, tile, tile)
+    }
   }
 
   private hoveredTile(level: Level, camera: Camera, view: ViewState, w: number, h: number): { x: number; y: number } | null {
@@ -146,6 +172,8 @@ export class Renderer {
   }
 
   private drawLevel(level: Level, ox: number, oy: number, tile: number): void {
+    // Keep only the shown level's image: each is several megabytes, too much for phones.
+    for (const id of this.levelCache.keys()) if (id !== level.id) { this.levelCache.delete(id); this.changesSeen.delete(id) }
     let cache = this.levelCache.get(level.id)
     const seen = this.changesSeen.get(level.id) ?? 0
     const total = level.changesTrimmed + level.changes.length
@@ -358,7 +386,7 @@ export class Renderer {
 
   /** Match the canvas's pixel size to its on-screen size (sharp on high-DPI screens). */
   private resizeToWindow(): void {
-    const dpr = window.devicePixelRatio || 1
+    const dpr = Math.min(CONFIG.render.maxPixelRatio, window.devicePixelRatio || 1)
     const w = Math.round(this.canvas.clientWidth * dpr)
     const h = Math.round(this.canvas.clientHeight * dpr)
     if (this.canvas.width !== w || this.canvas.height !== h) {

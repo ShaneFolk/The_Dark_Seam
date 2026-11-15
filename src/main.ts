@@ -10,6 +10,8 @@ import { Input } from './render/input.ts'
 import { Sidebar } from './render/sidebar.ts'
 import { showSummary } from './render/summary.ts'
 import { loadSprites } from './render/sprites.ts'
+import { Inspector, pickAt } from './render/inspector.ts'
+import { followSelected } from './render/view.ts'
 
 /** Read ?seed=123 from the URL, or fall back to the default seed. */
 function getSeed(): number {
@@ -39,8 +41,15 @@ try {
 const renderer = new Renderer(canvas)
 void loadSprites() // the renderer switches to sprites once the sheet has loaded
 const view = createView(sim.world.levels.length)
-const selectLevel = (levelIndex: number) => { view.levelIndex = levelIndex }
-const input = new Input(canvas, view, selectLevel)
+const selectLevel = (levelIndex: number) => { view.levelIndex = levelIndex; view.following = false }
+const selectAt = (x: number, y: number, touch: boolean) => {
+  view.selected = pickAt(sim, view, x, y, canvas.clientWidth, canvas.clientHeight, touch)
+  if (view.selected?.agentId === undefined) view.following = false
+}
+const input = new Input(canvas, view, selectLevel, selectAt)
+const stage = document.querySelector<HTMLElement>('#stage')
+if (!stage) throw new Error('Missing #stage')
+const inspector = new Inspector(stage, view)
 const sidebarRoot = document.querySelector<HTMLElement>('#sidebar')
 if (!sidebarRoot) throw new Error('Missing #sidebar')
 const sidebar = new Sidebar(sidebarRoot, sim, view, selectLevel)
@@ -50,8 +59,10 @@ startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
   speed: () => (view.paused ? 0 : view.speed),
   render: (frameMs) => {
     input.update(view, frameMs)
+    followSelected(sim, view)
     renderer.render(sim, view)
     sidebar.update(sim, view)
+    inspector.update(sim, view)
     if (sim.ending) showSummary(sim)
   },
 })

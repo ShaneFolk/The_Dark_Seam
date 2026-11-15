@@ -1,5 +1,7 @@
 // Sidebar: one tab per level with its activity counts, plus a controls hint.
 // Plain DOM, rebuilt only when something it shows has changed.
+// On phones (see style.css) it sits under the map: the clock, speed, toggles and
+// level tabs always show; the hive/colony details and the log open with a button.
 
 import { levelActivity, type SimState } from '../sim.ts'
 import type { ViewState } from './view.ts'
@@ -43,6 +45,8 @@ export class Sidebar {
   private logCount = -1
   private lastShown = ''
   private speedButtons: { btn: HTMLButtonElement; speed: number }[] = []
+  private scentBtn: HTMLButtonElement
+  private artBtn: HTMLButtonElement
 
   constructor(root: HTMLElement, sim: SimState, view: ViewState, onSelect: (levelIndex: number) => void) {
     const title = document.createElement('h1')
@@ -69,37 +73,62 @@ export class Sidebar {
     }
     root.appendChild(bar)
 
+    // On-screen versions of the P and G keys (for touch screens).
+    const toggles = document.createElement('div')
+    toggles.className = 'toggle-bar'
+    this.scentBtn = smallButton('Scent', () => { view.showPheromones = !view.showPheromones })
+    this.artBtn = smallButton('Sprites', () => { view.art = view.art === 'sprites' ? 'shapes' : 'sprites' })
+    toggles.append(this.scentBtn, this.artBtn)
+    root.appendChild(toggles)
+
+    const tabs = document.createElement('div')
+    tabs.className = 'level-tabs'
+    root.appendChild(tabs)
     sim.world.levels.forEach((level, i) => {
       const btn = document.createElement('button')
       btn.className = 'level-tab'
       btn.addEventListener('click', () => onSelect(i))
       btn.innerHTML = `<span class="level-key">${level.id}</span><span class="level-name"></span><span class="level-counts"></span>`
       btn.querySelector('.level-name')!.textContent = level.name
-      root.appendChild(btn)
+      tabs.appendChild(btn)
       this.buttons.push(btn)
     })
 
+    // Phones: the rest is folded away behind this button.
+    const more = smallButton('Details ▾', () => {
+      const open = root.classList.toggle('expanded')
+      more.textContent = open ? 'Details ▴' : 'Details ▾'
+    })
+    more.className = 'details-toggle'
+    root.appendChild(more)
+    const details = document.createElement('div')
+    details.className = 'sidebar-details'
+    root.appendChild(details)
+
     this.hiveInfo = document.createElement('p')
     this.hiveInfo.className = 'help'
-    root.appendChild(this.hiveInfo)
+    details.appendChild(this.hiveInfo)
 
     const logTitle = document.createElement('h2')
     logTitle.textContent = 'Event log'
-    root.appendChild(logTitle)
+    details.appendChild(logTitle)
     this.log = document.createElement('ol')
     this.log.className = 'event-log'
-    root.appendChild(this.log)
+    details.appendChild(this.log)
 
     const help = document.createElement('p')
     help.className = 'help'
-    help.innerHTML = 'Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>Space to pause, + / - to change speed<br>P to show hive scent (green trail, red alarm, yellow danger)<br>G to switch sprites / plain shapes'
-    root.appendChild(help)
+    help.innerHTML = '<span class="help-keys">Drag or WASD to pan<br>Scroll to zoom<br>1 / 2 / 3 to switch level<br>Space to pause, + / - to change speed<br>P to show hive scent (green trail, red alarm, yellow danger)<br>G to switch sprites / plain shapes<br>Click someone to inspect them, F to follow, Esc to close<br></span>'
+      + '<span class="help-touch">Drag to pan, pinch to zoom, tap someone to inspect them</span>'
+    details.appendChild(help)
   }
 
   update(sim: SimState, view: ViewState): void {
     const time = formatClock(sim.tick) + (view.paused ? ' · paused' : view.speed !== 1 ? ` · ${view.speed}×` : '')
     if (this.clock.textContent !== time) this.clock.textContent = time
     for (const { btn, speed } of this.speedButtons) btn.classList.toggle('active', speed === 0 ? view.paused : !view.paused && speed === view.speed)
+    this.scentBtn.classList.toggle('active', view.showPheromones)
+    this.artBtn.classList.toggle('active', view.art === 'sprites')
     let takers = 0, spinebacks = 0, broodlings = 0, civilians = 0, soldiers = 0, cocoons = 0, infected = 0
     for (const a of sim.agents) {
       if (a.dead) continue
@@ -142,4 +171,12 @@ Squad ${s.id + 1}${s.veteran ? ' ★' : ''} (${left} left): ${s.order} · morale
       btn.querySelector('.level-counts')!.textContent = `Humans ${counts[i].humans} · Myrr ${counts[i].myrr}`
     })
   }
+}
+
+function smallButton(label: string, onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.textContent = label
+  btn.addEventListener('click', onClick)
+  return btn
 }
