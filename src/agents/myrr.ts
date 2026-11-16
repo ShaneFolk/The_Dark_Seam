@@ -9,6 +9,7 @@
 // Takers only go after people who are alone; a group makes them back off,
 // and armed humans or getting hurt send them home.
 
+import { startTactic } from './hiveMemory.ts'
 import { CONFIG } from '../config.ts'
 import type { Rng } from '../core/rng.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
@@ -249,6 +250,7 @@ function startLurk(agent: Agent, m: MyrrData, gen: Generator, ctx: CombatContext
   if (!goTo(agent, ctx, spot)) return
   m.task = 'lurk'
   m.ticksLeft = Math.round(CONFIG.power.ambush.lurkSeconds * TPS)
+  startTactic(m, 'repairAmbush', ctx.tick)
   logEvent(ctx, 'hive', `A Taker is lying in wait at the ${gen.room.room.name} for the engineers`, agent)
 }
 

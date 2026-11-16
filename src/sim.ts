@@ -81,7 +81,7 @@ export function createSim(seed: number): SimState {
     agents: [],
     noises: [],
     pheromones: createPheromones(world),
-    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false, unplaced: [], repairsSeen: 0, ambushLearned: false, decoy: null, nextDecoyTick: 0, lastRecallTick: -1e9, landing: createLandingWatch() },
+    hive: { motherId: -1, captives: [], hatched: 0, losses: { taker: 0, spineback: 0 }, resinTiles: 0, dig: null, nextDigTick: 0, tunnelsDug: 0, collapsing: false, escapeTo: null, escaped: false, motherHome: null, deepHome: null, retreated: false, swarm: null, nextSwarmTick: 0, nursery: null, nestMoves: 0, nextNestTick: 0, raided: false, unplaced: [], repairsSeen: 0, ambushLearned: false, decoy: null, nextDecoyTick: 0, lastRecallTick: -1e9, landing: createLandingWatch(), doubts: { repairAmbush: 0, stakeout: 0 }, relearnAfter: { repairAmbush: 0, stakeout: 0 } },
     squads: [],
     shots: [],
     supplies: new Map(),

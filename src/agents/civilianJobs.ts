@@ -1,5 +1,6 @@
 // Civilian jobs beyond the daily routine: engineers repairing generators (and waiting for cover), barricading the shelter, grabbing a pistol and shooting back.
 
+import { canLearn } from './hiveMemory.ts'
 import { CONFIG } from '../config.ts'
 import { roomAt, sameRoom } from '../world/rooms.ts'
 import { isHidden } from '../systems/camouflage.ts'
@@ -42,7 +43,8 @@ export function repair(agent: Agent, gen: Generator, ctx: CivilianContext): void
   if (gen.sabotaged) {
     gen.sabotaged = false
     const hive = ctx.hive
-    if (++hive.repairsSeen >= CONFIG.power.ambush.learnAfter && !hive.ambushLearned) {
+    // (Not for a while after it gave the ambush up: hiveMemory.ts.)
+    if (canLearn(ctx, 'repairAmbush') && ++hive.repairsSeen >= CONFIG.power.ambush.learnAfter && !hive.ambushLearned) {
       hive.ambushLearned = true
       logEvent(ctx, 'hive', 'The hive has learned that engineers come to fix broken generators')
     }

@@ -1,5 +1,6 @@
 // Takers hunting: choosing the next job, finding lone prey, clawing, stinging, carrying them home and handing them to the Brood Mother.
 
+import { tacticWin } from './hiveMemory.ts'
 import { CONFIG } from '../config.ts'
 import { depositTrail } from '../systems/pheromones.ts'
 import { resinFrontier } from '../systems/resin.ts'
@@ -154,6 +155,7 @@ export function capture(agent: Agent, m: MyrrData, target: Agent, ctx: HiveConte
   target.speed = target.baseSpeed
   depositTrail(ctx.pheromones, ctx.world, agent.levelIndex, agent.x, agent.y, CONFIG.pheromones.capture)
 
+  tacticWin(m, ctx)
   m.task = 'carry'
   m.swarmHunt = false
   m.lastTrailTile = -1

@@ -255,6 +255,12 @@ export const CONFIG = {
 
   hive: {
     takers: 9,
+    /**
+     * The hive forgets a learned trick (repair ambush, landing stakeout) after this many Myrr die on it
+     * (a Myrr counts as on it for windowSeconds after being sent; a capture it makes takes one loss back).
+     * It can't start learning that trick again for relearnAfterSeconds.
+     */
+    forget: { losses: 2, windowSeconds: 300, relearnAfterSeconds: 480 },
     /** A Taker killed while carrying someone drops them, paralysed for this share of paralysisSeconds. */
     dropParalysisShare: 0.5,
     /** Spinebacks at the start. They guard the Brood Mother (combat comes in Phase 6). */

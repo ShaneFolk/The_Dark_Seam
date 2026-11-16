@@ -54,7 +54,13 @@ export interface MyrrData {
   shotTick: number
   /** Broodlings: where it hatched (it stays near there while it grows). */
   home: PathNode | null
+  /** A learned trick it was sent on, and when (hiveMemory.ts), or null. */
+  tactic: Tactic | null
+  tacticTick: number
 }
+
+/** The tricks the hive learns and can forget (hiveMemory.ts). */
+export type Tactic = 'repairAmbush' | 'stakeout'
 
 export interface HiveState {
   motherId: number
@@ -85,6 +91,9 @@ export interface HiveState {
   ambushLearned: boolean
   /** What it knows about soldiers coming down the elevators (landing.ts). */
   landing: LandingWatch
+  /** Losses on each learned trick since it last paid off, and when it may be learned again after giving it up (hiveMemory.ts). */
+  doubts: Record<Tactic, number>
+  relearnAfter: Record<Tactic, number>
   /** Last tick the Brood Mother called her raiders home. */
   lastRecallTick: number
   /** The diversion under way, if any, and when the next may start. */
@@ -114,5 +123,5 @@ export interface HiveContext extends Log {
 }
 
 export function createMyrrData(role: MyrrData['role']): MyrrData {
-  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false, lastChoice: '', shotTick: -1e9, home: null }
+  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false, lastChoice: '', shotTick: -1e9, home: null, tactic: null, tacticTick: 0 }
 }

@@ -1,5 +1,6 @@
 // Combat: weapons, attacks, damage and death. Shared by soldiers, civilians and the Myrr.
 
+import { tacticLoss } from './hiveMemory.ts'
 import { CONFIG } from '../config.ts'
 import { makeNoise } from '../systems/noise.ts'
 import { deposit, depositSpread } from '../systems/pheromones.ts'
@@ -204,6 +205,7 @@ export function kill(agent: Agent, ctx: CombatContext): void {
   }
   const m = agent.myrr
   if (m) {
+    tacticLoss(agent, ctx)
     if (m.role === 'taker') ctx.hive.losses.taker++
     if (m.role === 'spineback') ctx.hive.losses.spineback++
     if (m.role !== 'mother') ctx.stats.myrrKilled[m.role]++

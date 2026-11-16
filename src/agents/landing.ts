@@ -10,6 +10,7 @@
 // only a couple wait there, for a few minutes, and squads can scout first or
 // take a ladder (see scout.ts).
 
+import { canLearn, startTactic } from './hiveMemory.ts'
 import { CONFIG } from '../config.ts'
 import type { LinkKind } from '../world/links.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
@@ -121,7 +122,7 @@ export function noteArrival(agent: Agent, kind: LinkKind | null, from: PathNode,
   if (kind !== 'elevator' || !agent.soldier || to.levelIndex <= from.levelIndex) return
   const watch = ctx.hive.landing
   watch.at = to
-  if (ctx.tick - watch.lastRideTick < ST.rideGapSeconds * TPS) return
+  if (ctx.tick - watch.lastRideTick < ST.rideGapSeconds * TPS || !canLearn(ctx, 'stakeout')) return
   watch.lastRideTick = ctx.tick
   if (++watch.ridesSeen === ST.learnAfter) {
     logEvent(ctx, 'hive', `The hive has noticed soldiers keep coming down the elevator to the ${placeName(ctx.world, to)}: it will watch the landing`, to)
@@ -154,6 +155,7 @@ export function planStakeout(ctx: CombatContext): void {
     if (!path?.length) continue
     const m = a.myrr!
     m.task = 'stakeout'
+    startTactic(m, 'stakeout', ctx.tick)
     m.targetId = -1
     m.ticksLeft = Math.round(ST.lurkSeconds * TPS)
     a.path = path
