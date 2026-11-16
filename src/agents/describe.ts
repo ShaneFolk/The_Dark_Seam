@@ -1,9 +1,7 @@
 // One-line descriptions of agents, for the debug readout and the event log.
 
 import type { Agent } from './agent.ts'
-import { CONFIG } from '../config.ts'
-
-const TPS = CONFIG.sim.ticksPerSecond
+import { formatDuration } from '../core/clock.ts'
 
 /**
  * A short name for the log: "Miner Edda Rusk", "Medic Bram Holm", "The Commander",
@@ -28,7 +26,7 @@ function whoName(agent: Agent): string {
 
 export function describeAgent(agent: Agent, tick: number): string {
   const civ = agent.civ
-  if (agent.kind === 'turret') return 'Sentry turret #' + agent.id + ' · ammo ' + (agent.weapon?.inMag ?? 0) + ' · battery ' + Math.round((agent.battery ?? 0) / TPS) + 's · health ' + Math.round(agent.health)
+  if (agent.kind === 'turret') return 'Sentry turret #' + agent.id + ' · ammo ' + (agent.weapon?.inMag ?? 0) + ' · battery ' + formatDuration(agent.battery ?? 0) + ' left · health ' + Math.round(agent.health)
   if (agent.soldier && civ) {
     const w = agent.weapon
     const ammo = w ? `${w.inMag}+${w.spare} mags` : ''
@@ -38,12 +36,12 @@ export function describeAgent(agent: Agent, tick: number): string {
   if (civ) {
     const shift = `${String(civ.shiftStart).padStart(2, '0')}:00 shift`
     const doing = civ.mode === 'routine' ? `${civ.activity}${civ.target ? ` → ${civ.target.room.name}` : ''}` : civ.mode
-    const inf = civ.infection ? ` · INFECTED (hatches in ${Math.max(0, Math.round((civ.infection.hatchTick - tick) / TPS))}s${tick < civ.infection.stabilizedUntilTick ? ', stabilized' : ''})` : ''
+    const inf = civ.infection ? ` · INFECTED (hatches in ${formatDuration(Math.max(0, civ.infection.hatchTick - tick))}${tick < civ.infection.stabilizedUntilTick ? ', stabilized' : ''})` : ''
     return `${who(agent)} #${agent.id} · ${civ.trait ? civ.trait + ' ' : ''}${civ.engineer ? 'engineer ' : ''}${civ.job} (${shift}) · ${doing}${inf} · health ${Math.round(agent.health)} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
   }
   const m = agent.myrr
   if (m?.role === 'mother') return `Brood Mother #${agent.id} · ${m.task === 'inject' ? `injecting #${m.targetId}` : m.task} · health ${Math.round(agent.health)}${m.lastChoice ? ` · last chose ${m.lastChoice}` : ''}`
-  if (m?.role === 'broodling') return `Broodling #${agent.id} · grows up in ${Math.ceil(m.ticksLeft / TPS)}s`
+  if (m?.role === 'broodling') return `Broodling #${agent.id} · grows up in ${formatDuration(m.ticksLeft)}`
   if (m?.role === 'spineback') return `Spineback #${agent.id} · ${m.task === 'respond' ? 'answering alarm' : m.task === 'stakeout' ? 'lying in wait by the elevator' : 'guarding'} · health ${Math.round(agent.health)}`
   if (agent.dead) return `${agent.kind} #${agent.id} · dead`
   if (m) return `Taker #${agent.id}${m.task === 'dig' ? ' · DIGGING' : m.task === 'haulCarry' ? ' · CARRYING A COCOON' : m.task === 'decoy' ? ' · DECOY' : ''} · health ${Math.round(agent.health)} · ${m.task}${m.targetId >= 0 ? ` · target #${m.targetId}` : ''}${m.lastChoice ? ` · last chose ${m.lastChoice}` : ''}`

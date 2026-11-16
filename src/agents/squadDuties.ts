@@ -14,7 +14,7 @@ import { dist, members, newSquad, setOrder, type Order, type Squad } from './squ
 const S = CONFIG.soldiers
 
 /** Busy with something that can't just be handed over (carrying or setting up a turret). */
-export const NO_MERGE = new Set<Order>(['fetchTurret', 'deployTurret', 'packTurret', 'guide'])
+const NO_MERGE = new Set<Order>(['fetchTurret', 'deployTurret', 'packTurret', 'guide'])
 
 /**
  * A squad down to a soldier or two joins the nearest other squad (not the command
@@ -91,7 +91,7 @@ export function stillEscorting(squad: Squad, ctx: CombatContext): boolean {
 }
 
 /** Engineers working on (or heading to) this generator. */
-export function engineersOn(gen: Generator, ctx: CombatContext): Agent[] {
+function engineersOn(gen: Generator, ctx: CombatContext): Agent[] {
   return ctx.agents.filter((a) => !a.dead && a.civ?.engineer && a.civ.activity === 'repair' && isFree(a) && sameRoom(a.civ.target, gen.room))
 }
 

@@ -30,10 +30,21 @@ function hash(a: number, b: number): number {
   return h >>> 0
 }
 
-/** "Edda Rusk": the same seed and id always give the same name. */
-export function personName(seed: number, id: number): string {
+/**
+ * "Edda Rusk": the same seed and id always give the same name. `taken` holds the names
+ * given so far: while first names last, nobody shares one; after that, no full name repeats.
+ */
+export function personName(seed: number, id: number, taken: Set<string>): string {
   const h = hash(seed, id)
-  return `${FIRST[h % FIRST.length]} ${LAST[(h >>> 8) % LAST.length]}`
+  const usedFirst = new Set([...taken].map((n) => n.split(' ')[0]))
+  for (let k = 0; k < FIRST.length * LAST.length; k++) {
+    const first = FIRST[(h + k) % FIRST.length]
+    const name = `${first} ${LAST[((h >>> 8) + Math.floor(k / FIRST.length) * 7 + k) % LAST.length]}`
+    if (taken.has(name) || (usedFirst.size < FIRST.length && usedFirst.has(first))) continue
+    taken.add(name)
+    return name
+  }
+  return `Worker ${id}`
 }
 
 /** A squad's callsign, e.g. "Anvil". Shuffled per seed so runs differ. */

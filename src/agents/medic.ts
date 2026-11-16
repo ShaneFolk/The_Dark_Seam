@@ -59,7 +59,7 @@ export function treatPatients(agent: Agent, ctx: CombatContext): boolean {
 }
 
 /** What a person needs from a medic, if anything. */
-export function needsCare(a: Agent, medic: SoldierData, ctx: CombatContext): 'wake' | 'stabilize' | null {
+function needsCare(a: Agent, medic: SoldierData, ctx: CombatContext): 'wake' | 'stabilize' | null {
   const civ = a.civ
   if (!civ || a.dead || a.side !== 'human') return null
   if (civ.mode === 'paralyzed') return 'wake'

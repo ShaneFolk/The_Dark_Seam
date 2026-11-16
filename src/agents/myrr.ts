@@ -1,5 +1,6 @@
-// The hive's units. Phase 4: the Brood Mother (stays in the hive core) and
-// Takers, which run this state machine:
+// The hive's units: the Takers' state machine (below), digging and getting about.
+// Their data and the hive's shared state are in myrrData.ts; hunting, capturing
+// and delivering prey are in hunt.ts. Takers run this state machine:
 //
 //   rest ─▶ scout ──lone human seen──▶ hunt ─▶ attack (claw, sting) ─▶ carry ─▶ (deliver) ─▶ rest
 //     │       └─ trips without prey ─▶ return ─▶ rest
@@ -10,133 +11,28 @@
 
 import { CONFIG } from '../config.ts'
 import type { Rng } from '../core/rng.ts'
-import type { World } from '../world/loadWorld.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
-import { findRooms, randomTileIn, roomAt, roomTiles, type RoomRef } from '../world/rooms.ts'
+import { findRooms, randomTileIn, roomAt, roomTiles } from '../world/rooms.ts'
 import { carryCocoon, updateHaul } from './nest.ts'
-import { updateDecoy, type Decoy } from './decoy.ts'
-import { depositTrail, strongestTrail, type Pheromones } from '../systems/pheromones.ts'
-import { coatResin, resinFrontier } from '../systems/resin.ts'
-import { digTile, findDigSite, type DigJob } from '../systems/digging.ts'
+import { updateDecoy } from './decoy.ts'
+import { strongestTrail } from '../systems/pheromones.ts'
+import { coatResin } from '../systems/resin.ts'
+import { digTile, findDigSite } from '../systems/digging.ts'
 import { makeNoise } from '../systems/noise.ts'
-import type { Noise } from '../systems/noise.ts'
 import { tileOf, type Agent } from './agent.ts'
-import { logEvent, type Log } from '../core/events.ts'
-import { who } from './describe.ts'
+import { logEvent } from '../core/events.ts'
 import { followPath } from './movement.ts'
 import { canSee } from './perception.ts'
-import { callSwarm, type Swarm } from './swarm.ts'
-import { isFree, setMode } from './civilian.ts'
+import { isFree } from './civilian.ts'
 import { isRanged, tryAttack, type CombatContext } from './combat.ts'
 import { damageGenerator, type Generator } from '../systems/power.ts'
-import type { LandingWatch } from './landing.ts'
-import { pickWeighted as pickByScore, ramp, scoreList, type Option } from '../core/utility.ts'
-
-export type Task =
-  | 'rest' | 'scout' | 'return' | 'hunt' | 'attack' | 'carry' | 'spread' | 'coat' | 'dig' | 'sabotage' // Takers
-  | 'lurk' // a Taker lying in wait by a generator it knocked out, for the engineers
-  | 'swarm' // Takers and raiding Spinebacks gathering for a swarm
-  | 'haul' | 'haulCarry' // Takers moving a cocoon to a new nursery (nest.ts)
-  | 'decoy' // a Taker making a diversion at a motion sensor (decoy.ts)
-  | 'inject' | 'uproot' | 'root' | 'burrow' // Brood Mother (she also uses 'rest', 'hunt' and 'return')
-  | 'grow' // Broodlings
-  | 'guard' | 'respond' | 'stakeout' // Spinebacks (stakeout: hiding by an elevator landing, landing.ts)
-
-export interface MyrrData {
-  role: 'taker' | 'mother' | 'broodling' | 'spineback'
-  task: Task
-  /** Ticks left in timed tasks (rest, grab, coat). */
-  ticksLeft: number
-  /** Human being hunted or carried. */
-  targetId: number
-  /** Tick the hunted human was last seen. */
-  lastSeenTick: number
-  /** Next tick a hunter re-plans its route. */
-  repathTick: number
-  /** Scouting trips in a row that found nothing. */
-  trips: number
-  /** Last tile index scent was laid on while carrying. */
-  lastTrailTile: number
-  /** Tick the current hunt started. */
-  huntStartTick: number
-  /** Human this Taker has given up on, and until when. */
-  ignoreId: number
-  ignoreUntilTick: number
-  /** Brood Mother: anchored in her chamber. She must uproot before she can move. */
-  rooted: boolean
-  /** Hunting as part of a swarm: don't back off from groups or guns. */
-  swarmHunt: boolean
-  /** The last job picked after resting, with the scores (for the description). */
-  lastChoice: string
-  /** Tick it was last shot (a shaken Myrr steers clear of risky jobs for a while). */
-  shotTick: number
-  /** Broodlings: where it hatched (it stays near there while it grows). */
-  home: PathNode | null
-}
-
-export interface HiveState {
-  motherId: number
-  /** Humans held in the hive, waiting to be injected (oldest first). */
-  captives: number[]
-  /** Broodlings hatched so far. */
-  hatched: number
-  /** The Brood Mother has died: the hive is collapsing. */
-  collapsing: boolean
-  /** The Brood Mother is fleeing to this spot (escape ending if she gets there). */
-  escapeTo: PathNode | null
-  escaped: boolean
-  /** The Brood Mother's spot in the middle of her chamber (the Deep Chamber once she has retreated). */
-  motherHome: PathNode | null
-  /** Her fallback: the middle of the Deep Chamber, and whether she has retreated there. */
-  deepHome: PathNode | null
-  retreated: boolean
-  /** Where the cocoons are kept once the hive has moved them (null = the Hive Core), how often it has, and when it next may. */
-  nursery: RoomRef | null
-  nestMoves: number
-  nextNestTick: number
-  /** Soldiers have been in among the cocoons since the last move. */
-  raided: boolean
-  /** Cocoons waiting for a Taker to carry them to the nursery (new ones, or after a move). */
-  unplaced: number[]
-  /** Times engineers were seen coming to fix a generator the hive broke; at CONFIG.power.ambush.learnAfter it starts lying in wait. */
-  repairsSeen: number
-  ambushLearned: boolean
-  /** What it knows about soldiers coming down the elevators (landing.ts). */
-  landing: LandingWatch
-  /** Last tick the Brood Mother called her raiders home. */
-  lastRecallTick: number
-  /** The diversion under way, if any, and when the next may start. */
-  decoy: Decoy | null
-  nextDecoyTick: number
-  /** The swarm gathering right now, if any, and when the next may be called. */
-  swarm: Swarm | null
-  nextSwarmTick: number
-  /** Recent losses, used to decide what Broodlings grow into (Phase 6 fills these). */
-  losses: { taker: number; spineback: number }
-  /** Tiles covered in resin, all levels. */
-  resinTiles: number
-  /** Tunnel being dug, if any (one at a time), and when the next may start. */
-  dig: DigJob | null
-  nextDigTick: number
-  tunnelsDug: number
-}
-
-export interface HiveContext extends Log {
-  world: World
-  rng: Rng
-  tick: number
-  agents: Agent[]
-  noises: Noise[]
-  pheromones: Pheromones
-  hive: HiveState
-}
+import { type MyrrData, type HiveContext } from './myrrData.ts'
+import { chooseNextJob, lookForPrey, sting, capture, carryAlong, layTrail, deliver, giveUp } from './hunt.ts'
+export type { Task, MyrrData, HiveState, HiveContext } from './myrrData.ts'
+export { createMyrrData } from './myrrData.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const H = CONFIG.hive
-
-export function createMyrrData(role: MyrrData['role']): MyrrData {
-  return { role, task: 'rest', ticksLeft: 0, targetId: -1, lastSeenTick: 0, repathTick: 0, trips: 0, lastTrailTile: -1, huntStartTick: 0, ignoreId: -1, ignoreUntilTick: 0, rooted: role === 'mother', swarmHunt: false, lastChoice: '', shotTick: -1e9, home: null }
-}
 
 // ---------------------------------------------------------------- update
 
@@ -390,207 +286,9 @@ export function planDigging(ctx: HiveContext): void {
 }
 
 // ---------------------------------------------------------------- hunting
-
-type Job = 'scout' | 'spread' | 'sabotage' | 'commander'
-
-/**
- * Rested: what next? Each job gets a utility score from what the hive knows, and
- * one is picked at random, better scores more likely (see core/utility.ts):
- *
- *   scout      find prey; scores higher the hungrier the hive (few captives and cocoons)
- *   spread     coat more resin (Takers); scores lower as the resin nears its limit
- *   sabotage   knock out a generator (Takers), once the humans have killed Myrr;
- *              more losses and more turrets (they need power) make it more attractive
- *   commander  go looking for the Commander, once the humans have killed Myrr;
- *              less attractive while the command squad is at full strength
- *
- * A Myrr shot recently is shaken: sabotage and the Commander hunt score lower until it calms down.
- */
-function chooseNextJob(agent: Agent, m: MyrrData, ctx: CombatContext): void {
-  const U = CONFIG.utility.taker
-  const hive = ctx.hive
-  const losses = hive.losses.taker + hive.losses.spineback
-  const fought = ramp(losses, CONFIG.power.sabotageAfterLosses - 1, U.lossesFull)
-  // Shot recently: risky jobs look worse until it has calmed down.
-  const nerve = ramp(ctx.tick - m.shotTick, 0, U.shakenSeconds * TPS)
-  const fed = ctx.agents.filter((a) => a.civ?.mode === 'cocooned').length + hive.captives.length
-  const options: Option<Job>[] = [{ action: 'scout', score: U.scoutBase + U.scoutHunger * (1 - ramp(fed, 0, U.fullAt)) }]
-  const working = ctx.power.generators.filter((g) => !g.broken)
-  if (m.role === 'taker') {
-    if (hive.resinTiles < CONFIG.resin.maxTiles) options.push({ action: 'spread', score: U.spreadBase * (1 - ramp(hive.resinTiles, 0, CONFIG.resin.maxTiles)) })
-    if (working.length && fought > 0) {
-      const turrets = ctx.agents.filter((a) => a.kind === 'turret' && !a.dead).length
-      options.push({ action: 'sabotage', score: (U.sabotageMax * fought + U.turretBonus * ramp(turrets, 0, 3)) * nerve })
-    }
-  }
-  const boss = ctx.agents.find((a) => a.kind === 'commander' && !a.dead && isFree(a))
-  if (boss && fought > 0) {
-    const guards = ctx.agents.filter((a) => a.soldier && !a.dead && isFree(a) && a.levelIndex === boss.levelIndex && Math.hypot(a.x - boss.x, a.y - boss.y) <= CONFIG.commander.guardRange).length
-    options.push({ action: 'commander', score: U.commanderMax * fought * (guards >= CONFIG.commander.guardSquadSize ? H.guardedCommanderScale : 1) * nerve })
-  }
-  const pick = pickByScore(options, ctx.rng, CONFIG.utility.sharpness)?.action ?? 'scout'
-  m.lastChoice = `${pick} (${scoreList(options)})`
-
-  if (pick === 'sabotage') {
-    const gen = ctx.rng.pick(working)
-    if (goTo(agent, ctx, gen.at)) { m.task = 'sabotage'; m.targetId = ctx.power.generators.indexOf(gen); return }
-  } else if (pick === 'spread') {
-    const spot = resinFrontier(ctx.world, agent.levelIndex, ctx.rng)
-    if (spot && goTo(agent, ctx, spot)) { m.task = 'spread'; return }
-  } else if (pick === 'commander' && boss && goTo(agent, ctx, tileOf(boss))) {
-    // Head for the Commander's position (they'll be guarded: expect a swarm). One look, then home.
-    m.task = 'scout'
-    m.trips = H.tripsBeforeReturn - 1
-    return
-  }
-  m.task = 'scout'
-  m.trips = 0
-  nextScoutTrip(agent, m, ctx)
-}
-
-/** Spot free humans; lay scent where they are; hunt the closest one who is alone. */
-function lookForPrey(agent: Agent, m: MyrrData, ctx: HiveContext): void {
-  const level = ctx.world.levels[agent.levelIndex]
-  const range = H.sightRange
-  let best: Agent | null = null
-  let bestDist = Infinity
-  const scentPerLook = CONFIG.pheromones.sighting * (CONFIG.perception.intervalTicks / TPS)
-
-  const spine = m.role === 'spineback'
-  const groupSize = spine ? CONFIG.spinebacks.groupSize : H.groupSize
-  let crowded = false
-  for (const human of ctx.agents) {
-    if (human.dead || !isFree(human) || human.levelIndex !== agent.levelIndex || human.kind === 'turret') continue
-    const dist = Math.hypot(human.x - agent.x, human.y - agent.y)
-    if (dist > range || !canSee(agent, human, level, range)) continue
-    // Armed humans: a Taker alone is weak in a straight fight, so it calls a swarm or goes home.
-    // Spinebacks (and swarms) take them on.
-    if (human.weapon && isRanged(human.weapon) && !spine && !m.swarmHunt) {
-      if (m.task !== 'hunt' && callSwarm(agent, ctx)) return
-      // Not worth it here: wipe out the prey scent around this spot so scouts look elsewhere.
-      weakenScent(ctx, tileOf(agent), H.armedPreyScent.radius, H.armedPreyScent.keep)
-      if (m.task !== 'return' && m.task !== 'rest') goHome(agent, m, ctx)
-      return
-    }
-    depositTrail(ctx.pheromones, ctx.world, human.levelIndex, human.x, human.y, scentPerLook)
-    if (m.task === 'hunt' && human.id === m.targetId) m.lastSeenTick = ctx.tick
-    if (companions(human, ctx) >= groupSize && !m.swarmHunt) { crowded = true; continue } // too many of them
-    if (human.id === m.ignoreId && ctx.tick < m.ignoreUntilTick) continue // gave up on this one
-    if (dist < bestDist) { best = human; bestDist = dist }
-  }
-
-  if (m.task === 'hunt') {
-    const target = ctx.agents[m.targetId]
-    if (target && companions(target, ctx) >= groupSize && !m.swarmHunt) giveUp(agent, m, ctx)
-    return
-  }
-  // Only groups in sight: call the others in.
-  if (!best && crowded && callSwarm(agent, ctx)) return
-  if (best) {
-    m.task = 'hunt'
-    m.targetId = best.id
-    m.lastSeenTick = ctx.tick
-    m.repathTick = ctx.tick
-    m.huntStartTick = ctx.tick
-  }
-}
-
-/** Free humans within `loneRadius` of this one. */
-function companions(human: Agent, ctx: HiveContext): number {
-  let n = 0
-  for (const other of ctx.agents) {
-    if (other === human || !isFree(other) || other.levelIndex !== human.levelIndex) continue
-    if (Math.hypot(other.x - human.x, other.y - human.y) <= H.loneRadius) n++
-  }
-  return n
-}
-
-/** Paralyse a weakened human. */
-export function sting(target: Agent, ctx: HiveContext): void {
-  const civ = target.civ!
-  setMode(target, civ, 'paralyzed')
-  civ.paralyzedUntilTick = ctx.tick + Math.round(H.paralysisSeconds * TPS)
-  target.path = []
-  target.state = { name: 'idle', ticksLeft: 1e9 }
-}
-
-function capture(agent: Agent, m: MyrrData, target: Agent, ctx: HiveContext): void {
-  ctx.stats.captures++
-  // Did anyone see it? If not, the colony only notices when they go missing.
-  const level = ctx.world.levels[agent.levelIndex]
-  target.civ!.takenTick = ctx.tick
-  target.civ!.takenSeen = ctx.agents.some((h) => h !== target && isFree(h) && h.levelIndex === agent.levelIndex &&
-    canSee(h, agent, level, CONFIG.perception.sightRange))
-  logEvent(ctx, 'capture', `${who(target)} was taken by a ${agent.kind === 'spineback' ? 'Spineback' : 'Taker'} on Level ${agent.levelIndex + 1}`, target)
-  target.civ!.mode = 'captured'
-  target.path = []
-  target.state = { name: 'idle', ticksLeft: 1e9 }
-  target.speed = target.baseSpeed
-  depositTrail(ctx.pheromones, ctx.world, agent.levelIndex, agent.x, agent.y, CONFIG.pheromones.capture)
-
-  m.task = 'carry'
-  m.swarmHunt = false
-  m.lastTrailTile = -1
-  agent.speed = agent.baseSpeed * (m.role === 'spineback' ? CONFIG.spinebacks.carrySpeedMultiplier : H.carrySpeedMultiplier)
-  if (!goTo(agent, ctx, nearMother(ctx))) agent.path = []
-}
-
-/** Keep the carried human with the Taker. */
-function carryAlong(agent: Agent, ctx: HiveContext): void {
-  const m = agent.myrr!
-  if (m.task !== 'carry') return
-  const captive = ctx.agents[m.targetId]
-  if (!captive) return
-  captive.levelIndex = agent.levelIndex
-  captive.x = agent.x
-  captive.y = agent.y
-}
-
-/** Lay scent on each new tile on the way home with prey. */
-function layTrail(agent: Agent, m: MyrrData, ctx: HiveContext): void {
-  const level = ctx.world.levels[agent.levelIndex]
-  const tile = agent.levelIndex * level.width * level.height + Math.floor(agent.y) * level.width + Math.floor(agent.x)
-  if (tile === m.lastTrailTile) return
-  m.lastTrailTile = tile
-  depositTrail(ctx.pheromones, ctx.world, agent.levelIndex, agent.x, agent.y, CONFIG.pheromones.carryTrail)
-}
-
-function deliver(agent: Agent, m: MyrrData, ctx: HiveContext): void {
-  const captive = ctx.agents[m.targetId]
-  const mother = ctx.agents[ctx.hive.motherId]
-  // Not home yet (e.g. the first route failed): try again.
-  if (mother && !mother.dead && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > H.deliverRange)) {
-    if (goTo(agent, ctx, nearMother(ctx))) return
-  }
-  // A captive that hatched on the way is already dead: nothing to hand over.
-  if (captive?.civ && !captive.dead) {
-    captive.civ.mode = 'captive'
-    const spot = nearMother(ctx)
-    captive.levelIndex = spot.levelIndex
-    captive.x = spot.x + 0.5
-    captive.y = spot.y + 0.5
-    ctx.hive.captives.push(captive.id)
-  }
-  m.targetId = -1
-  agent.speed = agent.baseSpeed
-  rest(agent, m, ctx)
-}
-
-function giveUp(agent: Agent, m: MyrrData, ctx: HiveContext): void {
-  m.ignoreId = m.targetId
-  m.ignoreUntilTick = ctx.tick + Math.round(H.ignoreSeconds * TPS)
-  m.targetId = -1
-  m.swarmHunt = false
-  agent.speed = agent.baseSpeed
-  m.task = 'scout'
-  agent.path = []
-  agent.state = { name: 'idle', ticksLeft: 0 }
-  nextScoutTrip(agent, m, ctx)
-}
-
 // ---------------------------------------------------------------- moving about
 
-function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
+export function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   const spots = ctx.rng.chance(H.followTrailChance) ? strongestTrail(ctx.pheromones, ctx.world, H.scoutTrailSpots) : []
   if (spots.length) {
     // Stronger scent is more likely to be picked.
@@ -629,12 +327,12 @@ export function takerHurt(agent: Agent, source: Agent | null, ctx: HiveContext):
   goHome(agent, m, ctx)
 }
 
-function goHome(agent: Agent, m: MyrrData, ctx: HiveContext): void {
+export function goHome(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   m.task = 'return'
   if (!goTo(agent, ctx, nearMother(ctx))) rest(agent, m, ctx)
 }
 
-function rest(agent: Agent, m: MyrrData, ctx: HiveContext, scale = 1): void {
+export function rest(agent: Agent, m: MyrrData, ctx: HiveContext, scale = 1): void {
   const [min, max] = H.restSeconds
   m.task = 'rest'
   m.swarmHunt = false
@@ -643,7 +341,7 @@ function rest(agent: Agent, m: MyrrData, ctx: HiveContext, scale = 1): void {
   agent.state = { name: 'idle', ticksLeft: 0 }
 }
 
-function goTo(agent: Agent, ctx: HiveContext, to: PathNode): boolean {
+export function goTo(agent: Agent, ctx: HiveContext, to: PathNode): boolean {
   // Takers steer around danger scent (places Myrr have been shot or killed).
   const path = findPath(ctx.world, tileOf(agent), to, 'myrr', { avoid: ctx.pheromones.danger, avoidCost: CONFIG.pheromones.dangerCost, breakWalls: true })
   if (!path || !path.length) return false
@@ -653,7 +351,7 @@ function goTo(agent: Agent, ctx: HiveContext, to: PathNode): boolean {
 }
 
 /** A tile in the Brood Mother's room (Hive Core, or Deep Chamber after she retreats) close to her. */
-function nearMother(ctx: HiveContext): PathNode {
+export function nearMother(ctx: HiveContext): PathNode {
   const mother = ctx.agents[ctx.hive.motherId]
   const home = ctx.hive.motherHome
   const hive = (home && roomAt(ctx.world, home)) ?? findRooms(ctx.world, ['hive'])[0]
@@ -664,7 +362,7 @@ function nearMother(ctx: HiveContext): PathNode {
 }
 
 /** Scale down the scent around a spot (a scout that found nothing halves it). */
-function weakenScent(ctx: HiveContext, at: PathNode, radius = 2, keep = 0.5): void {
+export function weakenScent(ctx: HiveContext, at: PathNode, radius = 2, keep = 0.5): void {
   const map = ctx.pheromones.trail[at.levelIndex]
   const level = ctx.world.levels[at.levelIndex]
   for (let dy = -radius; dy <= radius; dy++)
@@ -674,7 +372,7 @@ function weakenScent(ctx: HiveContext, at: PathNode, radius = 2, keep = 0.5): vo
     }
 }
 
-function pickWeighted(weights: readonly number[], rng: Rng): number {
+export function pickWeighted(weights: readonly number[], rng: Rng): number {
   let roll = rng.next() * weights.reduce((a, b) => a + b, 0)
   for (let i = 0; i < weights.length; i++) if ((roll -= weights[i]) <= 0) return i
   return weights.length - 1

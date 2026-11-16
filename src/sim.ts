@@ -34,6 +34,8 @@ import type { RoomType } from './world/level.ts'
 import type { PathNode } from './world/pathfinding.ts'
 
 export interface SimState {
+  /** Names given to people so far (so none repeat; see data/names.ts). */
+  names: Set<string>
   seed: number
   tick: number
   rng: Rng
@@ -65,6 +67,7 @@ export function createSim(seed: number): SimState {
   const world = createWorld()
   const sim: SimState = {
     seed,
+    names: new Set(),
     tick: 0,
     rng: new Rng(seed),
     world,
@@ -221,7 +224,7 @@ function spawnCivilians(sim: SimState): void {
     const at = randomTileIn(world, civ.target, rng)
     const agent = createAgent(sim.agents.length, 'civilian', 'human', at, CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
-    civ.name = personName(sim.seed, agent.id)
+    civ.name = personName(sim.seed, agent.id, sim.names)
     agent.weapon = makeWeapon(civ.trait === 'brave' && civ.job === 'miner' ? 'torch' : 'fists', CONFIG.combat.skill.civilian)
     sim.agents.push(agent)
   }
@@ -246,7 +249,7 @@ function spawnCommander(sim: SimState): void {
   if (!room || !civ) return
   const boss = createAgent(sim.agents.length, 'commander', 'human', randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
   boss.civ = civ
-  civ.name = personName(sim.seed, boss.id)
+  civ.name = personName(sim.seed, boss.id, sim.names)
   civ.activity = 'work'
   boss.weapon = makeWeapon('pistol', CONFIG.combat.skill.soldier)
   sim.agents.push(boss)
@@ -277,7 +280,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     const civ = createCivilianData(world, rng, 'soldier')!
     const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', at ?? randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
-    civ.name = personName(sim.seed, agent.id)
+    civ.name = personName(sim.seed, agent.id, sim.names)
     agent.soldier = {
       squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, pathGoal: -1, samePathUntil: 0, targetId: -1,
       stabilizers: isMedic ? CONFIG.soldiers.stabilizers : 0, patientId: -1, workTicks: 0,

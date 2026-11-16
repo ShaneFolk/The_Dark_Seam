@@ -5,7 +5,7 @@
 
 import { levelActivity, type SimState } from '../sim.ts'
 import type { ViewState } from './view.ts'
-import { formatClock } from '../core/clock.ts'
+import { formatClock, formatDuration } from '../core/clock.ts'
 import { CONFIG } from '../config.ts'
 import { totalStock } from '../systems/supplies.ts'
 import { hasPower } from '../systems/power.ts'
@@ -20,12 +20,11 @@ function commanderLine(sim: SimState): string {
   if (c.lockdown) parts.push(c.locked ? 'lockdown' : 'lockdown (no power)')
   const assault = sim.squads.filter((s) => s.mission === 'assault').map((s) => s.name)
   if (assault.length) parts.push('assaulting the hive: ' + assault.join(', '))
-  const tps = CONFIG.sim.ticksPerSecond
-  if (c.reinforcementsDue !== null) parts.push('drop ship in ' + Math.ceil((c.reinforcementsDue - sim.tick) / tps) + 's')
+  if (c.reinforcementsDue !== null) parts.push('drop ship in ' + formatDuration(c.reinforcementsDue - sim.tick))
   else if (!c.reinforcementsCalled) parts.push(`${c.missingKnown} known missing (help is called at ${CONFIG.commander.reinforcements.missingToCall})`)
   if (c.evacuation === 'fortify') parts.push('FORTIFYING THE LANDING PAD')
-  if (c.evacuation === 'called') parts.push('evacuation ship in ' + Math.ceil((c.shipLands - sim.tick) / tps) + 's')
-  if (c.evacuation === 'landed') parts.push('SHIP AT THE PAD, leaves in ' + Math.ceil((c.shipLeaves - sim.tick) / tps) + 's')
+  if (c.evacuation === 'called') parts.push('evacuation ship in ' + formatDuration(c.shipLands - sim.tick))
+  if (c.evacuation === 'landed') parts.push('SHIP AT THE PAD, leaves in ' + formatDuration(c.shipLeaves - sim.tick))
   return parts.join(' · ')
 }
 
