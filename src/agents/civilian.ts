@@ -41,6 +41,8 @@ export type Mode = 'routine' | 'flee' | 'hide' | 'panic' | 'paralyzed' | 'captur
 
 export interface CivilianData {
   job: Job
+  /** Their name, e.g. "Edda Rusk" (set when they're placed in the world; see data/names.ts). */
+  name: string
   /** Personality (civilians only; see CONFIG.civilians.traits), or null. */
   trait: Trait | null
   /** Techs only: an engineer, one of the few who repair generators. */
@@ -111,6 +113,7 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
   if (!homes.length || !works.length) return null
   return {
     job,
+    name: '',
     trait: job === 'soldier' || job === 'commander' ? null : pickTrait(rng),
     engineer: job === 'tech' && rng.chance(CONFIG.power.engineerShare),
     coverWaitTick: -1,
@@ -361,7 +364,7 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
       ctx.commander.lastSightingTick = ctx.tick
       if (!ctx.stats.contact) {
         ctx.stats.contact = true
-        logEvent(ctx, 'contact', `First sighting: ${who(agent).toLowerCase()} saw a Myrr on Level ${agent.levelIndex + 1}`)
+        logEvent(ctx, 'contact', `First sighting: ${who(agent, true)} saw a Myrr on Level ${agent.levelIndex + 1}`, agent)
       }
     } else if (isFree(other) && Math.hypot(other.x - agent.x, other.y - agent.y) <= F.companyRadius) {
       company++

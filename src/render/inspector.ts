@@ -56,7 +56,7 @@ export class Inspector {
     if (sel) {
       const level = sim.world.levels[sel.levelIndex]
       text = agent
-        ? describeAgent(agent, sim.tick) + `\nLevel ${level.id} · ${level.rooms[level.roomOf[sel.y * level.width + sel.x]]?.name ?? 'tunnels'}`
+        ? describeAgent(agent, sim.tick) + `\nLevel ${level.id} · ${level.rooms[level.roomOf[sel.y * level.width + sel.x]]?.name ?? (sel.levelIndex === 0 ? 'outside' : 'tunnels')}`
         : `Level ${level.id} · tile ${sel.x}, ${sel.y}\n${describeTile(level, sel.x, sel.y)}`
     }
     this.panel.hidden = !sel

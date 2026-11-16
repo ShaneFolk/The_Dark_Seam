@@ -103,7 +103,7 @@ export function planListening(ctx: CombatContext): void {
     }
     if (!sent) continue
     watch.heard[key] = ctx.tick
-    logEvent(ctx, 'hive', `The elevator's clatter drew ${sent} Myrr toward the ${placeName(ctx.world, at)}`)
+    logEvent(ctx, 'hive', `The elevator's clatter drew ${sent} Myrr toward the ${placeName(ctx.world, at)}`, at)
   }
 }
 
@@ -124,7 +124,7 @@ export function noteArrival(agent: Agent, kind: LinkKind | null, from: PathNode,
   if (ctx.tick - watch.lastRideTick < ST.rideGapSeconds * TPS) return
   watch.lastRideTick = ctx.tick
   if (++watch.ridesSeen === ST.learnAfter) {
-    logEvent(ctx, 'hive', `The hive has noticed soldiers keep coming down the elevator to the ${placeName(ctx.world, to)}: it will watch the landing`)
+    logEvent(ctx, 'hive', `The hive has noticed soldiers keep coming down the elevator to the ${placeName(ctx.world, to)}: it will watch the landing`, to)
   }
 }
 
@@ -162,7 +162,7 @@ export function planStakeout(ctx: CombatContext): void {
   }
   if (!sent) return
   watch.nextTick = ctx.tick + Math.round(ST.everySeconds * TPS)
-  logEvent(ctx, 'hive', `${sent} Spineback${sent === 1 ? ' goes' : 's go'} to lie in wait by the elevator at the ${placeName(ctx.world, at)}`)
+  logEvent(ctx, 'hive', `${sent} Spineback${sent === 1 ? ' goes' : 's go'} to lie in wait by the elevator at the ${placeName(ctx.world, at)}`, at)
 }
 
 /** A Spineback staking out the landing: get to its spot, coat it, keep still, strike when someone comes close. */
@@ -187,7 +187,7 @@ export function updateStakeout(agent: Agent, ctx: CombatContext): void {
     Math.hypot(h.x - agent.x, h.y - agent.y) <= ST.strikeRange && canSee(agent, h, level, ST.strikeRange))
   if (!prey) return
   // Out of hiding: fight like a Spineback answering an alarm.
-  logEvent(ctx, 'hive', `A Spineback springs out of hiding at the ${placeName(ctx.world, tileOf(agent))}`)
+  logEvent(ctx, 'hive', `A Spineback springs out of hiding at the ${placeName(ctx.world, tileOf(agent))}`, agent)
   m.task = 'respond'
   m.targetId = prey.id
   m.lastSeenTick = ctx.tick

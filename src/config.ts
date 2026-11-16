@@ -776,6 +776,8 @@ export const CONFIG = {
     pickRadiusTouch: 1.5,
     /** Canvas resolution is capped at this many pixels per CSS pixel (phones report 3+, which costs a lot). */
     maxPixelRatio: 2,
+    /** Jumping to a logged event zooms in to at least this. */
+    jumpZoom: 1.5,
     /** Screens narrower than this (CSS pixels) use the phone layout; keep in sync with style.css. */
     phoneWidth: 700,
   },

@@ -8,6 +8,7 @@ import type { World } from '../world/loadWorld.ts'
 import { findRooms, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
 import { tileOf } from '../agents/agent.ts'
 import { logEvent, type Log } from '../core/events.ts'
+import { who } from '../agents/describe.ts'
 
 export interface MedBay {
   room: RoomRef
@@ -56,7 +57,7 @@ export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World, 
         civ.cured = true
         a.baseSpeed = a.speed = CONFIG.movement.humanSpeed
         log.stats.cures++
-        logEvent(log, 'cure', 'The med bay cured an infected ' + (a.soldier ? 'soldier' : civ.job))
+        logEvent(log, 'cure', `The med bay cured ${who(a, true)} of the larva`, a)
       }
     }
   }

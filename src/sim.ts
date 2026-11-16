@@ -19,6 +19,7 @@ import { createLandingWatch, elevatorRide, noteArrival, planListening, planStake
 import { planDecoy } from './agents/decoy.ts'
 import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
+import { personName, squadCallsign } from './data/names.ts'
 import { newSquad, soldierHurt, soldierKilled, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
 import { countResin, healMyrr, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
@@ -218,6 +219,7 @@ function spawnCivilians(sim: SimState): void {
     const at = randomTileIn(world, civ.target, rng)
     const agent = createAgent(sim.agents.length, 'civilian', 'human', at, CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
+    civ.name = personName(sim.seed, agent.id)
     agent.weapon = makeWeapon(civ.trait === 'brave' && civ.job === 'miner' ? 'torch' : 'fists', CONFIG.combat.skill.civilian)
     sim.agents.push(agent)
   }
@@ -242,11 +244,13 @@ function spawnCommander(sim: SimState): void {
   if (!room || !civ) return
   const boss = createAgent(sim.agents.length, 'commander', 'human', randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
   boss.civ = civ
+  civ.name = personName(sim.seed, boss.id)
   civ.activity = 'work'
   boss.weapon = makeWeapon('pistol', CONFIG.combat.skill.soldier)
   sim.agents.push(boss)
   addSquad(sim, room, CONFIG.commander.guardSquadSize, [{ level: 0, types: ['command'] }])
   sim.squads[sim.squads.length - 1].guardId = boss.id
+  sim.squads[sim.squads.length - 1].name = 'Command Squad'
 }
 
 /** Patrol beats: the rooms each squad walks between. */
@@ -268,7 +272,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
   const { world, rng } = sim
   const squadId = sim.squads.length
   const patrol: RoomRef[] = beat.flatMap((p) => findRooms(world, p.types, p.level).filter((r) => !r.room.outdoor))
-  const squad = newSquad(squadId, patrol, rng.int(0, Math.max(0, patrol.length - 1)), sim.tick)
+  const squad = newSquad(squadId, squadCallsign(sim.seed, squadId) + ' Squad', patrol, rng.int(0, Math.max(0, patrol.length - 1)), sim.tick)
   squad.charges = squadId < CONFIG.charges.count ? 1 : 0
   squad.incendiaries = CONFIG.incendiaries.perSquad
   squad.flares = CONFIG.flares.perSquad
@@ -278,6 +282,7 @@ function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: num
     const civ = createCivilianData(world, rng, 'soldier')!
     const agent = createAgent(sim.agents.length, isMedic ? 'medic' : 'soldier', 'human', at ?? randomTileIn(world, room, rng), CONFIG.movement.humanSpeed, CONFIG.health.human)
     agent.civ = civ
+    civ.name = personName(sim.seed, agent.id)
     agent.soldier = {
       squadId, role: isMedic ? 'medic' : 'soldier', repathTick: 0, pathGoal: -1, samePathUntil: 0, targetId: -1,
       stabilizers: isMedic ? CONFIG.soldiers.stabilizers : 0, patientId: -1, workTicks: 0,

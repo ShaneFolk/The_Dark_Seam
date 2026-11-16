@@ -9,7 +9,14 @@ export interface GameEvent {
   tick: number
   kind: EventKind
   text: string
+  /** Where it happened (clicking the log line jumps there), if anywhere in particular. */
+  at?: { levelIndex: number; x: number; y: number }
+  /** The person or Myrr it happened to, if one: for following them and for the people's fates. */
+  agentId?: number
 }
+
+/** What an event is about: an agent (its position now, and its id) or just a place. */
+export type About = { levelIndex: number; x: number; y: number; id?: number; kind?: string }
 
 export interface RunStats {
   captures: number
@@ -46,6 +53,12 @@ export interface Log {
   tick: number
 }
 
-export function logEvent(log: Log, kind: EventKind, text: string): void {
-  log.events.push({ tick: log.tick, kind, text })
+export function logEvent(log: Log, kind: EventKind, text: string, about?: About | null): void {
+  const ev: GameEvent = { tick: log.tick, kind, text }
+  if (about) {
+    ev.at = { levelIndex: about.levelIndex, x: Math.floor(about.x), y: Math.floor(about.y) }
+    // Agents have a kind; plain places (PathNodes) don't.
+    if (about.kind !== undefined && about.id !== undefined) ev.agentId = about.id
+  }
+  log.events.push(ev)
 }

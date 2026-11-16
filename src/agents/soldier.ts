@@ -76,6 +76,8 @@ export type Order = 'cover' | 'packTurret' | 'guide' | 'guard' | 'patrol' | 'res
 
 export interface Squad {
   id: number
+  /** What the log and sidebar call it, e.g. "Anvil Squad" (see data/names.ts). */
+  name: string
   members: number[]
   order: Order
   /** Where the squad is heading. */
@@ -126,9 +128,9 @@ export interface Squad {
 }
 
 /** A fresh squad on patrol with no members yet (add them with squad.members.push). */
-export function newSquad(id: number, patrol: RoomRef[], patrolIndex: number, tick: number): Squad {
+export function newSquad(id: number, name: string, patrol: RoomRef[], patrolIndex: number, tick: number): Squad {
   return {
-    id, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
+    id, name, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
     lastContactTick: tick, patrol, patrolIndex, ticksLeft: 0, welded: false,
     charges: 0, carryingTurret: false, mission: null, missionGoal: null, missionReached: false,
     incendiaries: 0, burnAt: null, riskTaken: false, riskLoggedTick: -1e9, guardId: -1, flares: 0,
@@ -187,13 +189,13 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     if (squad.mission === 'assault' && squad.missionReached && !ctx.hive.escapeTo && ctx.tick - squad.lastContactTick > CONFIG.commander.assault.quietSeconds * TPS) {
       squad.mission = null
       squad.missionReached = false
-      logEvent(ctx, 'command', `Squad ${squad.id + 1} finished its assault on the hive`)
+      logEvent(ctx, 'command', `${squad.name} finished its assault on the hive`, leader)
     }
     // A broken or thinned-out squad abandons its assault.
     if (squad.mission === 'assault' && (squad.morale < S.morale.breakAt || alive.length < CONFIG.commander.assault.minMembers)) {
       squad.mission = null
       ctx.commander.lastFailTick = ctx.tick
-      logEvent(ctx, 'command', `Squad ${squad.id + 1} broke off its assault on the hive`)
+      logEvent(ctx, 'command', `${squad.name} broke off its assault on the hive`, leader)
     }
 
     const ammo = alive.reduce((sum, s) => sum + (s.weapon ? roundsLeft(s.weapon) : 0), 0)
@@ -204,7 +206,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     // Regrouped: back on duty (they cut their way out of any welds on the way).
     if (squad.order === 'retreat' && squad.morale >= S.morale.regroupAt) {
       setOrder(squad, 'patrol', null)
-      logEvent(ctx, 'command', `Squad ${squad.id + 1} has regrouped and is back on duty`)
+      logEvent(ctx, 'command', `${squad.name} has regrouped and is back on duty`, leader)
     }
     // Pick the order (see the list at the top of this file).
     if (squad.order === 'retreat' ? squad.morale < S.morale.regroupAt : squad.morale < S.morale.breakAt) {
@@ -287,7 +289,8 @@ function mergeSquads(squads: Squad[], ctx: CombatContext): void {
     if (!mine.length || mine.length > G.at || small.guardId >= 0 || small.carryingTurret || NO_MERGE.has(small.order)) continue
     let best: Squad | null = null, bestD = Infinity
     for (const other of squads) {
-      if (other === small || other.guardId >= 0) continue
+      // Not into the command squad, nor one busy with something it can't share (an escort walking someone out).
+      if (other === small || other.guardId >= 0 || NO_MERGE.has(other.order)) continue
       const theirs = members(other, ctx)
       if (!theirs.length || theirs.length + mine.length > G.maxSize) continue
       const d = Math.abs(theirs[0].levelIndex - mine[0].levelIndex) * 200 + dist(theirs[0], mine[0])
@@ -308,7 +311,7 @@ function mergeSquads(squads: Squad[], ctx: CombatContext): void {
     small.flares = small.charges = small.incendiaries = 0
     small.mission = null
     setOrder(small, 'patrol', null)
-    logEvent(ctx, 'command', `Squad ${small.id + 1} (${mine.length} left) joins Squad ${best.id + 1}`)
+    logEvent(ctx, 'command', `${small.name} (${mine.length} left) joins ${best.name}`)
   }
 }
 
@@ -351,7 +354,7 @@ function coverRepair(squad: Squad, squads: Squad[], ctx: CombatContext): void {
     setOrder(squad, 'cover', null)
     squad.targetId = i
     ctx.power.generators[i].coverSquad = squad.id
-    logEvent(ctx, 'command', `Squad ${squad.id + 1} is covering the engineers at the ${ctx.power.generators[i].room.room.name}`)
+    logEvent(ctx, 'command', `${squad.name} is covering the engineers at the ${ctx.power.generators[i].room.room.name}`, ctx.power.generators[i].at)
   }
   const gen = ctx.power.generators[squad.targetId]
   const crew = gen ? engineersOn(gen, ctx) : []
@@ -590,7 +593,7 @@ function wantsToBurn(squad: Squad, ctx: CombatContext): boolean {
   // Logged once per decision, and not again for this squad until riskLogCooldownSeconds have passed.
   if (urgent && !squad.riskTaken && ctx.tick - squad.riskLoggedTick >= S.riskLogCooldownSeconds * TPS) {
     squad.riskLoggedTick = ctx.tick
-    logEvent(ctx, 'command', `The Commander takes the risk: Squad ${squad.id + 1} goes in without burning the resin to save lives`)
+    logEvent(ctx, 'command', `The Commander takes the risk: ${squad.name} goes in without burning the resin to save lives`)
   }
   squad.riskTaken = urgent
   return !urgent
@@ -653,7 +656,7 @@ function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatCo
       turret.dead = true // packed up: off the map until set up again
       squad.carryingTurret = true
       squad.turretAmmo = turret.weapon?.inMag ?? null
-      logEvent(ctx, 'gear', `Squad ${squad.id + 1} packed up a turret on Level ${turret.levelIndex + 1} to move it to the Landing Pad`)
+      logEvent(ctx, 'gear', `${squad.name} packed up a turret on Level ${turret.levelIndex + 1} to move it to the Landing Pad`, turret)
     }
     setOrder(squad, 'patrol', null)
     return
@@ -664,7 +667,7 @@ function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatCo
       if (squad.turretAmmo !== null) turret.weapon!.inMag = squad.turretAmmo
       squad.turretAmmo = null
       ctx.agents.push(turret)
-      logEvent(ctx, 'gear', `Squad ${squad.id + 1} set up a sentry turret on Level ${squad.goal!.levelIndex + 1}`)
+      logEvent(ctx, 'gear', `${squad.name} set up a sentry turret on Level ${squad.goal!.levelIndex + 1}`, squad.goal)
       squad.carryingTurret = false
     }
     setOrder(squad, 'patrol', null)
@@ -692,7 +695,7 @@ function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatCo
     }
     makeNoise(ctx.noises, 'blast', at.levelIndex, at.x, at.y, ctx.tick, alive[0].id)
     squad.charges--
-    logEvent(ctx, 'gear', `Squad ${squad.id + 1} collapsed a tunnel on Level ${at.levelIndex + 1} with a mining charge`)
+    logEvent(ctx, 'gear', `${squad.name} collapsed a tunnel on Level ${at.levelIndex + 1} with a mining charge`, at)
     ctx.hive.resinTiles = countResin(ctx.world)
     setOrder(squad, 'patrol', null)
     return
@@ -705,7 +708,7 @@ function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatCo
       if (level.barrier[o.tile] <= 0) putBarrier(level, o.tile, o.kind === Barrier.Boards ? Barrier.Boards : Barrier.Weld)
     }
     squad.welded = true
-    logEvent(ctx, 'command', `Squad ${squad.id + 1} fell back and welded itself in`)
+    logEvent(ctx, 'command', `${squad.name} fell back and welded itself in`, alive[0])
     return
   }
   if (squad.order === 'resupply') {
@@ -736,10 +739,10 @@ function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatCo
       if (squad.mission === 'assault') {
         const escort = detachEscort(squad, person, squads, ctx)
         logEvent(ctx, 'rescue', escort
-          ? `Soldiers cut ${who(person).toLowerCase()} free from a cocoon; ${members(escort, ctx).length === 1 ? 'one of them takes' : `Squad ${escort.id + 1} (${members(escort, ctx).length}) splits off to take`} them to the med bay while the rest fight on`
-          : `Soldiers cut ${who(person).toLowerCase()} free from a cocoon; nobody can be spared, so they must make their own way to the med bay`)
+          ? `Soldiers cut ${who(person, true)} free from a cocoon; ${members(escort, ctx).length === 1 ? 'one of them takes' : `${escort.name} (${members(escort, ctx).length}) splits off to take`} them to the med bay while the rest fight on`
+          : `Soldiers cut ${who(person, true)} free from a cocoon; nobody can be spared, so they must make their own way to the med bay`, person)
       } else {
-        logEvent(ctx, 'rescue', `Soldiers cut ${who(person).toLowerCase()} free from a cocoon and walk them to the med bay`)
+        logEvent(ctx, 'rescue', `Soldiers cut ${who(person, true)} free from a cocoon and walk them to the med bay`, person)
         squad.escortId = person.id
         setOrder(squad, 'guide', tileOf(person))
         squad.targetId = person.id
@@ -762,7 +765,7 @@ function detachEscort(squad: Squad, person: Agent, squads: Squad[], ctx: CombatC
   const picks = [...alive]
     .sort((a, b) => (a.soldier!.role === 'medic' ? 0 : 1) - (b.soldier!.role === 'medic' ? 0 : 1) || dist(a, person) - dist(b, person))
     .slice(0, spare)
-  const escort = newSquad(squads.length, squad.patrol, squad.patrolIndex, ctx.tick)
+  const escort = newSquad(squads.length, `${squad.name.replace(/ Squad$/, '')} Escort`, squad.patrol, squad.patrolIndex, ctx.tick)
   escort.morale = squad.morale
   escort.veteran = squad.veteran
   squads.push(escort)
@@ -935,7 +938,7 @@ export function soldierKilled(squads: Squad[], soldier: Agent, ctx: CombatContex
     if (a.weapon) a.weapon.skill = Math.min(1, a.weapon.skill + S.veteran.skillBonus)
   }
   squad.morale = Math.min(1, squad.morale + 0.2)
-  logEvent(ctx, 'command', `Squad ${squad.id + 1} are veterans now (${squad.kills} Myrr killed)`)
+  logEvent(ctx, 'command', `${squad.name} are veterans now (${squad.kills} Myrr killed)`)
 }
 
 function roomGoal(ctx: CombatContext, types: ('security' | 'armory')[], from: Agent): PathNode | null {

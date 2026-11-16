@@ -4,10 +4,53 @@ import type { SimState } from '../sim.ts'
 import { ENDING_TEXT } from '../systems/endings.ts'
 import { formatClock } from '../core/clock.ts'
 import { CONFIG } from '../config.ts'
+import { who } from '../agents/describe.ts'
+import type { GameEvent } from '../core/events.ts'
 
 /** Event kinds worth listing as key moments. */
 const KEY_KINDS = new Set(['contact', 'death', 'power', 'gear', 'hive', 'command', 'rescue', 'cure', 'ending'])
 const MAX_KEY_MOMENTS = 25
+const MAX_FATES = 14
+
+/** A short word for what an event meant for the person it was about. */
+function fateStep(ev: GameEvent): string | null {
+  switch (ev.kind) {
+    case 'capture': return 'taken'
+    case 'injected': return 'cocooned'
+    case 'hatch': return 'a Broodling burst out'
+    case 'cure': return 'cured'
+    case 'death': return 'killed'
+    case 'rescue': return ev.text.includes('dropped') ? 'dropped by their Taker' : 'cut free'
+    case 'command': return ev.text.includes('volunteers') ? 'volunteered to fight' : null
+    default: return null
+  }
+}
+
+/**
+ * One line per person with a story (taken, cut free, cured, killed...), built from
+ * the event log: "Miner Edda Rusk: taken D1 13:40 → cocooned → cut free → cured → evacuated".
+ */
+function fates(sim: SimState): string[] {
+  const steps = new Map<number, string[]>()
+  for (const ev of sim.events) {
+    if (ev.agentId === undefined || !sim.agents[ev.agentId]?.civ) continue
+    const step = fateStep(ev)
+    if (!step) continue
+    const list = steps.get(ev.agentId) ?? []
+    list.push(list.length ? step : `${step} ${formatClock(ev.tick).replace('Day ', 'D').replace(' ·', '')}`)
+    steps.set(ev.agentId, list)
+  }
+  const lines: string[] = []
+  for (const [id, list] of steps) {
+    const a = sim.agents[id]
+    const mode = a.civ!.mode
+    const end = mode === 'evacuated' ? 'evacuated' : a.dead ? null : mode === 'cocooned' ? 'still cocooned' : mode === 'captive' || mode === 'captured' ? 'still held' : 'alive at the end'
+    if (end) list.push(end)
+    lines.push(`${who(a)}: ${list.join(' → ')}`)
+  }
+  // The longest stories first.
+  return lines.sort((x, y) => y.split('→').length - x.split('→').length).slice(0, MAX_FATES)
+}
 
 export function showSummary(sim: SimState): void {
   if (!sim.ending || document.querySelector('.summary')) return
@@ -33,6 +76,8 @@ export function showSummary(sim: SimState): void {
       <tr><th>Rescued</th><td>${s.cutFree} cut free, ${s.dropped} dropped</td><th>Soldiers killed</th><td>${s.soldiersKilled}</td></tr>
       <tr><th>Cured</th><td>${s.cures}</td><th>Evacuated</th><td>${s.evacuated}</td></tr>
     </table>
+    <h3>People</h3>
+    <ul class="moments fates"></ul>
     <h3>Key moments</h3>
     <ol class="moments"></ol>
     <button type="button">New run (next seed)</button>`
@@ -40,7 +85,14 @@ export function showSummary(sim: SimState): void {
   panel.querySelector('.line')!.textContent = e.line
   panel.querySelector('.meta')!.textContent =
     `Seed ${sim.seed} · ended ${formatClock(sim.ending.tick)} · ${colonyHours.toFixed(1)} colony hours (${minutes.toFixed(1)} real minutes)`
-  const list = panel.querySelector('.moments')!
+  const people = fates(sim)
+  const fateList = panel.querySelector('.fates')!
+  for (const line of people.length ? people : ['Nobody was taken.']) {
+    const li = document.createElement('li')
+    li.textContent = line
+    fateList.appendChild(li)
+  }
+  const list = panel.querySelector('ol.moments')!
   for (const ev of shown) {
     const li = document.createElement('li')
     li.textContent = ev ? `${formatClock(ev.tick)} — ${ev.text}` : '…'

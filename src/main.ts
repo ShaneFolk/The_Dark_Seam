@@ -11,7 +11,7 @@ import { Sidebar } from './render/sidebar.ts'
 import { showSummary } from './render/summary.ts'
 import { loadSprites } from './render/sprites.ts'
 import { Inspector, pickAt } from './render/inspector.ts'
-import { followSelected } from './render/view.ts'
+import { followSelected, jumpTo } from './render/view.ts'
 
 /** Read ?seed=123 from the URL, or fall back to the default seed. */
 function getSeed(): number {
@@ -52,7 +52,7 @@ if (!stage) throw new Error('Missing #stage')
 const inspector = new Inspector(stage, view)
 const sidebarRoot = document.querySelector<HTMLElement>('#sidebar')
 if (!sidebarRoot) throw new Error('Missing #sidebar')
-const sidebar = new Sidebar(sidebarRoot, sim, view, selectLevel)
+const sidebar = new Sidebar(sidebarRoot, sim, view, selectLevel, (ev) => jumpTo(sim, view, ev))
 
 startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
   update: () => step(sim),

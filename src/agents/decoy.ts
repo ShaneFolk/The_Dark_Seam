@@ -55,7 +55,7 @@ export function planDecoy(ctx: CombatContext): void {
     t.myrr!.targetId = -1
     hive.decoy = { takerId: t.id, at, startTick: ctx.tick, noisyFrom: null, raided: false }
     hive.nextDecoyTick = ctx.tick + Math.round(D.cooldownSeconds * TPS)
-    logEvent(ctx, 'hive', `A Taker slips off toward a motion sensor on Level ${at.levelIndex + 1}: a decoy`)
+    logEvent(ctx, 'hive', `A Taker slips off toward a motion sensor on Level ${at.levelIndex + 1}: a decoy`, t)
     return
   }
 }

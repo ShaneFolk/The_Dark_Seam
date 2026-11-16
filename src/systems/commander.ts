@@ -228,7 +228,7 @@ function planAssault(cmd: CommanderState, squads: Squad[], cocoons: number, hive
   if (pick === 'wait') return
 
   const scores = `scores: ${scoreList(options)}`
-  const names = (list: Squad[]) => `Squad${list.length > 1 ? 's' : ''} ${list.map((s) => s.id + 1).join(', ')}`
+  const names = (list: Squad[]) => list.map((s) => s.name).join(', ')
   const send = (list: Squad[]) => { for (const s of list) { s.mission = 'assault'; s.missionGoal = null; s.missionReached = false } }
   if (pick === 'probe') {
     cmd.probed = true
@@ -279,7 +279,7 @@ function enlist(a: Agent, squads: Squad[], ctx: CivilianContext): void {
   if (!open.length) return
   const squad = open.reduce((best, s) => (members(s, ctx).length < members(best, ctx).length ? s : best))
   const wasEmpty = members(squad, ctx).length === 0
-  const before = who(a).toLowerCase()
+  const before = who(a, true)
   a.kind = 'soldier'
   a.soldier = { squadId: squad.id, role: 'soldier', repathTick: 0, pathGoal: -1, samePathUntil: 0, targetId: -1, stabilizers: 0, patientId: -1, workTicks: 0 }
   a.weapon = makeWeapon('rifle', CONFIG.soldiers.volunteerSkill)
@@ -289,7 +289,7 @@ function enlist(a: Agent, squads: Squad[], ctx: CivilianContext): void {
   squad.members.push(a.id)
   if (wasEmpty) { squad.morale = 1; squad.order = 'patrol'; squad.goal = null; squad.mission = null }
   ctx.stats.volunteers++
-  logEvent(ctx, 'command', `Having survived being taken, ${before} volunteers to fight and joins Squad ${squad.id + 1}`)
+  logEvent(ctx, 'command', `Having survived being taken, ${before} volunteers to fight and joins ${squad.name}`, a)
 }
 
 /** Is the Commander still in charge? Killed or taken: the second-in-command takes over. */
@@ -300,7 +300,7 @@ function checkCommander(cmd: CommanderState, squads: Squad[], ctx: CivilianConte
   if (!lost) return
   cmd.second = true
   for (const s of squads) s.morale = Math.max(0, s.morale - C.second.moraleHit)
-  logEvent(ctx, 'command', `The Commander has been ${boss.dead ? 'killed' : 'taken'}! The second-in-command takes over`)
+  logEvent(ctx, 'command', `The Commander has been ${boss.dead ? 'killed' : 'taken'}! The second-in-command takes over`, boss)
 }
 
 /** Has a human seen a Myrr on Level 1 recently? */

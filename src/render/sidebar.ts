@@ -9,6 +9,7 @@ import { formatClock } from '../core/clock.ts'
 import { CONFIG } from '../config.ts'
 import { totalStock } from '../systems/supplies.ts'
 import { hasPower } from '../systems/power.ts'
+import type { GameEvent } from '../core/events.ts'
 
 function commanderLine(sim: SimState): string {
   const c = sim.commander
@@ -16,8 +17,8 @@ function commanderLine(sim: SimState): string {
   if (c.second) parts.push('SECOND-IN-COMMAND (the Commander is lost)')
   parts.push(c.alarm ? 'ALARM' : 'no alarm')
   if (c.lockdown) parts.push(c.locked ? 'lockdown' : 'lockdown (no power)')
-  const assault = sim.squads.filter((s) => s.mission === 'assault').map((s) => s.id + 1)
-  if (assault.length) parts.push('assaulting the hive: squad ' + assault.join(', '))
+  const assault = sim.squads.filter((s) => s.mission === 'assault').map((s) => s.name)
+  if (assault.length) parts.push('assaulting the hive: ' + assault.join(', '))
   const tps = CONFIG.sim.ticksPerSecond
   if (c.reinforcementsDue !== null) parts.push('drop ship in ' + Math.ceil((c.reinforcementsDue - sim.tick) / tps) + 's')
   else if (!c.reinforcementsCalled) parts.push(`${c.missingKnown} known missing (help is called at ${CONFIG.commander.reinforcements.missingToCall})`)
@@ -48,7 +49,11 @@ export class Sidebar {
   private scentBtn: HTMLButtonElement
   private artBtn: HTMLButtonElement
 
-  constructor(root: HTMLElement, sim: SimState, view: ViewState, onSelect: (levelIndex: number) => void) {
+  /** Called when a log line with a place is clicked. */
+  private onJump: (ev: GameEvent) => void
+
+  constructor(root: HTMLElement, sim: SimState, view: ViewState, onSelect: (levelIndex: number) => void, onJump: (ev: GameEvent) => void) {
+    this.onJump = onJump
     const title = document.createElement('h1')
     title.textContent = 'Carrow Deep'
     root.appendChild(title)
@@ -149,7 +154,7 @@ Colony: ${civilians} civilians · ${soldiers} soldiers · ${infected} infected w
       + sim.medbays.map((b) => `
 Med bay: ${b.beds.length}/${CONFIG.medbay.beds} beds`).join('')
       + sim.squads.map((s) => ({ s, left: soldiersLeft(sim, s.members) })).filter(({ left }) => left > 0).map(({ s, left }) => `
-Squad ${s.id + 1}${s.veteran ? ' ★' : ''} (${left} left): ${s.order} · morale ${Math.round(s.morale * 100)}%`).join('')
+${s.name}${s.veteran ? ' ★' : ''} (${left} left): ${s.order} · morale ${Math.round(s.morale * 100)}%`).join('')
     if (this.hiveInfo.textContent !== hive) this.hiveInfo.textContent = hive
     // Latest events, newest first.
     if (sim.events.length !== this.logCount) {
@@ -158,6 +163,12 @@ Squad ${s.id + 1}${s.veteran ? ' ★' : ''} (${left} left): ${s.order} · morale
         const li = document.createElement('li')
         li.textContent = `${formatClock(ev.tick).replace('Day ', 'D')} ${ev.text}`
         li.className = 'ev-' + ev.kind
+        // Lines that happened somewhere: click to look there (and select who it was about).
+        if (ev.at) {
+          li.classList.add('has-place')
+          li.title = 'Show where this happened'
+          li.addEventListener('click', () => this.onJump(ev))
+        }
         return li
       }))
     }

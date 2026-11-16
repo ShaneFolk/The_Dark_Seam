@@ -294,7 +294,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       ctx.hive.dig = null
       ctx.hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS)
       ctx.hive.tunnelsDug++
-      logEvent(ctx, 'hive', `The hive dug a tunnel on Level ${agent.levelIndex + 1}`)
+      logEvent(ctx, 'hive', `The hive dug a tunnel on Level ${agent.levelIndex + 1}`, agent)
       return rest(agent, m, ctx)
     }
 
@@ -353,7 +353,7 @@ function startLurk(agent: Agent, m: MyrrData, gen: Generator, ctx: CombatContext
   if (!goTo(agent, ctx, spot)) return
   m.task = 'lurk'
   m.ticksLeft = Math.round(CONFIG.power.ambush.lurkSeconds * TPS)
-  logEvent(ctx, 'hive', `A Taker is lying in wait at the ${gen.room.room.name} for the engineers`)
+  logEvent(ctx, 'hive', `A Taker is lying in wait at the ${gen.room.room.name} for the engineers`, agent)
 }
 
 // ---------------------------------------------------------------- digging
@@ -521,7 +521,7 @@ function capture(agent: Agent, m: MyrrData, target: Agent, ctx: HiveContext): vo
   target.civ!.takenTick = ctx.tick
   target.civ!.takenSeen = ctx.agents.some((h) => h !== target && isFree(h) && h.levelIndex === agent.levelIndex &&
     canSee(h, agent, level, CONFIG.perception.sightRange))
-  logEvent(ctx, 'capture', `${who(target)} was taken by a ${agent.kind === 'spineback' ? 'Spineback' : 'Taker'} on Level ${agent.levelIndex + 1}`)
+  logEvent(ctx, 'capture', `${who(target)} was taken by a ${agent.kind === 'spineback' ? 'Spineback' : 'Taker'} on Level ${agent.levelIndex + 1}`, target)
   target.civ!.mode = 'captured'
   target.path = []
   target.state = { name: 'idle', ticksLeft: 1e9 }

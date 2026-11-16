@@ -98,7 +98,7 @@ export function startScouting(squad: Squad, leader: Agent, alive: Agent[], ctx: 
   squad.scouting = { scoutId: scout.id, key, bottom, phase: 'down', ticksLeft: Math.round(SC.maxSeconds * TPS), lookLeft: Math.round(SC.lookSeconds * TPS), saw: false }
   leader.path = []
   leader.state = { name: 'idle', ticksLeft: 0 }
-  logEvent(ctx, 'command', `Squad ${squad.id + 1} stops at the elevator and sends a scout down to the ${placeName(ctx.world, bottom)}`)
+  logEvent(ctx, 'command', `${squad.name} stops at the elevator and sends a scout down to the ${placeName(ctx.world, bottom)}`, bottom)
   return true
 }
 
@@ -161,11 +161,11 @@ function finish(squad: Squad, leader: Agent, ctx: CombatContext, result: 'saw' |
   const place = placeName(ctx.world, sc.bottom)
   if (result === 'clear') {
     ctx.commander.landings[sc.key] = { hotUntil: 0, clearUntil: ctx.tick + Math.round(SC.clearSeconds * TPS), scoutedUntil: 0 }
-    logEvent(ctx, 'command', `Squad ${squad.id + 1}'s scout found the ${place} clear: the squad rides down`)
+    logEvent(ctx, 'command', `${squad.name}'s scout found the ${place} clear: the squad rides down`)
   } else {
     ctx.commander.landings[sc.key] = { hotUntil: ctx.tick + Math.round(SC.hotSeconds * TPS), clearUntil: 0, scoutedUntil: 0 }
     const what = result === 'saw' ? 'saw Myrr at' : "didn't come back from"
-    logEvent(ctx, 'command', `Squad ${squad.id + 1}'s scout ${what} the ${place}: squads take a ladder down for a while`)
+    logEvent(ctx, 'command', `${squad.name}'s scout ${what} the ${place}: squads take a ladder down for a while`)
   }
   return false
 }

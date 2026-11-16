@@ -2,12 +2,24 @@
 
 import type { Agent } from './agent.ts'
 
-/** A short name: "a miner", "a medic", "Taker #12". */
-export function who(agent: Agent): string {
+/**
+ * A short name for the log: "Miner Edda Rusk", "Medic Bram Holm", "The Commander",
+ * "Taker #12". With `midSentence`, the first letter is lower case ("miner Edda Rusk").
+ */
+export function who(agent: Agent, midSentence = false): string {
+  const name = whoName(agent)
+  return midSentence && !name.startsWith('Taker') && !name.startsWith('Spineback') ? name[0].toLowerCase() + name.slice(1) : name
+}
+
+function whoName(agent: Agent): string {
   if (agent.kind === 'commander') return 'The Commander'
-  if (agent.soldier) return agent.soldier.role === 'medic' ? 'A medic' : 'A soldier'
-  if (agent.civ) return 'A ' + agent.civ.job
   if (agent.kind === 'brood-mother') return 'The Brood Mother'
+  const civ = agent.civ
+  if (civ) {
+    const role = agent.soldier ? agent.soldier.role : civ.job === 'staff' ? 'staffer' : civ.job
+    const title = role[0].toUpperCase() + role.slice(1)
+    return civ.name ? `${title} ${civ.name}` : `A ${role}`
+  }
   return agent.kind[0].toUpperCase() + agent.kind.slice(1) + ' #' + agent.id
 }
 
@@ -18,13 +30,13 @@ export function describeAgent(agent: Agent, tick: number): string {
     const w = agent.weapon
     const ammo = w ? `${w.inMag}+${w.spare} mags` : ''
     const meds = agent.soldier.role === 'medic' ? ` · ${agent.soldier.stabilizers} stabilizers${agent.soldier.patientId >= 0 ? ` · treating #${agent.soldier.patientId}` : ''}` : ''
-    return `${agent.soldier.role === 'medic' ? 'Medic' : 'Soldier'} #${agent.id}${meds} · squad ${agent.soldier.squadId + 1} · ${civ.mode === 'routine' ? 'on duty' : civ.mode} · health ${Math.round(agent.health)} · ${w?.kind} ${ammo}`
+    return `${who(agent)} #${agent.id}${meds} · squad ${agent.soldier.squadId + 1} · ${civ.mode === 'routine' ? 'on duty' : civ.mode} · health ${Math.round(agent.health)} · ${w?.kind} ${ammo}`
   }
   if (civ) {
     const shift = `${String(civ.shiftStart).padStart(2, '0')}:00 shift`
     const doing = civ.mode === 'routine' ? `${civ.activity}${civ.target ? ` → ${civ.target.room.name}` : ''}` : civ.mode
     const inf = civ.infection ? ` · INFECTED (hatches in ${Math.max(0, Math.round((civ.infection.hatchTick - tick) / 20))}s${tick < civ.infection.stabilizedUntilTick ? ', stabilized' : ''})` : ''
-    return `Civilian #${agent.id} · ${civ.trait ? civ.trait + ' ' : ''}${civ.engineer ? 'engineer ' : ''}${civ.job} (${shift}) · ${doing}${inf} · health ${Math.round(agent.health)} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
+    return `${who(agent)} #${agent.id} · ${civ.trait ? civ.trait + ' ' : ''}${civ.engineer ? 'engineer ' : ''}${civ.job} (${shift}) · ${doing}${inf} · health ${Math.round(agent.health)} · fear ${civ.fear.toFixed(2)} · home ${civ.home.room.name}`
   }
   const m = agent.myrr
   if (m?.role === 'mother') return `Brood Mother #${agent.id} · ${m.task === 'inject' ? `injecting #${m.targetId}` : m.task} · health ${Math.round(agent.health)}${m.lastChoice ? ` · last chose ${m.lastChoice}` : ''}`

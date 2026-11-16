@@ -127,7 +127,7 @@ export function tryAttack(attacker: Agent, target: Agent, ctx: CombatContext): b
   if (ambush) {
     ctx.stats.ambushes++
     if (target.soldier) ctx.stats.squadAmbushes++
-    logEvent(ctx, 'hive', `${who(attacker)} ambushed ${who(target)} from the resin`)
+    logEvent(ctx, 'hive', `${who(attacker)} ambushed ${who(target, true)} from the resin`, target)
   }
   if (w.kind === 'flamethrower') burn(attacker, target, spec.damage, ctx)
   return true
@@ -200,7 +200,7 @@ export function kill(agent: Agent, ctx: CombatContext): void {
     agent.civ.deathCause = agent.civ.deathCause ?? 'killed'
     if (agent.soldier) ctx.stats.soldiersKilled++
     else ctx.stats.civiliansKilled++
-    logEvent(ctx, 'death', `${who(agent)} was killed on Level ${agent.levelIndex + 1}`)
+    logEvent(ctx, 'death', `${who(agent)} was killed on Level ${agent.levelIndex + 1}`, agent)
   }
   const m = agent.myrr
   if (m) {
@@ -210,7 +210,7 @@ export function kill(agent: Agent, ctx: CombatContext): void {
     if (m.role === 'mother') {
       ctx.stats.myrrKilled.mother++
       ctx.hive.collapsing = true
-      logEvent(ctx, 'hive', 'The Brood Mother is dead. The hive is collapsing')
+      logEvent(ctx, 'hive', 'The Brood Mother is dead. The hive is collapsing', agent)
     }
     // A Taker killed while carrying someone drops them, still paralysed for a while.
     if (m.task === 'carry' && m.targetId >= 0) {
@@ -220,7 +220,7 @@ export function kill(agent: Agent, ctx: CombatContext): void {
         captive.civ.paralyzedUntilTick = ctx.tick + Math.round(CONFIG.hive.paralysisSeconds * TPS * 0.5)
         captive.state = { name: 'idle', ticksLeft: 1e9 }
         ctx.stats.dropped++
-        logEvent(ctx, 'rescue', `A Taker carrying ${who(captive).toLowerCase()} was killed; they were dropped`)
+        logEvent(ctx, 'rescue', `A Taker carrying ${who(captive, true)} was killed; they were dropped`, captive)
       }
       m.targetId = -1
     }

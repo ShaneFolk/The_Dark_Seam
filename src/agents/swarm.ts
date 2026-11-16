@@ -71,7 +71,7 @@ export function callSwarm(caller: Agent, ctx: HiveContext): boolean {
     a.state = { name: 'moving' }
     swarm.members.push(a.id)
   }
-  logEvent(ctx, 'hive', `A ${caller.kind === 'spineback' ? 'Spineback' : 'Taker'} screeched on Level ${rally.levelIndex + 1}, calling a swarm (${swarm.members.length - 1} answered)`)
+  logEvent(ctx, 'hive', `A ${caller.kind === 'spineback' ? 'Spineback' : 'Taker'} screeched on Level ${rally.levelIndex + 1}, calling a swarm (${swarm.members.length - 1} answered)`, caller)
   return true
 }
 

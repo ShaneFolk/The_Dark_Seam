@@ -3,6 +3,7 @@
 
 import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
+import type { GameEvent } from '../core/events.ts'
 import { Camera } from './camera.ts'
 
 export interface ViewState {
@@ -65,4 +66,20 @@ export function followSelected(sim: SimState, view: ViewState): void {
   const camera = currentCamera(view)
   camera.x = agent.x * CONFIG.render.tileSize
   camera.y = agent.y * CONFIG.render.tileSize
+}
+
+/** Show where a logged event happened, and select who it was about (if they're still around). */
+export function jumpTo(sim: SimState, view: ViewState, ev: GameEvent): void {
+  if (!ev.at) return
+  view.levelIndex = ev.at.levelIndex
+  view.following = false
+  const camera = currentCamera(view)
+  camera.x = (ev.at.x + 0.5) * CONFIG.render.tileSize
+  camera.y = (ev.at.y + 0.5) * CONFIG.render.tileSize
+  camera.zoom = Math.max(camera.zoom, CONFIG.render.jumpZoom)
+  camera.fitted = true // don't let the first-view fit undo the jump
+  const agent = ev.agentId !== undefined ? sim.agents[ev.agentId] : null
+  view.selected = agent && !agent.dead
+    ? { levelIndex: agent.levelIndex, x: Math.floor(agent.x), y: Math.floor(agent.y), agentId: agent.id }
+    : { ...ev.at }
 }

@@ -60,7 +60,7 @@ export function updateMother(mother: Agent, ctx: HiveContext & CombatContext): v
       hive.escapeTo = hive.deepHome
       logEvent(ctx, 'hive', m.rooted
         ? 'The Brood Mother is tearing herself free to retreat to her Deep Chamber'
-        : 'The Brood Mother is retreating to her Deep Chamber with her guards')
+        : 'The Brood Mother is retreating to her Deep Chamber with her guards', mother)
       if (m.rooted && m.task !== 'uproot') startUproot(m)
       // Already loose (hunting): drop the hunt and go.
       if (!m.rooted) { mother.path = []; mother.state = { name: 'idle', ticksLeft: 0 } }
@@ -86,7 +86,7 @@ export function updateMother(mother: Agent, ctx: HiveContext & CombatContext): v
   // Rooted: intruders in the hive core make her tear free to fight them.
   if (check && m.task !== 'inject' && intruder(mother, ctx)) {
     startUproot(m)
-    logEvent(ctx, 'hive', 'The Brood Mother is uprooting herself to deal with the intruders')
+    logEvent(ctx, 'hive', 'The Brood Mother is uprooting herself to deal with the intruders', mother)
     return
   }
 
@@ -165,7 +165,7 @@ function startBurrow(mother: Agent, ctx: HiveContext): void {
   mother.path = []
   mother.state = { name: 'idle', ticksLeft: 0 }
   ctx.hive.escapeTo = null
-  logEvent(ctx, 'hive', 'The Brood Mother is burrowing into the deep rock to escape!')
+  logEvent(ctx, 'hive', 'The Brood Mother is burrowing into the deep rock to escape!', mother)
 }
 
 function startUproot(m: MyrrData): void {
@@ -187,7 +187,7 @@ function uproot(mother: Agent, ctx: HiveContext): void {
   m.task = 'hunt'
   m.lastSeenTick = ctx.tick
   mother.baseSpeed = mother.speed = L.motherSpeed
-  if (!ctx.hive.escapeTo) logEvent(ctx, 'hive', 'The Brood Mother has torn free and is hunting the intruders')
+  if (!ctx.hive.escapeTo) logEvent(ctx, 'hive', 'The Brood Mother has torn free and is hunting the intruders', mother)
 }
 
 /** Uprooted: hunt intruders in the hive core, then go home and root again. */
@@ -263,7 +263,7 @@ function cocoon(captive: Agent, ctx: HiveContext): void {
   civ.infection = { hatchTick: ctx.tick + Math.round(L.incubationSeconds * TPS), stabilizedUntilTick: 0 }
   captive.state = { name: 'idle', ticksLeft: 1e9 }
   ctx.hive.unplaced.push(captive.id)
-  logEvent(ctx, 'injected', `${who(captive)} was injected and cocooned in the hive`)
+  logEvent(ctx, 'injected', `${who(captive)} was injected and cocooned in the hive`, captive)
 }
 
 /** Humans in the hive core and few guards left, or the Brood Mother badly hurt. */
@@ -301,7 +301,7 @@ function arriveDeep(mother: Agent, ctx: HiveContext): void {
   m.ticksLeft = Math.round(L.rerootSeconds * TPS)
   mother.path = []
   mother.state = { name: 'idle', ticksLeft: 0 }
-  logEvent(ctx, 'hive', 'The Brood Mother has reached her Deep Chamber')
+  logEvent(ctx, 'hive', 'The Brood Mother has reached her Deep Chamber', mother)
 }
 
 /** With the Brood Mother dead: Broodlings die at once; the rest weaken until they die. */
@@ -332,7 +332,7 @@ export function updateInfections(ctx: HiveContext): void {
     addBroodling(tileOf(host), ctx)
     ctx.hive.hatched++
     ctx.stats.hatched++
-    logEvent(ctx, 'hatch', `A Broodling burst out of ${who(host).toLowerCase()} on Level ${host.levelIndex + 1}`)
+    logEvent(ctx, 'hatch', `A Broodling burst out of ${who(host, true)} on Level ${host.levelIndex + 1}`, host)
   }
 }
 
