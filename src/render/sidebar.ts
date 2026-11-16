@@ -16,12 +16,13 @@ function commanderLine(sim: SimState): string {
   const c = sim.commander
   const parts: string[] = []
   if (c.second) parts.push('SECOND-IN-COMMAND (the Commander is lost)')
+  else parts.push(c.temperament)
   parts.push(c.alarm ? 'ALARM' : 'no alarm')
   if (c.lockdown) parts.push(c.locked ? 'lockdown' : 'lockdown (no power)')
   const assault = sim.squads.filter((s) => s.mission === 'assault').map((s) => s.name)
   if (assault.length) parts.push('assaulting the hive: ' + assault.join(', '))
   if (c.reinforcementsDue !== null) parts.push('drop ship in ' + formatDuration(c.reinforcementsDue - sim.tick))
-  else if (!c.reinforcementsCalled) parts.push(`${c.missingKnown} known missing (help is called at ${CONFIG.commander.reinforcements.missingToCall})`)
+  else if (!c.reinforcementsCalled) parts.push(`${c.missingKnown} known missing (help is called at ${Math.max(1, CONFIG.commander.reinforcements.missingToCall + CONFIG.commander.temperaments[c.temperament].missingDelta)})`)
   if (c.evacuation === 'fortify') parts.push('FORTIFYING THE LANDING PAD')
   if (c.evacuation === 'called') parts.push('evacuation ship in ' + formatDuration(c.shipLands - sim.tick))
   if (c.evacuation === 'landed') parts.push('SHIP AT THE PAD, leaves in ' + formatDuration(c.shipLeaves - sim.tick))

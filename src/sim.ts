@@ -17,7 +17,7 @@ import { updateSwarm } from './agents/swarm.ts'
 import { planNest } from './agents/nest.ts'
 import { createLandingWatch, elevatorRide, noteArrival, planListening, planStakeout } from './agents/landing.ts'
 import { planDecoy } from './agents/decoy.ts'
-import { createCommander, landingPad, updateCommander, type CommanderState } from './systems/commander.ts'
+import { createCommander, landingPad, type Temperament, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { personName, squadCallsign } from './data/names.ts'
 import { newSquad, soldierHurt, soldierKilled, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
@@ -63,6 +63,13 @@ export interface SimState {
   commander: CommanderState
 }
 
+/** One line for the log at the start of a run. */
+const TEMPERAMENT_TEXT: Record<Temperament, string> = {
+  cautious: 'slow to attack, quick to call for help and to evacuate',
+  steady: 'goes by the book',
+  bold: 'quick to attack, slow to call for help, holds on before evacuating',
+}
+
 export function createSim(seed: number): SimState {
   const world = createWorld()
   const sim: SimState = {
@@ -97,7 +104,9 @@ export function createSim(seed: number): SimState {
   spawnCommander(sim)
   spawnHive(sim)
   spawnMyrrWanderers(sim)
-  sim.commander = createCommander(sim.agents)
+  const temperaments = Object.keys(CONFIG.commander.temperaments) as Temperament[]
+  sim.commander = createCommander(sim.agents, sim.rng.pick(temperaments))
+  logEvent({ events: sim.events, stats: sim.stats, tick: sim.tick }, 'command', `The Commander is ${sim.commander.temperament}: ${TEMPERAMENT_TEXT[sim.commander.temperament]}`)
   return sim
 }
 

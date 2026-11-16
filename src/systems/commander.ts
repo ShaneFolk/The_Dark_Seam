@@ -32,7 +32,7 @@ import { markChanged } from './resin.ts'
 import { hasPower } from './power.ts'
 import { callShipSwarm } from '../agents/swarm.ts'
 import { makeWeapon } from '../agents/combat.ts'
-import { choose, ramp, scoreList, type Option } from '../core/utility.ts'
+import { pickWeighted, ramp, scoreList, type Option } from '../core/utility.ts'
 import { who } from '../agents/describe.ts'
 import { makeNoise } from './noise.ts'
 
@@ -75,10 +75,17 @@ export interface CommanderState {
   escortTo: PathNode | null
   /** What scouts found at the elevator landings (scout.ts). */
   landings: LandingNotes
+  /** This run's Commander: cautious, steady or bold (see CONFIG.commander.temperaments). */
+  temperament: Temperament
+  /** Next tick the Commander weighs an assault. */
+  nextAssaultThinkTick: number
 }
 
-export function createCommander(agents: Agent[]): CommanderState {
+export type Temperament = keyof typeof CONFIG.commander.temperaments
+
+export function createCommander(agents: Agent[], temperament: Temperament): CommanderState {
   return {
+    temperament, nextAssaultThinkTick: 0,
     alarm: false, lockdown: false, locked: false, hiveKnown: false, lastSightingTick: -1e9,
     reinforcementsCalled: false, reinforcementsDue: null, missingKnown: 0, probed: false, lastMustTick: -1e9, lastFailTick: -1e9, landings: {},
     evacuation: 'none', fortifyUntil: 0, shipLands: 0, shipLeaves: 0, shipHeard: false,
@@ -160,15 +167,16 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
   const R = C.reinforcements
   cmd.missingKnown = ctx.agents.filter((a) => a.civ && a.civ.takenTick >= 0 &&
     (a.civ.takenSeen || ctx.tick - a.civ.takenTick >= R.noticeSeconds * TPS)).length
-  if (!cmd.reinforcementsCalled && (cmd.missingKnown >= R.missingToCall || soldiers < cmd.startSoldiers * R.belowShare)) {
+  const callAt = Math.max(1, R.missingToCall + C.temperaments[cmd.temperament].missingDelta)
+  if (!cmd.reinforcementsCalled && (cmd.missingKnown >= callAt || soldiers < cmd.startSoldiers * R.belowShare)) {
     cmd.reinforcementsCalled = true
     cmd.reinforcementsDue = ctx.tick + Math.round(R.delaySeconds * TPS)
-    const why = cmd.missingKnown >= R.missingToCall ? `${cmd.missingKnown} people are missing` : 'too many soldiers are down'
+    const why = cmd.missingKnown >= callAt ? `${cmd.missingKnown} people are missing` : 'too many soldiers are down'
     logEvent(ctx, 'command', `The Commander realizes ${why} and radios for help: a drop ship with ${R.squads} squads lands in ${formatDuration(R.delaySeconds * TPS)}`)
   }
 
   // Evacuation when few civilians are left free.
-  if (cmd.evacuation === 'none' && civilians > 0 && civilians < cmd.startCivilians * C.evacuation.civiliansBelow) {
+  if (cmd.evacuation === 'none' && civilians > 0 && civilians < cmd.startCivilians * C.evacuation.civiliansBelow * C.temperaments[cmd.temperament].evacuateScale) {
     cmd.evacuation = 'fortify'
     cmd.fortifyUntil = ctx.tick + Math.round(C.evacuation.fortifySeconds * TPS)
     for (const s of squads) { s.mission = 'escort'; s.missionGoal = null; s.missionReached = false }
@@ -212,7 +220,12 @@ function planAssault(cmd: CommanderState, squads: Squad[], cocoons: number, hive
   const R = CONFIG.utility.commanderMemory
   const memory = R.failedScale + (1 - R.failedScale) * ramp(ctx.tick - cmd.lastFailTick, 0, R.memorySeconds * TPS)
 
-  const options: Option<AssaultChoice>[] = [{ action: 'wait', score: cmd.second ? U.secondWait : U.wait }]
+  // Weighed once a minute, not every review, so the random pick doesn't fire at the first chance.
+  if (ctx.tick < cmd.nextAssaultThinkTick) return
+  cmd.nextAssaultThinkTick = ctx.tick + Math.round(C.assaultThinkSeconds * TPS)
+
+  const T = C.temperaments[cmd.temperament]
+  const options: Option<AssaultChoice>[] = [{ action: 'wait', score: (cmd.second ? U.secondWait : U.wait) * T.waitScale }]
   if (!cmd.probed) options.push({ action: 'probe', score: urgency * U.probe })
   else {
     if (force >= A.forceMinSoldiers) {
@@ -224,7 +237,8 @@ function planAssault(cmd: CommanderState, squads: Squad[], cocoons: number, hive
       options.push({ action: 'must', score: U.must * ramp(hatchingSoon(ctx), ...U.mustHatching) * memory })
     }
   }
-  const pick = choose(options)?.action ?? 'wait'
+  // Better scores are more likely, but a close call can go either way.
+  const pick = pickWeighted(options, ctx.rng, C.assaultSharpness)?.action ?? 'wait'
   if (pick === 'wait') return
 
   const scores = `scores: ${scoreList(options)}`

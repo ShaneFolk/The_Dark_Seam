@@ -683,6 +683,23 @@ export const CONFIG = {
   commander: {
     /** The Commander reviews the situation this often, in seconds. */
     intervalSeconds: 5,
+    /**
+     * Whether to assault the hive is weighed this often, in seconds, and picked at random
+     * weighted by score ^ assaultSharpness (higher = the best choice wins more often).
+     */
+    assaultThinkSeconds: 60,
+    assaultSharpness: 6,
+    /**
+     * Each run's Commander has a temperament (picked from the seed, equally likely):
+     *   waitScale         how much they like waiting over attacking (the wait score is multiplied)
+     *   missingDelta      people known missing before they call for help (added to reinforcements.missingToCall)
+     *   evacuateScale     how early they evacuate (multiplies evacuation.civiliansBelow)
+     */
+    temperaments: {
+      cautious: { waitScale: 1.3, missingDelta: -1, evacuateScale: 1.3 },
+      steady: { waitScale: 1, missingDelta: 0, evacuateScale: 1 },
+      bold: { waitScale: 0.75, missingDelta: 1, evacuateScale: 0.7 },
+    },
     /** The command squad (extra, on top of soldiers.count) stays with the Commander and fights Myrr within guardRange tiles of them. */
     guardSquadSize: 3,
     guardRange: 10,
