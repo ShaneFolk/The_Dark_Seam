@@ -94,7 +94,7 @@ export class Input {
       if (e.code === 'Space') view.paused = !view.paused
       if (e.key === '+' || e.key === '=') stepSpeed(view, 1)
       if (e.key === '-' || e.key === '_') stepSpeed(view, -1)
-      if (e.code === 'Escape') view.selected = null
+      if (e.code === 'Escape') { view.selected = null; view.tool = 'inspect'; view.sendSquad = null }
       this.keysDown.add(e.code)
       if (e.code === 'KeyP') view.showPheromones = !view.showPheromones
       if (e.code === 'KeyG') view.art = view.art === 'sprites' ? 'shapes' : 'sprites'

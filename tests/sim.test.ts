@@ -7,6 +7,8 @@ import { CONFIG } from '../src/config.ts'
 import { createSim, step } from '../src/sim.ts'
 import { createWorld } from '../src/world/world.ts'
 import { canWalk } from '../src/world/pathfinding.ts'
+import { Tile } from '../src/world/tiles.ts'
+import { Barrier } from '../src/systems/barriers.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const TICKS_PER_HOUR = (CONFIG.clock.dayLengthMinutes * 60 * TPS) / 24
@@ -64,4 +66,20 @@ test('dead Myrr scare nobody: no sightings logged after every Myrr is dead', () 
   const lastMyrrDeath = sim.ending?.kind === 'extermination' ? sim.ending.tick : null
   if (lastMyrrDeath === null) return // this seed didn't end in extermination; nothing to check
   assert.ok(sim.commander.lastSightingTick <= lastMyrrDeath, 'the Commander kept "seeing" Myrr after they were all dead')
+})
+
+test('player tools: actions apply on the next tick and are logged; an alarm the player sounds holds', () => {
+  const sim = createSim(4)
+  const level = sim.world.levels[0]
+  const door = level.tiles.findIndex((t, i) => t === Tile.Door && level.barrier[i] <= 0)
+  sim.player.queue.push({ kind: 'door', levelIndex: 0, i: door }, { kind: 'power', generator: 0 }, { kind: 'alarm' })
+  step(sim)
+  assert.equal(level.barrierKind[door], Barrier.Lock, 'the door is locked')
+  assert.equal(sim.power.generators[0].switchedOff, true)
+  assert.equal(sim.commander.alarm, true)
+  assert.equal(sim.player.log.length, 3)
+  // The player's alarm holds even with no Myrr seen for a long while.
+  for (let i = 0; i < 600 * TPS && !sim.ending; i++) step(sim)
+  assert.equal(sim.commander.alarm, true, 'the alarm the player sounded stays on')
+  assert.ok(sim.events.some((e) => e.kind === 'player'))
 })

@@ -11,6 +11,7 @@ import { Sidebar } from './render/sidebar.ts'
 import { showSummary } from './render/summary.ts'
 import { loadSprites } from './render/sprites.ts'
 import { Inspector, pickAt } from './render/inspector.ts'
+import { Tools } from './render/tools.ts'
 import { followSelected, jumpTo } from './render/view.ts'
 
 /** Read ?seed=123 from the URL, or fall back to the default seed. */
@@ -43,6 +44,7 @@ void loadSprites() // the renderer switches to sprites once the sheet has loaded
 const view = createView(sim.world.levels.length)
 const selectLevel = (levelIndex: number) => { view.levelIndex = levelIndex; view.following = false }
 const selectAt = (x: number, y: number, touch: boolean) => {
+  if (tools.tap(x, y, touch, canvas.clientWidth, canvas.clientHeight)) return
   view.selected = pickAt(sim, view, x, y, canvas.clientWidth, canvas.clientHeight, touch)
   if (view.selected?.agentId === undefined) view.following = false
 }
@@ -53,6 +55,10 @@ const inspector = new Inspector(stage, view)
 const sidebarRoot = document.querySelector<HTMLElement>('#sidebar')
 if (!sidebarRoot) throw new Error('Missing #sidebar')
 const sidebar = new Sidebar(sidebarRoot, sim, view, selectLevel, (ev) => jumpTo(sim, view, ev))
+// The player's tools go under the speed and toggle buttons in the sidebar.
+const toolSlot = document.createElement('div')
+sidebarRoot.querySelector('.toggle-bar')!.after(toolSlot)
+const tools = new Tools(toolSlot, stage, sim, view)
 
 // Dev server only (npm run dev): the sim and step() in the browser console, for poking at a run.
 if (import.meta.env.DEV) Object.assign(window, { sim, step: (n = 1) => { for (let i = 0; i < n && !sim.ending; i++) step(sim) }, view })
@@ -66,6 +72,7 @@ startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
     renderer.render(sim, view)
     sidebar.update(sim, view)
     inspector.update(sim, view)
+    tools.update()
     if (sim.ending) showSummary(sim)
   },
 })

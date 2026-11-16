@@ -20,6 +20,7 @@ import { planDecoy } from './agents/decoy.ts'
 import { createCommander, landingPad, type Temperament, updateCommander, type CommanderState } from './systems/commander.ts'
 import { makeWeapon, pruneShots, tickWeapon, type Shot } from './agents/combat.ts'
 import { personName, squadCallsign } from './data/names.ts'
+import { createPlayer, updatePlayer, type PlayerState } from './systems/player.ts'
 import { newSquad, soldierHurt, soldierKilled, updateSoldier, updateSquads, type Squad } from './agents/soldier.ts'
 import { countResin, healMyrr, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
@@ -61,6 +62,8 @@ export interface SimState {
   /** Was the colony powered last tick (to log power going off and on). */
   hadPower: boolean
   commander: CommanderState
+  /** What the player did and has queued (systems/player.ts). */
+  player: PlayerState
 }
 
 /** One line for the log at the start of a run. */
@@ -75,6 +78,7 @@ export function createSim(seed: number): SimState {
   const sim: SimState = {
     seed,
     names: new Set(),
+    player: createPlayer(),
     tick: 0,
     rng: new Rng(seed),
     world,
@@ -148,6 +152,7 @@ export function step(sim: SimState): void {
   hooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
   hooks.onRide = (agent, kind, from, to, ticksLeft) => elevatorRide(agent, kind, from, to, ticksLeft, ctx)
   hooks.onArrive = (agent, kind, from, to) => noteArrival(agent, kind, from, to, ctx)
+  updatePlayer(sim.player, sim.squads, ctx)
   updateInfections(ctx)
   updateMedBays(sim.medbays, sim.agents, sim.world, hasPower(sim.power), ctx)
   updateCollapse(ctx)

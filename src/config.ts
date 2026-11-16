@@ -849,6 +849,14 @@ export const CONFIG = {
     maxTiles: 3000,
   },
 
+  /** Player tools (systems/player.ts). */
+  player: {
+    /** After the player stops the alarm, the Commander won't sound it again for this long, in seconds. */
+    alarmQuietSeconds: 60,
+    /** A squad the player sends holds the spot this long before going back on patrol, in seconds. */
+    holdSeconds: 30,
+  },
+
   render: {
     /** Tile size in pixels at zoom 1. */
     tileSize: 16,

@@ -4,6 +4,8 @@
 export type EventKind =
   | 'contact' | 'capture' | 'injected' | 'hatch' | 'rescue' | 'cure' | 'death'
   | 'power' | 'gear' | 'hive' | 'command' | 'ending'
+  /** Something the watcher did with a tool (systems/player.ts). */
+  | 'player'
 
 export interface GameEvent {
   tick: number

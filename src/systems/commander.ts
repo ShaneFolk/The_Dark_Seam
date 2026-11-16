@@ -75,6 +75,12 @@ export interface CommanderState {
   escortTo: PathNode | null
   /** What scouts found at the elevator landings (scout.ts). */
   landings: LandingNotes
+  /** The player sounded the alarm: it stays on until they stop it. */
+  playerAlarm: boolean
+  /** The player stopped the alarm: the Commander won't sound it again before this tick. */
+  alarmQuietUntil: number
+  /** Doors (Level 1 tile indexes) the lockdown locked, so lifting it frees only those. */
+  lockdownTiles: number[]
   /** This run's Commander: cautious, steady or bold (see CONFIG.commander.temperaments). */
   temperament: Temperament
   /** Next tick the Commander weighs an assault. */
@@ -85,7 +91,7 @@ export type Temperament = keyof typeof CONFIG.commander.temperaments
 
 export function createCommander(agents: Agent[], temperament: Temperament): CommanderState {
   return {
-    temperament, nextAssaultThinkTick: 0,
+    temperament, nextAssaultThinkTick: 0, playerAlarm: false, alarmQuietUntil: 0, lockdownTiles: [],
     alarm: false, lockdown: false, locked: false, hiveKnown: false, lastSightingTick: -1e9,
     reinforcementsCalled: false, reinforcementsDue: null, missingKnown: 0, probed: false, lastMustTick: -1e9, lastFailTick: -1e9, landings: {},
     evacuation: 'none', fortifyUntil: 0, shipLands: 0, shipLeaves: 0, shipHeard: false,
@@ -126,10 +132,10 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
 
   // Alarm: on the first sighting or capture; clears after a quiet spell.
   const recent = ctx.tick - cmd.lastSightingTick < C.alarmClearSeconds * TPS
-  if (!cmd.alarm && recent) {
+  if (!cmd.alarm && recent && ctx.tick >= cmd.alarmQuietUntil) {
     cmd.alarm = true
     logEvent(ctx, 'command', 'The Commander sounded the alarm: everyone to shelter')
-  } else if (cmd.alarm && !recent) {
+  } else if (cmd.alarm && !recent && !cmd.playerAlarm) {
     cmd.alarm = false
     logEvent(ctx, 'command', 'All clear: the alarm is off')
     if (cmd.lockdown) { cmd.lockdown = false; logEvent(ctx, 'command', 'Lockdown lifted') }
@@ -329,14 +335,22 @@ function keepLocks(cmd: CommanderState, ctx: CivilianContext): void {
   if (want === cmd.locked) return
   cmd.locked = want
   const level = ctx.world.levels[0]
-  for (let i = 0; i < level.tiles.length; i++) {
-    if (level.tiles[i] !== Tile.Door) continue
-    if (want && level.barrier[i] <= 0) putBarrier(level, i, Barrier.Lock)
-    else if (!want && level.barrierKind[i] === Barrier.Lock) {
+  if (want) {
+    cmd.lockdownTiles = []
+    for (let i = 0; i < level.tiles.length; i++) {
+      if (level.tiles[i] !== Tile.Door || level.barrier[i] > 0) continue
+      putBarrier(level, i, Barrier.Lock)
+      cmd.lockdownTiles.push(i)
+    }
+  } else {
+    // Only the locks the lockdown put on (the player's own locks stay).
+    for (const i of cmd.lockdownTiles) {
+      if (level.barrierKind[i] !== Barrier.Lock) continue
       level.barrier[i] = 0
       level.barrierKind[i] = Barrier.None
       markChanged(level, i)
     }
+    cmd.lockdownTiles = []
   }
   if (!want && cmd.lockdown) logEvent(ctx, 'power', 'The door locks failed without power')
 }

@@ -14,7 +14,7 @@ import { dist, members, newSquad, setOrder, type Order, type Squad } from './squ
 const S = CONFIG.soldiers
 
 /** Busy with something that can't just be handed over (carrying or setting up a turret). */
-const NO_MERGE = new Set<Order>(['fetchTurret', 'deployTurret', 'packTurret', 'guide'])
+const NO_MERGE = new Set<Order>(['fetchTurret', 'deployTurret', 'packTurret', 'guide', 'move'])
 
 /**
  * A squad down to a soldier or two joins the nearest other squad (not the command

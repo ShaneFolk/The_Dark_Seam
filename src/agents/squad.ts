@@ -29,7 +29,7 @@ export interface SoldierData {
   workTicks: number
 }
 
-export type Order = 'cover' | 'packTurret' | 'guide' | 'guard' | 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
+export type Order = 'move' | 'cover' | 'packTurret' | 'guide' | 'guard' | 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
 
 export interface Squad {
   id: number
@@ -82,6 +82,8 @@ export interface Squad {
   scouting: Scouting | null
   /** Someone just cut free that this squad is walking to the med bay, or -1. */
   escortId: number
+  /** Where the player sent this squad (systems/player.ts), or null. */
+  playerGoal: PathNode | null
   /** Split off from an assault as an escort: others don't merge into it (it rejoins a squad when done). */
   isEscort: boolean
 }
@@ -93,7 +95,7 @@ export function newSquad(id: number, name: string, patrol: RoomRef[], patrolInde
     lastContactTick: tick, patrol, patrolIndex, ticksLeft: 0, welded: false,
     charges: 0, carryingTurret: false, mission: null, missionGoal: null, missionReached: false,
     incendiaries: 0, burnAt: null, riskTaken: false, riskLoggedTick: -1e9, guardId: -1, flares: 0,
-    turretAmmo: null, scouting: null, searches: 0, kills: 0, veteran: false, escortId: -1, isEscort: false,
+    turretAmmo: null, scouting: null, searches: 0, kills: 0, veteran: false, escortId: -1, isEscort: false, playerGoal: null,
   }
 }
 

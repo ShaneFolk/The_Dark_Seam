@@ -6,6 +6,8 @@
 // Each squad has one order at a time, picked by its "brain" a few times a second
 // in this priority order:
 //
+//   (move)    the player sent the squad somewhere (systems/player.ts): go, hold a while, patrol;
+//             only a broken morale or empty magazines come first
 //   retreat   morale broke: fall back to Security, weld it shut, wait until it recovers, then
 //             go back on duty (during an evacuation: fall back to the Landing Pad instead)
 //   resupply  low on ammo: restock at the Armory
@@ -140,6 +142,9 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
       if (squad.order !== 'retreat') setOrder(squad, 'retreat', pad ? randomTileIn(ctx.world, pad, ctx.rng) : roomGoal(ctx, ['security'], leader))
     } else if (squad.order === 'resupply' || lowAmmo) {
       if (squad.order !== 'resupply') setOrder(squad, 'resupply', restockAt ? randomTileIn(ctx.world, restockAt, ctx.rng) : roomGoal(ctx, ['armory'], leader))
+    } else if (squad.playerGoal) {
+      // The player's order: go there (they still shoot whatever they meet on the way).
+      setOrder(squad, 'move', squad.playerGoal)
     } else if (squad.guardId >= 0 && padWork(squad, ctx)) {
       // The command squad is busy setting up the Landing Pad (the Commander waits there).
     } else if (squad.guardId >= 0 && !(squad.order === 'guard' && !myrrSeen &&
@@ -290,6 +295,7 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], squads: Squad[], 
     if (squad.order === 'packTurret') squad.ticksLeft = Math.round(CONFIG.turrets.packSeconds * TPS)
     if (squad.order === 'deployTurret') squad.ticksLeft = Math.round(CONFIG.turrets.setupSeconds * TPS)
     if (squad.order === 'blast') squad.ticksLeft = Math.round(CONFIG.charges.setSeconds * TPS)
+    if (squad.order === 'move') squad.ticksLeft = Math.round(CONFIG.player.holdSeconds * TPS)
     if (squad.order === 'cut') squad.ticksLeft = Math.round(S.cutSeconds * TPS)
     if (squad.order === 'guide') squad.goal = null
     // Responding: nothing here, so search a couple of places nearby before giving up.
@@ -327,6 +333,12 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], squads: Squad[], 
 }
 
 function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatContext): void {
+  if (squad.order === 'move') {
+    // Held the spot the player sent them to: back to their own judgement.
+    squad.playerGoal = null
+    setOrder(squad, 'patrol', null)
+    return
+  }
   if (squad.order === 'fetchTurret') {
     const stock = stockIn(ctx.supplies, roomAt(ctx.world, tileOf(alive[0])))
     if (stock && take(stock, 'turrets', 1)) squad.carryingTurret = true

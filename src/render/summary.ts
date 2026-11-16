@@ -8,7 +8,7 @@ import { who } from '../agents/describe.ts'
 import type { GameEvent } from '../core/events.ts'
 
 /** Event kinds worth listing as key moments. */
-const KEY_KINDS = new Set(['contact', 'death', 'power', 'gear', 'hive', 'command', 'rescue', 'cure', 'ending'])
+const KEY_KINDS = new Set(['contact', 'death', 'power', 'gear', 'hive', 'command', 'rescue', 'cure', 'ending', 'player'])
 const MAX_KEY_MOMENTS = 25
 const MAX_FATES = 14
 

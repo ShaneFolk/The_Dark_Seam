@@ -21,6 +21,8 @@ export interface Generator {
   sabotaged: boolean
   /** The squad covering its repair, or -1. */
   coverSquad: number
+  /** Switched off by the player (not damage: engineers leave it alone). */
+  switchedOff: boolean
 }
 
 export interface PowerState {
@@ -30,13 +32,13 @@ export interface PowerState {
 export function createPower(world: World): PowerState {
   const generators = findRooms(world, ['generator']).map((room) => {
     const at = centreTile(world, room)
-    return { room, at, health: CONFIG.power.generatorHp, maxHealth: CONFIG.power.generatorHp, broken: false, sabotaged: false, coverSquad: -1 }
+    return { room, at, health: CONFIG.power.generatorHp, maxHealth: CONFIG.power.generatorHp, broken: false, sabotaged: false, coverSquad: -1, switchedOff: false }
   })
   return { generators }
 }
 
 export function hasPower(power: PowerState): boolean {
-  return power.generators.some((g) => !g.broken)
+  return power.generators.some((g) => !g.broken && !g.switchedOff)
 }
 
 /** Damage a generator; at zero it's knocked out until fully repaired. */

@@ -150,6 +150,7 @@ body {
 .event-log .ev-capture { color: #ff9a8a; }
 .event-log .ev-rescue,
 .event-log .ev-cure { color: #8fe08f; }
+.event-log .ev-player { color: #c9a3ff; }
 .event-log .ev-power,
 .event-log .ev-hive { color: #f0c674; }
 
@@ -241,6 +242,49 @@ body {
 
 .details-toggle { display: none; }
 
+/* ---- player tools (Phase 11) */
+
+.tool-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.tool-bar button {
+  flex: 1 1 auto;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: #181d23;
+  border: 1px solid #262c34;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tool-bar button.active {
+  border-color: #c9a3ff;
+  background: #221b2e;
+}
+
+.tool-hint {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100% - 16px));
+  padding: 6px 10px;
+  box-sizing: border-box;
+  background: rgba(34, 27, 46, 0.92);
+  border: 1px solid #c9a3ff;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.tool-hint[hidden] { display: none; }
+
 /* ---- clickable event log lines (jump to where it happened) */
 
 .event-log li.has-place { cursor: pointer; }
@@ -273,6 +317,7 @@ body {
 @media (pointer: coarse) {
   .speed-bar button,
   .toggle-bar button,
+  .tool-bar button,
   .inspector button,
   .details-toggle { min-height: 40px; font-size: 14px; }
   .event-log { font-size: 13px; }

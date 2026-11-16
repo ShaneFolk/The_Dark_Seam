@@ -5,6 +5,7 @@ import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
 import type { GameEvent } from '../core/events.ts'
 import { Camera } from './camera.ts'
+import type { Tool } from './tools.ts'
 
 export interface ViewState {
   /** Index into world.levels (0 = Level 1). */
@@ -23,6 +24,10 @@ export interface ViewState {
   selected: Selection | null
   /** Keep the camera on the selected agent, across levels (toggle with F). */
   following: boolean
+  /** The player's tool: what a tap on the map does (render/tools.ts). */
+  tool: Tool
+  /** Send tool: the squad picked, waiting for a tap on where to send it. */
+  sendSquad: number | null
 }
 
 export interface Selection {
@@ -43,6 +48,8 @@ export function createView(levelCount: number): ViewState {
     art: 'sprites',
     selected: null,
     following: false,
+    tool: 'inspect',
+    sendSquad: null,
   }
 }
 

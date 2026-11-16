@@ -144,6 +144,18 @@ export class Renderer {
 
   /** A ring around the selected agent (or a box around the selected tile). */
   private drawSelection(sim: SimState, view: ViewState, ox: number, oy: number, tile: number): void {
+    // Send tool: the squad picked so far.
+    if (view.sendSquad !== null) {
+      this.ctx.strokeStyle = COLORS.selected
+      this.ctx.lineWidth = 2
+      for (const id of sim.squads[view.sendSquad].members) {
+        const a = sim.agents[id]
+        if (!a || a.dead || a.levelIndex !== view.levelIndex) continue
+        this.ctx.beginPath()
+        this.ctx.arc(ox + a.x * tile, oy + a.y * tile, Math.max(6, tile * 0.75), 0, Math.PI * 2)
+        this.ctx.stroke()
+      }
+    }
     const sel = view.selected
     if (!sel || sel.levelIndex !== view.levelIndex) return
     const { ctx } = this

@@ -311,9 +311,20 @@ A look over the whole project (bugs, watchability, phones, code health), done be
 - [x] Faster sim: scent scans reused for a second, guards with no path wait before retrying, leaders re-plan less
 - [x] Cleanup: soldier.ts split by job, shared room/distance helpers, tuning numbers into config.ts, movement hooks on the world
 - [x] Tests (`npm test`) and `npm run batch -- --events` to print a run's log
+- [x] Round 2: unique names, colony time everywhere, myrr.ts and civilian.ts split by job
+- [x] Squads down to 1-2 soldiers merge with the nearest squad on any level (never into an escort)
+- [x] The Commander's temperament per seed (cautious, steady, bold) and a weighted random assault choice once a minute, so openings differ
+- [x] The hive forgets: a learned trick is dropped after 2 Myrr die on it and can be relearned after 8 minutes
+- [x] The rescue on screen: escort lines, hatch and cure rings, an inspector line, a log entry on reaching the med bay
 
 ### Phase 11 — Player Interference
-- [ ] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
+Tools act through a queue the sim applies on its next tick (`src/systems/player.ts`), so the sim stays the only thing that changes sim state, and every action is kept with its tick.
+- [x] Lock / unlock a door (powered like the lockdown; Myrr can break it; the lockdown never removes it)
+- [x] Switch a generator off / on (not damage: engineers leave it alone)
+- [x] Sound / stop the alarm (the player's alarm holds until stopped; once stopped, the Commander waits a minute before sounding it again)
+- [x] Send a squad to a spot on any level (it holds 30 s, then patrols; calls it off an assault)
+- [ ] More tools (ideas: board up a window, call the drop ship early, flare a room, order an evacuation)
+- [ ] Replays: re-run a seed with its recorded player actions
 
 ---
 
@@ -333,7 +344,7 @@ A look over the whole project (bugs, watchability, phones, code health), done be
 
 ## 9. Open Questions
 - Self-destruct: in or out?
-- Which player-interference tools come first?
+- Which player-interference tools come next? *(First four chosen in the review pass: door, power, alarm, send squad.)*
 - Map format details: link pairing and room letters (see *Map format*).
 
 *Closed:* mine tunnels stay hand-built; variety comes from the seeded RNG (see *Run variety*).
