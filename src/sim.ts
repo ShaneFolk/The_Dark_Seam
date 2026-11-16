@@ -126,6 +126,28 @@ export function step(sim: SimState): void {
   for (const level of sim.world.levels) pruneFlares(level, sim.tick)
   if (sim.tick % TPS === 0) decayPheromones(sim.pheromones)
 
+  const ctx = makeContext(sim)
+
+  // The hooks close over this tick's context.
+  const hooks = sim.world.movementHooks
+  hooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
+  hooks.onRide = (agent, kind, from, to, ticksLeft) => elevatorRide(agent, kind, from, to, ticksLeft, ctx)
+  hooks.onArrive = (agent, kind, from, to) => noteArrival(agent, kind, from, to, ctx)
+  updatePlayer(sim.player, sim.squads, ctx)
+  stepWith(sim, ctx)
+}
+
+/**
+ * While paused, the player's actions are applied at once (without advancing time),
+ * so a tool works whether or not the clock is running.
+ */
+export function applyPlayerActions(sim: SimState): void {
+  if (!sim.player.queue.length || sim.ending) return
+  updatePlayer(sim.player, sim.squads, makeContext(sim))
+}
+
+/** Everything the systems need for one tick. */
+function makeContext(sim: SimState): CivilianContext {
   const ctx: CivilianContext = {
     world: sim.world,
     rng: sim.rng,
@@ -146,13 +168,11 @@ export function step(sim: SimState): void {
     onMyrrKilled: (_myrr, killer) => soldierKilled(sim.squads, killer, ctx),
     onMyrrHurt: (myrr, source) => takerHurt(myrr, source, ctx),
   }
+  return ctx
+}
 
-  // The hooks close over this tick's context.
-  const hooks = sim.world.movementHooks
-  hooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
-  hooks.onRide = (agent, kind, from, to, ticksLeft) => elevatorRide(agent, kind, from, to, ticksLeft, ctx)
-  hooks.onArrive = (agent, kind, from, to) => noteArrival(agent, kind, from, to, ctx)
-  updatePlayer(sim.player, sim.squads, ctx)
+/** The rest of a tick, after the player's actions. */
+function stepWith(sim: SimState, ctx: CivilianContext): void {
   updateInfections(ctx)
   updateMedBays(sim.medbays, sim.agents, sim.world, hasPower(sim.power), ctx)
   updateCollapse(ctx)

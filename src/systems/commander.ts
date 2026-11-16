@@ -175,17 +175,14 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
     (a.civ.takenSeen || ctx.tick - a.civ.takenTick >= R.noticeSeconds * TPS)).length
   const callAt = Math.max(1, R.missingToCall + C.temperaments[cmd.temperament].missingDelta)
   if (!cmd.reinforcementsCalled && (cmd.missingKnown >= callAt || soldiers < cmd.startSoldiers * R.belowShare)) {
-    cmd.reinforcementsCalled = true
-    cmd.reinforcementsDue = ctx.tick + Math.round(R.delaySeconds * TPS)
     const why = cmd.missingKnown >= callAt ? `${cmd.missingKnown} people are missing` : 'too many soldiers are down'
+    callReinforcements(cmd, ctx)
     logEvent(ctx, 'command', `The Commander realizes ${why} and radios for help: a drop ship with ${R.squads} squads lands in ${formatDuration(R.delaySeconds * TPS)}`)
   }
 
   // Evacuation when few civilians are left free.
   if (cmd.evacuation === 'none' && civilians > 0 && civilians < cmd.startCivilians * C.evacuation.civiliansBelow * C.temperaments[cmd.temperament].evacuateScale) {
-    cmd.evacuation = 'fortify'
-    cmd.fortifyUntil = ctx.tick + Math.round(C.evacuation.fortifySeconds * TPS)
-    for (const s of squads) { s.mission = 'escort'; s.missionGoal = null; s.missionReached = false }
+    startEvacuation(cmd, squads, ctx)
     logEvent(ctx, 'command', 'Evacuation: everyone falls back to the Landing Pad; the squads fortify it before the ship is called')
   }
   // Fortified (or out of time): call the ship.
@@ -196,6 +193,19 @@ export function updateCommander(cmd: CommanderState, squads: Squad[], ctx: Civil
     const state = turrets >= C.evacuation.padTurrets ? `fortified with ${turrets} turrets` : turrets ? `only ${turrets} turret${turrets === 1 ? '' : 's'} could be set up` : 'no turrets left to set up; the squads hold the pad'
     logEvent(ctx, 'command', `Landing Pad: ${state}. The ship is called, landing in ${formatDuration(C.evacuation.shipDelaySeconds * TPS)}`)
   }
+}
+
+/** The one drop-ship call: it lands reinforcements.delaySeconds later. */
+export function callReinforcements(cmd: CommanderState, ctx: CivilianContext): void {
+  cmd.reinforcementsCalled = true
+  cmd.reinforcementsDue = ctx.tick + Math.round(C.reinforcements.delaySeconds * TPS)
+}
+
+/** Everyone falls back to the Landing Pad; squads fortify it, then the ship is called. */
+export function startEvacuation(cmd: CommanderState, squads: Squad[], ctx: CivilianContext): void {
+  cmd.evacuation = 'fortify'
+  cmd.fortifyUntil = ctx.tick + Math.round(C.evacuation.fortifySeconds * TPS)
+  for (const s of squads) { s.mission = 'escort'; s.missionGoal = null; s.missionReached = false }
 }
 
 type AssaultChoice = 'wait' | 'probe' | 'force' | 'must'

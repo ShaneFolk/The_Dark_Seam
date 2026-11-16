@@ -284,6 +284,9 @@ body {
 }
 
 .tool-hint[hidden] { display: none; }
+.tool-notice:not(:empty) { margin-top: 4px; color: #ffe08a; font-weight: 600; }
+.tool-bar button:disabled { opacity: 0.4; cursor: default; }
+.tool-bar.orders { margin-top: -8px; }
 
 /* ---- clickable event log lines (jump to where it happened) */
 

@@ -855,6 +855,11 @@ export const CONFIG = {
     alarmQuietSeconds: 60,
     /** A squad the player sends holds the spot this long before going back on patrol, in seconds. */
     holdSeconds: 30,
+    /** Boards (for windows) and flares the player has for the whole run. */
+    boards: 6,
+    flares: 4,
+    /** Taps reach this far (CSS pixels on screen) to find a door, window or soldier, whatever the zoom. */
+    tapReachPx: 24,
   },
 
   render: {

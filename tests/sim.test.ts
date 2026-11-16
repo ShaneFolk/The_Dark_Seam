@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CONFIG } from '../src/config.ts'
-import { createSim, step } from '../src/sim.ts'
+import { applyPlayerActions, createSim, step } from '../src/sim.ts'
 import { createWorld } from '../src/world/world.ts'
 import { canWalk } from '../src/world/pathfinding.ts'
 import { Tile } from '../src/world/tiles.ts'
@@ -82,4 +82,37 @@ test('player tools: actions apply on the next tick and are logged; an alarm the 
   for (let i = 0; i < 600 * TPS && !sim.ending; i++) step(sim)
   assert.equal(sim.commander.alarm, true, 'the alarm the player sounded stays on')
   assert.ok(sim.events.some((e) => e.kind === 'player'))
+})
+
+test('tools work while paused and on doors the lockdown locked; boards, flares, drop ship and evacuation', () => {
+  const sim = createSim(4)
+  // Run until the Commander's lockdown has locked the doors.
+  while (!sim.commander.locked && sim.tick < 4 * TICKS_PER_HOUR) step(sim)
+  assert.ok(sim.commander.locked, 'the lockdown came on')
+  const level = sim.world.levels[0]
+  const door = sim.commander.lockdownTiles[0]
+  const tick = sim.tick
+  // "Paused": no step(), just apply the queue.
+  sim.player.queue.push({ kind: 'door', levelIndex: 0, i: door })
+  applyPlayerActions(sim)
+  assert.equal(sim.tick, tick, 'applying actions does not advance time')
+  assert.equal(level.barrier[door], 0, 'the lockdown lock is off')
+  sim.player.queue.push({ kind: 'door', levelIndex: 0, i: door })
+  applyPlayerActions(sim)
+  assert.equal(level.barrierKind[door], Barrier.Lock, 'locked again, by the player')
+
+  const window = level.tiles.findIndex((t, i) => t === Tile.Window && level.barrier[i] <= 0)
+  sim.player.queue.push({ kind: 'window', levelIndex: 0, i: window }, { kind: 'flare', at: { levelIndex: 1, x: 10, y: 10 } })
+  applyPlayerActions(sim)
+  assert.equal(level.barrierKind[window], Barrier.Boards)
+  assert.equal(sim.world.levels[1].flares.length > 0, true)
+  assert.equal(sim.player.boards, CONFIG.player.boards - 1)
+
+  const called = sim.commander.reinforcementsCalled
+  sim.player.queue.push({ kind: 'dropShip' }, { kind: 'evacuate' })
+  applyPlayerActions(sim)
+  assert.equal(sim.commander.reinforcementsCalled, true)
+  assert.equal(sim.commander.evacuation, 'fortify')
+  assert.ok(sim.player.feedback.length >= 5, 'every action left a message for the screen')
+  if (called) assert.ok(sim.player.feedback.some((f) => f.startsWith('The drop ship')), 'a second call is refused with a reason')
 })

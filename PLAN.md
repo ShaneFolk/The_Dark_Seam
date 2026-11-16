@@ -318,13 +318,13 @@ A look over the whole project (bugs, watchability, phones, code health), done be
 - [x] The rescue on screen: escort lines, hatch and cure rings, an inspector line, a log entry on reaching the med bay
 
 ### Phase 11 — Player Interference
-Tools act through a queue the sim applies on its next tick (`src/systems/player.ts`), so the sim stays the only thing that changes sim state, and every action is kept with its tick.
-- [x] Lock / unlock a door (powered like the lockdown; Myrr can break it; the lockdown never removes it)
+Tools act through a queue the sim applies (`src/systems/player.ts`) right away, paused or not, so the sim stays the only thing that changes sim state. Each action leaves a short message on screen saying what it did or why it couldn't.
+- [x] Lock / unlock a door (powered like the lockdown; Myrr can break it; the lockdown never removes it). Fixed after Shane's test: tools now work while paused, doors the lockdown locked can be unlocked, and a tap reaches 24 screen pixels whatever the zoom
 - [x] Switch a generator off / on (not damage: engineers leave it alone)
 - [x] Sound / stop the alarm (the player's alarm holds until stopped; once stopped, the Commander waits a minute before sounding it again)
 - [x] Send a squad to a spot on any level (it holds 30 s, then patrols; calls it off an assault)
-- [ ] More tools (ideas: board up a window, call the drop ship early, flare a room, order an evacuation)
-- [ ] Replays: re-run a seed with its recorded player actions
+- [x] Board up a window (6 boards a run), light a flare anywhere (4 a run), call the drop ship (if the Commander hasn't), order the evacuation
+- *(Replays: declined by Shane.)*
 
 ---
 

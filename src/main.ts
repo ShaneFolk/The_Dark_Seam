@@ -3,7 +3,7 @@
 import './style.css'
 import { CONFIG } from './config.ts'
 import { startLoop } from './core/loop.ts'
-import { createSim, step } from './sim.ts'
+import { applyPlayerActions, createSim, step } from './sim.ts'
 import { Renderer } from './render/renderer.ts'
 import { createView } from './render/view.ts'
 import { Input } from './render/input.ts'
@@ -44,7 +44,7 @@ void loadSprites() // the renderer switches to sprites once the sheet has loaded
 const view = createView(sim.world.levels.length)
 const selectLevel = (levelIndex: number) => { view.levelIndex = levelIndex; view.following = false }
 const selectAt = (x: number, y: number, touch: boolean) => {
-  if (tools.tap(x, y, touch, canvas.clientWidth, canvas.clientHeight)) return
+  if (tools.tap(x, y, canvas.clientWidth, canvas.clientHeight)) return
   view.selected = pickAt(sim, view, x, y, canvas.clientWidth, canvas.clientHeight, touch)
   if (view.selected?.agentId === undefined) view.following = false
 }
@@ -68,6 +68,8 @@ startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
   speed: () => (view.paused ? 0 : view.speed),
   render: (frameMs) => {
     input.update(view, frameMs)
+    // Tools act at once, paused or not (the sim applies them; systems/player.ts).
+    applyPlayerActions(sim)
     followSelected(sim, view)
     renderer.render(sim, view)
     sidebar.update(sim, view)
