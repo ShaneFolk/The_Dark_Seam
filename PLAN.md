@@ -299,6 +299,19 @@ Move from colored shapes to a Dwarf Fortress (Steam version) style.
 - [x] Effects (sprite mode, `src/render/effects.ts`): Myrr walk frames, resin glints, fight marks that fade (green acid where Myrr were hit, red blood for humans), night on the surface (20:00-05:00), and on dark levels a darkness layer with flashlight beams from soldiers and the Commander, glows around people and flares, and a faint glow on each Myrr
 - [x] Always night on the surface and dark on Level 2 (visual only; the sim's lighting is unchanged); muzzle flashes, screech rings, the drop ship and evacuation ship landing on the pad, burn scars where resin was burned
 
+### Review pass (November 2026)
+A look over the whole project (bugs, watchability, phones, code health), done between Phase 10 and Phase 11.
+- [x] Fix: dead Myrr kept scaring people and the Commander (the alarm never cleared)
+- [x] Fix: carriers looped forever once the Brood Mother retreated to her Deep Chamber; a host that hatched while carried could be injected again
+- [x] Rescue escort: on an assault, the medic and a soldier split off (as "<callsign> Escort") to walk someone cut free to the med bay, if the assault can spare them
+- [x] Mobile: pinch to zoom, tap to inspect, phone layout (map on top, control strip below, details behind a button), bigger buttons on touch screens, Scent/Sprites buttons, resolution capped, refit on rotate
+- [x] Inspector panel for whatever is clicked or tapped; Follow keeps the camera on someone across levels (F, Esc)
+- [x] Click a log line to jump to where it happened
+- [x] Names: people get names from the seed, squads get callsigns; the end screen tells each person's story
+- [x] Faster sim: scent scans reused for a second, guards with no path wait before retrying, leaders re-plan less
+- [x] Cleanup: soldier.ts split by job, shared room/distance helpers, tuning numbers into config.ts, movement hooks on the world
+- [x] Tests (`npm test`) and `npm run batch -- --events` to print a run's log
+
 ### Phase 11 — Player Interference
 - [ ] Tools TBD (lock a door, cut power, send a squad, trigger an alarm, etc.)
 

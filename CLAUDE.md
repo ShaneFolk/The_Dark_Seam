@@ -15,7 +15,8 @@ The Dark Seam is a top-down 2D simulation of an alien hive (the Myrr) waking up 
 - `npm install` — install dependencies
 - `npm run dev` — start the dev server
 - `npm run build` — production build
-- `npm run batch` — run many seeds headless and report the endings (see scripts/batch.ts)
+- `npm run batch` — run many seeds headless and report the endings (see scripts/batch.ts); `-- --events` prints each run's log
+- `npm test` — quick checks (same seed = same run, maps load, no endless carrying); see tests/
 - `npm run sprites` — regenerate the sprite sheet (assets/sprites.png) and src/render/spriteRects.ts
 
 ## How we work
