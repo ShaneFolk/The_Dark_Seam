@@ -148,7 +148,7 @@ export function intruderCount(ctx: HiveContext): number {
 }
 
 function addBroodling(at: PathNode, ctx: HiveContext): void {
-  const brood = createAgent(ctx.agents.length, 'broodling', 'myrr', at, CONFIG.movement.myrrSpeed * 0.5, CONFIG.health.broodling)
+  const brood = createAgent(ctx.agents.length, 'broodling', 'myrr', at, CONFIG.movement.myrrSpeed * L.broodlingSpeedShare, CONFIG.health.broodling)
   brood.myrr = createMyrrData('broodling')
   brood.myrr.task = 'grow'
   brood.myrr.home = at
@@ -271,10 +271,10 @@ function badlyThreatened(mother: Agent, ctx: HiveContext): boolean {
   if (mother.health < mother.maxHealth * L.fleeBelowHealth) return true
   // Free humans only: captives and cocoons lying in the hive don't count.
   const intruders = ctx.agents.filter((a) => !a.dead && isFree(a) && a.levelIndex === mother.levelIndex &&
-    Math.hypot(a.x - mother.x, a.y - mother.y) <= L.guardRadius + 4).length
+    Math.hypot(a.x - mother.x, a.y - mother.y) <= L.guardRadius + L.threatMargin).length
   const guards = ctx.agents.filter((a) => !a.dead && a.kind === 'spineback').length
   // Unguarded, she still fights until she has taken some real damage.
-  return intruders >= 2 && guards < L.fleeWhenGuardsBelow && mother.health < mother.maxHealth * L.fleeUnguardedBelowHealth
+  return intruders >= L.threatIntruders && guards < L.fleeWhenGuardsBelow && mother.health < mother.maxHealth * L.fleeUnguardedBelowHealth
 }
 
 /** The reachable Level 3 tile farthest from the hive core: the deep tunnels. */
@@ -349,7 +349,7 @@ export function updateBroodling(agent: Agent, ctx: HiveContext): void {
     followPath(agent, ctx.world)
     return
   }
-  if (ctx.rng.chance(1 / (3 * TPS))) wanderNearHome(agent, ctx)
+  if (ctx.rng.chance(1 / (L.broodlingWanderSeconds * TPS))) wanderNearHome(agent, ctx)
 }
 
 function growUp(agent: Agent, ctx: HiveContext): void {
@@ -375,7 +375,7 @@ export function whatTheHiveNeeds(ctx: HiveContext): 'taker' | 'spineback' {
     if (a.kind === 'taker') takers++
     else if (a.kind === 'spineback') spinebacks++
   }
-  const want = Math.min(0.8, L.spinebackShare + L.lossBias * ctx.hive.losses.spineback)
+  const want = Math.min(L.maxSpinebackShare, L.spinebackShare + L.lossBias * ctx.hive.losses.spineback)
   const share = spinebacks / Math.max(1, takers + spinebacks)
   return share < want ? 'spineback' : 'taker'
 }
@@ -393,7 +393,7 @@ export function updateSpineback(agent: Agent, ctx: CombatContext): void {
   if (RAID_TASKS.has(m.task)) return updateTaker(agent, ctx)
   if (m.task === 'stakeout') return updateStakeout(agent, ctx)
   const post = guardPost(agent, ctx)
-  const chaseRange = L.guardRadius + 10
+  const chaseRange = L.guardRadius + L.chaseMargin
   const responding = m.task === 'respond'
 
   if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks === 0) {

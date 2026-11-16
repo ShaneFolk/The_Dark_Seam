@@ -11,7 +11,7 @@ import type { Rng } from '../core/rng.ts'
 import { hourOfDay } from '../core/clock.ts'
 import type { World } from '../world/loadWorld.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
-import { cornerTiles, findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
+import { cornerTiles, findLandingPad, findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
 import { isHidden } from '../systems/camouflage.ts'
 import { makeNoise } from '../systems/noise.ts'
 import { tileOf, type Agent } from './agent.ts'
@@ -118,7 +118,7 @@ export function createCivilianData(world: World, rng: Rng, forceJob?: Job): Civi
     engineer: job === 'tech' && rng.chance(CONFIG.power.engineerShare),
     coverWaitTick: -1,
     shiftStart: rng.pick(CONFIG.civilians.shiftStartHours),
-    jitterHours: (rng.next() - 0.5) * 0.5,
+    jitterHours: (rng.next() - 0.5) * CONFIG.civilians.shiftJitterHours,
     home: rng.pick(homes),
     work: rng.pick(works),
     activity: 'sleep',
@@ -177,7 +177,7 @@ export function roomFor(civ: CivilianData, activity: Activity, levelIndex: numbe
     }
     case 'free': {
       const mess = findRooms(world, ['mess'], 0)
-      return rng.chance(0.5) && mess.length ? mess[0] : civ.home
+      return rng.chance(CONFIG.civilians.messChance) && mess.length ? mess[0] : civ.home
     }
     case 'treat':
       return findRooms(world, ['medbay'])[0] ?? civ.home
@@ -186,7 +186,7 @@ export function roomFor(civ: CivilianData, activity: Activity, levelIndex: numbe
     case 'shelter':
       return civ.home
     case 'evacuate':
-      return findRooms(world, ['other'], 0).find((r) => r.room.name === 'Landing Pad') ?? civ.home
+      return findLandingPad(world) ?? civ.home
   }
 }
 
@@ -285,7 +285,7 @@ function routine(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
 
 /** Walk with the command squad's leader (re-planning once a second), stopping close to them. */
 function followEscort(agent: Agent, to: PathNode, ctx: CivilianContext): void {
-  const close = agent.levelIndex === to.levelIndex && Math.hypot(agent.x - to.x - 0.5, agent.y - to.y - 0.5) <= 2
+  const close = agent.levelIndex === to.levelIndex && Math.hypot(agent.x - to.x - 0.5, agent.y - to.y - 0.5) <= CONFIG.civilians.escortCloseDistance
   if (close) {
     agent.path = []
     agent.state = { name: 'idle', ticksLeft: 0 }
@@ -337,7 +337,7 @@ function panic(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   // Dash somewhere nearby at random.
   const level = ctx.world.levels[agent.levelIndex]
   for (let tries = 0; tries < 20; tries++) {
-    const x = Math.floor(agent.x) + ctx.rng.int(-6, 6), y = Math.floor(agent.y) + ctx.rng.int(-6, 6)
+    const x = Math.floor(agent.x) + ctx.rng.int(-F.panicDash, F.panicDash), y = Math.floor(agent.y) + ctx.rng.int(-F.panicDash, F.panicDash)
     if (canWalk(level, x, y, 'human') && walkTo(agent, ctx, { levelIndex: agent.levelIndex, x, y })) return
   }
   agent.state = { name: 'idle', ticksLeft: TPS }
@@ -358,7 +358,7 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
     if (other.side === 'myrr') {
       if (!canSee(agent, other, level, humanSight(ctx.power, agent.levelIndex))) continue
       const dist = Math.hypot(other.x - agent.x, other.y - agent.y)
-      sightGain += F.sight * (1 - (0.5 * dist) / CONFIG.perception.sightRange)
+      sightGain += F.sight * (1 - (F.distanceFade * dist) / CONFIG.perception.sightRange)
       civ.threat = { levelIndex: other.levelIndex, x: other.x, y: other.y }
       civ.lastSeenTick = ctx.tick
       ctx.commander.lastSightingTick = ctx.tick
@@ -390,7 +390,7 @@ function sense(agent: Agent, civ: CivilianData, ctx: CivilianContext): void {
   // Choose the mode from the fear level (with a gap between "calm" and "hide" so it doesn't flicker).
   const seenRecently = ctx.tick - civ.lastSeenTick <= F.fleeMemorySeconds * TPS
   let next: Mode = civ.mode
-  if (civ.fear >= F.panic || (civ.mode === 'panic' && civ.fear >= F.panic - 0.15)) next = 'panic'
+  if (civ.fear >= F.panic || (civ.mode === 'panic' && civ.fear >= F.panic - F.panicHysteresis)) next = 'panic'
   else if (civ.fear >= F.flee && seenRecently) next = 'flee'
   else if (civ.fear >= F.hide && (civ.mode === 'routine' || civ.mode === 'panic')) next = 'hide'
   else if (civ.fear < F.calm) next = 'routine'
@@ -509,6 +509,18 @@ function shootBack(agent: Agent, ctx: CivilianContext): void {
 
 /** A human who isn't captured or held by the hive. */
 const NOT_FREE: readonly Mode[] = ['paralyzed', 'captured', 'captive', 'cocooned', 'dead', 'evacuated']
+const OUT: readonly Mode[] = ['captured', 'captive', 'cocooned', 'dead', 'evacuated']
+const LOST: readonly Mode[] = ['captive', 'cocooned', 'dead', 'evacuated']
+
+/** Out of the colony's hands: dead, evacuated, or taken (even while still being carried off). */
+export function isOut(agent: Agent): boolean {
+  return agent.dead || !agent.civ || OUT.includes(agent.civ.mode)
+}
+
+/** Lost to their squad: dead, evacuated, or already in the hive (someone still being carried can be saved). */
+export function isLost(agent: Agent): boolean {
+  return agent.dead || !agent.civ || LOST.includes(agent.civ.mode)
+}
 export function isFree(agent: Agent): boolean {
   return agent.side === 'human' && !!agent.civ && !NOT_FREE.includes(agent.civ.mode)
 }

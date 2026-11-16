@@ -13,7 +13,7 @@
 import { CONFIG } from '../config.ts'
 import type { LinkKind } from '../world/links.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
-import { roomAt } from '../world/rooms.ts'
+import { roomAt, roughDistance } from '../world/rooms.ts'
 import { Tile } from '../world/tiles.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { isFree } from './civilian.ts'
@@ -208,5 +208,5 @@ function hidingSpots(world: World, at: PathNode): PathNode[] {
 }
 
 function far(a: Agent, at: PathNode): number {
-  return Math.abs(a.levelIndex - at.levelIndex) * 200 + Math.hypot(a.x - at.x, a.y - at.y)
+  return roughDistance(a, at)
 }

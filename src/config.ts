@@ -24,6 +24,8 @@ export const CONFIG = {
   },
 
   movement: {
+    /** When picking the nearest of several things, each level apart counts as this many tiles. */
+    otherLevelDistance: 200,
     /** Walking speed in tiles per second. */
     humanSpeed: 2.5,
     myrrSpeed: 4.5,
@@ -52,6 +54,12 @@ export const CONFIG = {
 
   civilians: {
     count: 50,
+    /** Each person's shift starts up to half this many hours early or late. */
+    shiftJitterHours: 0.5,
+    /** Off duty, a person eats in the mess this share of the time (else stays home). */
+    messChance: 0.5,
+    /** People walking with the Commander's escort stop within this many tiles of them. */
+    escortCloseDistance: 2,
     /** Hour each shift's day starts. Each civilian is on one shift. */
     shiftStartHours: [6, 18],
     /**
@@ -113,6 +121,10 @@ export const CONFIG = {
   },
 
   swarm: {
+    /** A swarm the prey heard coming rushes once this share of its members have gathered. */
+    heardShare: 0.75,
+    /** The swarm spots prey this many tiles beyond normal Myrr sight. */
+    sightBonus: 4,
     /** Myrr this far away answer a screech, in tiles (another level counts as levelDistance). */
     callRange: 80,
     levelDistance: 15,
@@ -202,6 +214,12 @@ export const CONFIG = {
   },
 
   fear: {
+    /** A Myrr far off (at sight range) is scarier by 1 minus this share than one close by. */
+    distanceFade: 0.5,
+    /** Panic eases off only once fear drops this far below the panic level (so it doesn't flicker). */
+    panicHysteresis: 0.15,
+    /** Panicking people dash to a random spot up to this many tiles away. */
+    panicDash: 6,
     /** Fear added per sense check while a Myrr is in sight (more when closer). */
     sight: 0.25,
     /** Fear added by hearing a scream or skittering. */
@@ -237,6 +255,8 @@ export const CONFIG = {
 
   hive: {
     takers: 9,
+    /** A Taker killed while carrying someone drops them, paralysed for this share of paralysisSeconds. */
+    dropParalysisShare: 0.5,
     /** Spinebacks at the start. They guard the Brood Mother (combat comes in Phase 6). */
     spinebacks: 6,
     /** How far Myrr see, in tiles (same blockers as for humans). */
@@ -252,6 +272,26 @@ export const CONFIG = {
     stingHealth: 40,
     /** How long a sting paralyses, in seconds (if nobody carries them off). */
     paralysisSeconds: 60,
+    /** A Taker grabs its prey within this many tiles, and loses hold beyond holdReach. */
+    grabReach: 1.1,
+    holdReach: 1.6,
+    /** A saboteur works on a generator from within this many tiles. */
+    sabotageReach: 1.6,
+    /** A Taker hurt below this share of its health runs home (unless carrying prey). */
+    fleeBelowHealth: 0.4,
+    /** Carriers hand their captive over within this many tiles of the Brood Mother. */
+    deliverRange: 4,
+    /** Scouts choose among this many of the strongest trail spots. */
+    scoutTrailSpots: 12,
+    /** A Taker that backs off from armed prey wipes out the prey scent this far around, keeping this share. */
+    armedPreyScent: { radius: 8, keep: 0.05 },
+    /** Rest after a job, as a share of the usual rest time. */
+    restAfter: { haul: 0.3, swarm: 0.2, coat: 0.3 },
+    /** Dig planning runs this often, in seconds; after a failed dig the cooldown is shortened by these shares. */
+    digPlanSeconds: 5,
+    digRetryShare: { diggerLost: 0.5, noSite: 0.25 },
+    /** Hunting the Commander scores lower (times this) while their full guard is around them. */
+    guardedCommanderScale: 0.5,
     /** Within this many tiles of its target a Taker pounces, moving faster. */
     pounceRange: 3,
     pounceMultiplier: 1.3,
@@ -287,6 +327,17 @@ export const CONFIG = {
   },
 
   lifecycle: {
+    /** A Broodling crawls at this share of normal Myrr speed. */
+    broodlingSpeedShare: 0.5,
+    /** Broodlings shift about this often, in seconds. */
+    broodlingWanderSeconds: 3,
+    /** Humans count as threatening the Brood Mother within guardRadius plus this many tiles; this many make her flee. */
+    threatMargin: 4,
+    threatIntruders: 2,
+    /** Broodlings grow into Spinebacks at most this often (the rest become Takers). */
+    maxSpinebackShare: 0.8,
+    /** Guards chase intruders up to guardRadius plus this many tiles from their post. */
+    chaseMargin: 10,
     /** Seconds the Brood Mother needs to inject one captive. */
     injectSeconds: 6,
     /** Seconds from injection until the Broodling bursts out (about 8 colony hours). */
@@ -381,6 +432,22 @@ export const CONFIG = {
     rescuedSpeed: 0.6,
     /** On an assault, up to this many members split off to walk a freed person to the med bay. */
     escortSize: 2,
+    /** Squads check whether to merge this often, in seconds. */
+    mergeCheckSeconds: 5,
+    /** A squad restocks when its rounds fall below this share of a full rifle magazine each. */
+    lowAmmoShare: 0.5,
+    /** The command squad re-forms on the Commander when they're farther than this, in tiles. */
+    guardRegroupDistance: 3,
+    /** The leader has arrived within this many tiles of the goal; medics treat from this close. */
+    arriveDistance: 1.5,
+    /** On patrol, the squad pauses this long at each stop, in seconds. */
+    patrolPauseSeconds: 5,
+    /** A turret can be packed up from within this many tiles. */
+    packReach: 2.5,
+    /** Blasting: look this many tiles around the fighting for a narrow spot. */
+    blastSearchRadius: 10,
+    /** Morale boost when a squad becomes veterans. */
+    veteranMoraleBoost: 0.2,
     /** A squad leader re-plans its route to an unchanged goal only this often, in seconds. */
     repathSameGoalSeconds: 5,
     /** "The Commander takes the risk…" is logged at most once per squad in this many seconds. */
@@ -501,8 +568,9 @@ export const CONFIG = {
   flamethrower: {
     /** Flamethrowers carried (by soldiers in the first squads). */
     count: 1,
-    /** Myrr within this many tiles of the target are also burned. */
+    /** Myrr within this many tiles of the target are also burned, at this share of the damage. */
     splash: 1.5,
+    splashShare: 0.6,
     /** Resin is burned away this many tiles around the target. */
     burnRadius: 1,
   },
@@ -602,6 +670,8 @@ export const CONFIG = {
   },
 
   sensors: {
+    /** A sensor shows red for this long after going off, in seconds (drawing only). */
+    flashSeconds: 2,
     /** Motion sensors near the Upper Mine's vent shafts and ladders. */
     count: 5,
     /** A Myrr moving within this many tiles sets one off. */

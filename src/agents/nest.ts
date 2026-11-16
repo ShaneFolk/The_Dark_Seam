@@ -16,7 +16,7 @@
 
 import { CONFIG } from '../config.ts'
 import { findPath, type PathNode } from '../world/pathfinding.ts'
-import { cornerTiles, findRooms, randomTileIn, roomAt, roomTiles, sameRoom, type RoomRef } from '../world/rooms.ts'
+import { cornerTiles, findRooms, randomTileIn, roomAt, roomTiles, roughDistance, sameRoom, type RoomRef } from '../world/rooms.ts'
 import { Tile } from '../world/tiles.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { isFree } from './civilian.ts'
@@ -159,5 +159,5 @@ function walk(agent: Agent, to: PathNode, ctx: HiveContext): boolean {
 }
 
 function distance(a: Agent, b: Agent): number {
-  return Math.abs(a.levelIndex - b.levelIndex) * 200 + Math.hypot(a.x - b.x, a.y - b.y)
+  return roughDistance(a, b)
 }

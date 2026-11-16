@@ -1,4 +1,7 @@
-// Soldiers and squads.
+// Soldiers and squads: the squad brain (which order each squad follows) and how
+// each soldier moves and fights. Shared squad data lives in squad.ts; the duties
+// are in squadDuties.ts (merging, escorts, covering repairs, the command squad),
+// squadGear.ts (turrets, charges, flares, burning resin) and medic.ts.
 //
 // Each squad has one order at a time, picked by its "brain" a few times a second
 // in this priority order:
@@ -32,111 +35,33 @@
 
 import { CONFIG } from '../config.ts'
 import type { PathNode } from '../world/pathfinding.ts'
-import { canWalk, findPath } from '../world/pathfinding.ts'
-import { findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
+import { canWalk } from '../world/pathfinding.ts'
+import { findRooms, randomTileIn, roomAt, roughDistance } from '../world/rooms.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { followPath } from './movement.ts'
 import { canHear, canSee } from './perception.ts'
-import { isFree, setMode } from './civilian.ts'
-import { burnArea, nearestVisible, roundsLeft, tryAttack } from './combat.ts'
+import { setMode } from './civilian.ts'
+import { nearestVisible, roundsLeft, tryAttack } from './combat.ts'
 import { roomsWith, stockIn, take } from '../systems/supplies.ts'
 import { Barrier, putBarrier, roomOpenings } from '../systems/barriers.ts'
-import { humanSight, type Generator } from '../systems/power.ts'
-import { createTurret, deploySite, needsReload, padSite } from './turret.ts'
-import { strongest } from '../systems/pheromones.ts'
-import { chokePoint, collapseTunnel } from '../systems/digging.ts'
+import { humanSight } from '../systems/power.ts'
+import { createTurret, deploySite } from './turret.ts'
+import { collapseTunnel } from '../systems/digging.ts'
 import { countResin } from '../systems/resin.ts'
 import { makeNoise } from '../systems/noise.ts'
-import { lightFlare } from '../systems/camouflage.ts'
 import { kill } from './combat.ts'
 import { logEvent } from '../core/events.ts'
-import { hatchingSoon, landingPad } from '../systems/commander.ts'
+import { landingPad } from '../systems/commander.ts'
 import { who } from './describe.ts'
 import type { CivilianContext as CombatContext } from './civilian.ts'
-import { medBayFor, needsMedBay } from '../systems/medbay.ts'
-import { landingCost, startScouting, updateScout, waitForScout, type Scouting } from './scout.ts'
-
-export interface SoldierData {
-  squadId: number
-  role: 'soldier' | 'medic'
-  /** Next tick this soldier re-plans its route. */
-  repathTick: number
-  /** Leaders: the goal of the current route (as a number), and when to re-plan it anyway. */
-  pathGoal: number
-  samePathUntil: number
-  /** Myrr this soldier is shooting at, or -1. */
-  targetId: number
-  /** Medics only: stabilizers left, current patient (-1 = none) and ticks left on the job. */
-  stabilizers: number
-  patientId: number
-  workTicks: number
-}
-
-export type Order = 'cover' | 'packTurret' | 'guide' | 'guard' | 'patrol' | 'respond' | 'rescue' | 'cut' | 'resupply' | 'retreat' | 'reload' | 'blast' | 'fetchTurret' | 'deployTurret' | 'assault' | 'escort'
-
-export interface Squad {
-  id: number
-  /** What the log and sidebar call it, e.g. "Anvil Squad" (see data/names.ts). */
-  name: string
-  members: number[]
-  order: Order
-  /** Where the squad is heading. */
-  goal: PathNode | null
-  /** Agent the order is about (carrier to chase, cocoon to cut), or -1. */
-  targetId: number
-  /** 0 to 1. Low morale makes the squad retreat. */
-  morale: number
-  lastContactTick: number
-  patrol: RoomRef[]
-  patrolIndex: number
-  /** Ticks left on timed work (resupplying, cutting, welding, pausing on patrol). */
-  ticksLeft: number
-  /** Welded themselves in during the current retreat. */
-  welded: boolean
-  /** Mining charges the squad carries. */
-  charges: number
-  /** The leader is carrying a packed turret. */
-  carryingTurret: boolean
-  /** The Commander's orders for this squad: assault the hive, or guard the evacuation. */
-  mission: 'assault' | 'escort' | null
-  missionGoal: PathNode | null
-  /** Has reached the mission goal (assault: the Hive Core). */
-  missionReached: boolean
-  /** Incendiary grenades for burning resin. */
-  incendiaries: number
-  /** Where the squad is about to burn resin (while it stops to throw), or null. */
-  burnAt: PathNode | null
-  /** The Commander told it to skip burning to save someone (logged once per decision). */
-  riskTaken: boolean
-  /** When that decision was last logged (so it isn't repeated every time the order flips). */
-  riskLoggedTick: number
-  /** Command squad: the agent it guards (the Commander), or -1. */
-  guardId: number
-  /** Flares left (they show hidden Myrr nearby). */
-  flares: number
-  /** Places searched so far on the current response. */
-  searches: number
-  /** Myrr its soldiers have killed; at CONFIG.soldiers.veteran.kills the squad becomes veterans. */
-  kills: number
-  veteran: boolean
-  /** Ammo left in a turret the squad packed up and is carrying (null = a fresh one from the armory). */
-  turretAmmo: number | null
-  /** A scout sent down an elevator ahead of the squad (scout.ts), or null. */
-  scouting: Scouting | null
-  /** Someone just cut free that this squad is walking to the med bay, or -1. */
-  escortId: number
-}
-
-/** A fresh squad on patrol with no members yet (add them with squad.members.push). */
-export function newSquad(id: number, name: string, patrol: RoomRef[], patrolIndex: number, tick: number): Squad {
-  return {
-    id, name, members: [], order: 'patrol', goal: null, targetId: -1, morale: 1,
-    lastContactTick: tick, patrol, patrolIndex, ticksLeft: 0, welded: false,
-    charges: 0, carryingTurret: false, mission: null, missionGoal: null, missionReached: false,
-    incendiaries: 0, burnAt: null, riskTaken: false, riskLoggedTick: -1e9, guardId: -1, flares: 0,
-    turretAmmo: null, scouting: null, searches: 0, kills: 0, veteran: false, escortId: -1,
-  }
-}
+import { startScouting, updateScout, waitForScout } from './scout.ts'
+export type { Order, SoldierData, Squad } from './squad.ts'
+export { members, newSquad, soldierHurt, soldierKilled } from './squad.ts'
+export { movableTurret } from './squadGear.ts'
+import { dist, isCocooned, members, roomGoal, setOrder, walkTo, type Squad } from './squad.ts'
+import { treatPatients } from './medic.ts'
+import { armoryWithTurret, blastSite, canBurn, fortifyPad, lightFlareAhead, onPad, padWork, resinAhead, reservedSites, throwIncendiary, turretToReload, wantsToBurn } from './squadGear.ts'
+import { coverRepair, detachEscort, guardCommander, mergeSquads, repairToCover, STAY_WITH_COMMANDER, stillEscorting } from './squadDuties.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
 const S = CONFIG.soldiers
@@ -147,7 +72,7 @@ const S = CONFIG.soldiers
 export function updateSquads(squads: Squad[], ctx: CombatContext): void {
   if (ctx.tick % CONFIG.perception.intervalTicks !== 0) return
   const seconds = CONFIG.perception.intervalTicks / TPS
-  if (ctx.tick % (5 * TPS) === 0) mergeSquads(squads, ctx)
+  if (ctx.tick % (S.mergeCheckSeconds * TPS) === 0) mergeSquads(squads, ctx)
   for (const squad of squads) {
     const alive = members(squad, ctx)
     if (squad.guardId >= 0 && !alive.length) ctx.commander.escortTo = null
@@ -201,7 +126,7 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
     const ammo = alive.reduce((sum, s) => sum + (s.weapon ? roundsLeft(s.weapon) : 0), 0)
     // Low on ammo, and somewhere still has some to restock from.
     const restockAt = roomsWith(ctx.supplies, 'rifleMags', leader)[0] ?? null
-    const lowAmmo = !!restockAt && ammo < alive.length * CONFIG.combat.weapons.rifle.magazine * 0.5
+    const lowAmmo = !!restockAt && ammo < alive.length * CONFIG.combat.weapons.rifle.magazine * S.lowAmmoShare
 
     // Regrouped: back on duty (they cut their way out of any welds on the way).
     if (squad.order === 'retreat' && squad.morale >= S.morale.regroupAt) {
@@ -273,184 +198,6 @@ export function updateSquads(squads: Squad[], ctx: CombatContext): void {
   }
 }
 
-// ---------------------------------------------------------------- merging
-
-/** Busy with something that can't just be handed over (carrying or setting up a turret). */
-const NO_MERGE = new Set<Order>(['fetchTurret', 'deployTurret', 'packTurret', 'guide'])
-
-/**
- * A squad down to a soldier or two joins the nearest other squad (not the command
- * squad) with room, so nobody is left wandering alone. They bring their gear.
- */
-function mergeSquads(squads: Squad[], ctx: CombatContext): void {
-  const G = S.merge
-  for (const small of squads) {
-    const mine = members(small, ctx)
-    if (!mine.length || mine.length > G.at || small.guardId >= 0 || small.carryingTurret || NO_MERGE.has(small.order)) continue
-    let best: Squad | null = null, bestD = Infinity
-    for (const other of squads) {
-      // Not into the command squad, nor one busy with something it can't share (an escort walking someone out).
-      if (other === small || other.guardId >= 0 || NO_MERGE.has(other.order)) continue
-      const theirs = members(other, ctx)
-      if (!theirs.length || theirs.length + mine.length > G.maxSize) continue
-      const d = Math.abs(theirs[0].levelIndex - mine[0].levelIndex) * 200 + dist(theirs[0], mine[0])
-      if (d < bestD) { best = other; bestD = d }
-    }
-    if (!best) continue
-    for (const id of small.members) {
-      const a = ctx.agents[id]
-      if (!a || a.dead) continue
-      a.soldier!.squadId = best.id
-      best.members.push(id)
-    }
-    small.members = []
-    best.flares += small.flares
-    best.charges += small.charges
-    best.incendiaries += small.incendiaries
-    best.kills += small.kills
-    small.flares = small.charges = small.incendiaries = 0
-    small.mission = null
-    setOrder(small, 'patrol', null)
-    logEvent(ctx, 'command', `${small.name} (${mine.length} left) joins ${best.name}`)
-  }
-}
-
-// ---------------------------------------------------------------- covering repairs
-
-/** Engineers working on (or heading to) this generator. */
-function engineersOn(gen: Generator, ctx: CombatContext): Agent[] {
-  return ctx.agents.filter((a) => !a.dead && a.civ?.engineer && a.civ.activity === 'repair' && isFree(a) && sameRoom(a.civ.target, gen.room))
-}
-
-/**
- * The knocked-out generator (its index) this squad should cover: one with
- * engineers on it that no other squad covers, and this is the nearest free
- * squad to it. -1 if none.
- */
-function repairToCover(squad: Squad, squads: Squad[], ctx: CombatContext): number {
-  if (!S.coverRepairs) return -1
-  const gens = ctx.power.generators
-  for (let i = 0; i < gens.length; i++) {
-    if (!gens[i].broken || squads.some((s) => s.order === 'cover' && s.targetId === i)) continue
-    const crew = engineersOn(gens[i], ctx)
-    if (!crew.length) continue
-    // Only the nearest squad that's free (on patrol, no mission, not the command squad) goes.
-    const at = gens[i].at
-    const far = (s: Squad) => {
-      const l = members(s, ctx)[0]
-      return l ? Math.abs(l.levelIndex - at.levelIndex) * 200 + Math.hypot(l.x - at.x, l.y - at.y) : Infinity
-    }
-    const free = squads.filter((s) => s.order === 'patrol' && !s.mission && s.guardId < 0 && members(s, ctx).length)
-    free.sort((a, b) => far(a) - far(b))
-    if (free[0] === squad) return i
-  }
-  return -1
-}
-
-/** Stay with the engineers until the generator runs again (or they're gone). */
-function coverRepair(squad: Squad, squads: Squad[], ctx: CombatContext): void {
-  if (squad.order !== 'cover') {
-    const i = repairToCover(squad, squads, ctx)
-    setOrder(squad, 'cover', null)
-    squad.targetId = i
-    ctx.power.generators[i].coverSquad = squad.id
-    logEvent(ctx, 'command', `${squad.name} is covering the engineers at the ${ctx.power.generators[i].room.room.name}`, ctx.power.generators[i].at)
-  }
-  const gen = ctx.power.generators[squad.targetId]
-  const crew = gen ? engineersOn(gen, ctx) : []
-  if (!gen || !gen.broken || !crew.length) {
-    if (gen?.coverSquad === squad.id) gen.coverSquad = -1
-    setOrder(squad, 'patrol', null)
-    return
-  }
-  // Walk with the nearest engineer (to the generator, then stand guard there).
-  const leader = members(squad, ctx)[0]
-  crew.sort((a, b) => dist(leader, a) - dist(leader, b))
-  squad.goal = tileOf(crew[0])
-}
-
-/** Command-squad orders done at the Commander's side; for any other, he walks along with them. */
-const STAY_WITH_COMMANDER = new Set<Order>(['guard', 'respond', 'rescue', 'patrol'])
-
-/**
- * The command squad: stay with the Commander, fight Myrr that come near them,
- * and chase down anything carrying them off. Once the Commander is lost for good
- * the squad becomes an ordinary one.
- */
-function guardCommander(squad: Squad, leader: Agent, myrrSeen: Agent | null, ctx: CombatContext): void {
-  const boss = ctx.agents[squad.guardId]
-  const carrier = ctx.agents.find((a) => !a.dead && a.myrr?.task === 'carry' && a.myrr.targetId === boss.id)
-  if (carrier) {
-    setOrder(squad, 'rescue', tileOf(carrier))
-    squad.targetId = carrier.id
-    return
-  }
-  if (boss.dead || ['captive', 'cocooned', 'dead', 'evacuated'].includes(boss.civ?.mode ?? 'dead')) {
-    squad.guardId = -1
-    setOrder(squad, 'patrol', null)
-    return
-  }
-  const range = CONFIG.commander.guardRange
-  if (myrrSeen && myrrSeen.levelIndex === boss.levelIndex && dist(myrrSeen, boss) <= range) {
-    setOrder(squad, 'respond', tileOf(myrrSeen))
-    return
-  }
-  if (squad.order !== 'guard' || leader.levelIndex !== boss.levelIndex || dist(leader, boss) > 3) setOrder(squad, 'guard', tileOf(boss))
-}
-
-/**
- * Fortifying the Landing Pad before the ship is called: carry a turret there and
- * set it up on the pad's edge. Returns true if it gave the squad an order.
- */
-function fortifyPad(squad: Squad, squads: Squad[], ctx: CombatContext): boolean {
-  const reserved = reservedSites(squads)
-  const site = padSite(ctx, reserved)
-  if (!site) return false
-  if (squad.carryingTurret) { setOrder(squad, 'deployTurret', site); return true }
-  // Squads already fetching count toward the turrets wanted.
-  const coming = squads.filter((s) => s.carryingTurret || s.order === 'fetchTurret' || s.order === 'deployTurret' || s.order === 'packTurret').length
-  const standing = ctx.agents.filter((a) => a.kind === 'turret' && !a.dead && a.levelIndex === 0 &&
-    ctx.world.levels[0].rooms[ctx.world.levels[0].roomOf[Math.floor(a.y) * ctx.world.levels[0].width + Math.floor(a.x)]]?.name === 'Landing Pad').length
-  if (standing + coming >= CONFIG.commander.evacuation.padTurrets) return false
-  const armory = armoryWithTurret(ctx)
-  if (armory) {
-    setOrder(squad, 'fetchTurret', randomTileIn(ctx.world, armory, ctx.rng))
-    return true
-  }
-  // The armory is empty: go and pack up a turret standing somewhere else.
-  const turret = movableTurret(squad, squads, ctx)
-  if (!turret) return false
-  setOrder(squad, 'packTurret', tileOf(turret))
-  squad.targetId = turret.id
-  return true
-}
-
-/** Fetching, packing or setting up a turret for the Landing Pad during the fortifying. */
-function padWork(squad: Squad, ctx: CombatContext): boolean {
-  return ctx.commander.evacuation === 'fortify' && squad.mission === 'escort' &&
-    (squad.order === 'fetchTurret' || squad.order === 'packTurret' || squad.order === 'deployTurret')
-}
-
-/** Is this agent standing on the Landing Pad? */
-function onPad(a: Agent | undefined, ctx: CombatContext): boolean {
-  if (!a || a.dead || a.levelIndex !== 0) return false
-  const level = ctx.world.levels[0]
-  return level.rooms[level.roomOf[Math.floor(a.y) * level.width + Math.floor(a.x)]]?.name === 'Landing Pad'
-}
-
-/** The nearest standing turret off the Landing Pad that no other squad is already packing up. */
-export function movableTurret(squad: Squad | null, squads: Squad[], ctx: CombatContext): Agent | null {
-  const claimed = new Set(squads.filter((s) => s !== squad && s.order === 'packTurret').map((s) => s.targetId))
-  const leader = squad ? members(squad, ctx)[0] : null
-  let best: Agent | null = null, bestD = Infinity
-  for (const a of ctx.agents) {
-    if (a.kind !== 'turret' || a.dead || onPad(a, ctx) || claimed.has(a.id)) continue
-    const d = leader ? Math.abs(leader.levelIndex - a.levelIndex) * 200 + Math.hypot(leader.x - a.x, leader.y - a.y) : a.levelIndex
-    if (d < bestD) { best = a; bestD = d }
-  }
-  return best
-}
-
 /** A walkable spot within searchRadius tiles of the leader, to look around. */
 function searchSpot(leader: Agent, ctx: CombatContext): PathNode | null {
   const level = ctx.world.levels[leader.levelIndex]
@@ -470,13 +217,6 @@ function missionGoal(squad: Squad, ctx: CombatContext): PathNode | null {
   }
   const pad = landingPad(ctx)
   return pad ? randomTileIn(ctx.world, pad, ctx.rng) : null
-}
-
-function setOrder(squad: Squad, order: Order, goal: PathNode | null): void {
-  if (squad.order !== order) { squad.ticksLeft = 0; squad.welded = false; squad.searches = 0 }
-  squad.order = order
-  if (goal) squad.goal = goal
-  if (order === 'patrol') { squad.goal = null; squad.targetId = -1 }
 }
 
 // ---------------------------------------------------------------- each soldier
@@ -538,11 +278,11 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], squads: Squad[], 
   if (!goal) return
 
   const here = tileOf(agent)
-  const arrived = here.levelIndex === goal.levelIndex && Math.hypot(here.x - goal.x, here.y - goal.y) <= 1.5
+  const arrived = here.levelIndex === goal.levelIndex && Math.hypot(here.x - goal.x, here.y - goal.y) <= S.arriveDistance
   if (arrived) {
     agent.path = []
     agent.state = { name: 'idle', ticksLeft: 0 }
-    if (squad.order === 'patrol') { squad.ticksLeft = 5 * TPS; squad.goal = null }
+    if (squad.order === 'patrol') { squad.ticksLeft = S.patrolPauseSeconds * TPS; squad.goal = null }
     if (squad.order === 'resupply') squad.ticksLeft = Math.round(S.resupplySeconds * TPS)
     if (squad.order === 'retreat' && !squad.welded && !onPad(alive[0], ctx)) squad.ticksLeft = Math.round(CONFIG.barriers.weldSeconds * TPS)
     if (squad.order === 'reload') squad.ticksLeft = Math.round(CONFIG.turrets.reloadSeconds * TPS)
@@ -586,62 +326,6 @@ function leadSquad(agent: Agent, squad: Squad, alive: Agent[], squads: Squad[], 
   followPath(agent, ctx.world)
 }
 
-/** Should this squad burn resin ahead of it? The Commander skips it when someone is about to be lost. */
-function wantsToBurn(squad: Squad, ctx: CombatContext): boolean {
-  if (!ctx.commander.burnResin || squad.order === 'retreat' || squad.order === 'resupply') return false
-  const urgent = squad.order === 'rescue' || ((squad.order === 'cut' || squad.mission === 'assault') && hatchingSoon(ctx) > 0)
-  // Logged once per decision, and not again for this squad until riskLogCooldownSeconds have passed.
-  if (urgent && !squad.riskTaken && ctx.tick - squad.riskLoggedTick >= S.riskLogCooldownSeconds * TPS) {
-    squad.riskLoggedTick = ctx.tick
-    logEvent(ctx, 'command', `The Commander takes the risk: ${squad.name} goes in without burning the resin to save lives`)
-  }
-  squad.riskTaken = urgent
-  return !urgent
-}
-
-/** Throw a flare onto the resin ahead (or underfoot) if none is burning nearby. */
-function lightFlareAhead(squad: Squad, agent: Agent, ctx: CombatContext): void {
-  const level = ctx.world.levels[agent.levelIndex]
-  const here = level.resin[Math.floor(agent.y) * level.width + Math.floor(agent.x)] > 0 ? tileOf(agent) : null
-  const spot = resinAhead(agent, ctx) ?? here
-  if (!spot) return
-  const x = spot.x + 0.5, y = spot.y + 0.5
-  if (level.flares.some((f) => Math.hypot(f.x - x, f.y - y) < CONFIG.flares.spacing)) return
-  lightFlare(level, x, y, ctx.tick)
-  squad.flares--
-}
-
-/** Grenades left, or a flamethrower with fuel to spare. */
-function canBurn(squad: Squad, alive: Agent[]): boolean {
-  return squad.incendiaries > 0 || alive.some((s) => s.weapon?.kind === 'flamethrower' && s.weapon.inMag >= CONFIG.incendiaries.flamerFuel)
-}
-
-/** The first resin tile on the leader's route within throwing range, if any. */
-function resinAhead(agent: Agent, ctx: CombatContext): PathNode | null {
-  const range = CONFIG.incendiaries.throwRange
-  for (const step of agent.path) {
-    if (step.levelIndex !== agent.levelIndex) return null
-    if (Math.hypot(step.x + 0.5 - agent.x, step.y + 0.5 - agent.y) > range) return null
-    const level = ctx.world.levels[step.levelIndex]
-    if (level.resin[step.y * level.width + step.x]) return step
-  }
-  return null
-}
-
-/** Throw a grenade (or use the flamethrower) at the resin ahead. */
-function throwIncendiary(squad: Squad, alive: Agent[], ctx: CombatContext): void {
-  const at = squad.burnAt!
-  squad.burnAt = null
-  if (squad.incendiaries > 0) squad.incendiaries--
-  else {
-    const flamer = alive.find((s) => s.weapon?.kind === 'flamethrower' && s.weapon.inMag >= CONFIG.incendiaries.flamerFuel)
-    if (!flamer) return
-    flamer.weapon!.inMag -= CONFIG.incendiaries.flamerFuel
-  }
-  burnArea(at, CONFIG.incendiaries.radius, CONFIG.incendiaries.damage, alive[0], ctx)
-  makeNoise(ctx.noises, 'smash', at.levelIndex, at.x, at.y, ctx.tick, alive[0].id)
-}
-
 function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatContext): void {
   if (squad.order === 'fetchTurret') {
     const stock = stockIn(ctx.supplies, roomAt(ctx.world, tileOf(alive[0])))
@@ -652,7 +336,7 @@ function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatCo
   if (squad.order === 'packTurret') {
     const turret = ctx.agents[squad.targetId]
     const leader = alive[0]
-    if (turret && !turret.dead && !squad.carryingTurret && turret.levelIndex === leader.levelIndex && Math.hypot(turret.x - leader.x, turret.y - leader.y) <= 2.5) {
+    if (turret && !turret.dead && !squad.carryingTurret && turret.levelIndex === leader.levelIndex && Math.hypot(turret.x - leader.x, turret.y - leader.y) <= S.packReach) {
       turret.dead = true // packed up: off the map until set up again
       squad.carryingTurret = true
       squad.turretAmmo = turret.weapon?.inMag ?? null
@@ -753,42 +437,6 @@ function finishWork(squad: Squad, alive: Agent[], squads: Squad[], ctx: CombatCo
   }
 }
 
-/**
- * On an assault: split off up to S.escortSize members (the medic first, for the
- * stabilizers) as a new squad to walk a freed person to the med bay, as long as
- * the assault keeps enough soldiers. Returns the new squad, or null if nobody can go.
- */
-function detachEscort(squad: Squad, person: Agent, squads: Squad[], ctx: CombatContext): Squad | null {
-  const alive = members(squad, ctx)
-  const spare = Math.min(S.escortSize, alive.length - CONFIG.commander.assault.minMembers)
-  if (spare <= 0) return null
-  const picks = [...alive]
-    .sort((a, b) => (a.soldier!.role === 'medic' ? 0 : 1) - (b.soldier!.role === 'medic' ? 0 : 1) || dist(a, person) - dist(b, person))
-    .slice(0, spare)
-  const escort = newSquad(squads.length, `${squad.name.replace(/ Squad$/, '')} Escort`, squad.patrol, squad.patrolIndex, ctx.tick)
-  escort.morale = squad.morale
-  escort.veteran = squad.veteran
-  squads.push(escort)
-  for (const a of picks) {
-    squad.members = squad.members.filter((id) => id !== a.id)
-    escort.members.push(a.id)
-    a.soldier!.squadId = escort.id
-  }
-  escort.escortId = person.id
-  setOrder(escort, 'guide', tileOf(person))
-  escort.targetId = person.id
-  return escort
-}
-
-/** Is the squad's rescued person still on their way to the med bay? Clears escortId once not. */
-function stillEscorting(squad: Squad, ctx: CombatContext): boolean {
-  const person = ctx.agents[squad.escortId]
-  const bay = person && medBayFor(ctx.medbays)
-  if (person && isFree(person) && needsMedBay(person) && bay && !sameRoom(roomAt(ctx.world, tileOf(person)), bay)) return true
-  squad.escortId = -1
-  return false
-}
-
 /** Spots around the leader, one per follower, so the squad spreads out instead of stacking. */
 const FORMATION: readonly [number, number][] = [[-1, 1], [1, 1], [-1, -1], [1, -1], [0, 2], [2, 0], [-2, 0], [0, -2]]
 
@@ -820,148 +468,8 @@ function nearestSquad(squads: Squad[], at: { levelIndex: number; x: number; y: n
   for (const sq of squads) {
     const leader = members(sq, ctx)[0]
     if (!leader) continue
-    const d = Math.abs(leader.levelIndex - at.levelIndex) * 200 + Math.hypot(leader.x - at.x, leader.y - at.y)
+    const d = roughDistance(leader, at)
     if (d < bestD) { best = sq; bestD = d }
   }
   return best
-}
-
-// ---------------------------------------------------------------- turrets and charges
-
-/** Spots squads are already carrying turrets to. */
-function reservedSites(squads: Squad[]): PathNode[] {
-  return squads.filter((s) => s.order === 'deployTurret' && s.goal).map((s) => s.goal!)
-}
-
-/** A room that still has a packed turret (more than `keep`, which are held back for the Landing Pad). */
-function armoryWithTurret(ctx: CombatContext, keep = 0): RoomRef | null {
-  return [...ctx.supplies.values()].find((s) => s.stock.turrets > keep)?.room ?? null
-}
-
-/** A turret on the leader's level that needs ammo, if the squad has spare rifle magazines. */
-function turretToReload(ctx: CombatContext, leader: Agent): Agent | null {
-  if (!leader.weapon || leader.weapon.kind !== 'rifle' || leader.weapon.spare < 1) return null
-  return ctx.agents.find((a) => a.kind === 'turret' && a.levelIndex === leader.levelIndex && needsReload(a)) ?? null
-}
-
-/** Where to blast: a narrow tunnel near heavy fighting on Level 2 (strong danger scent). */
-function blastSite(ctx: CombatContext): PathNode | null {
-  const hot = strongest(ctx.pheromones, 'danger', ctx.world, 3, CONFIG.charges.trigger, ctx.tick).find((s) => s.at.levelIndex === 1)
-  if (!hot) return null
-  // Stand next to the choke point, on the colony side, and blast it.
-  return chokePoint(ctx.world, hot.at, 10)
-}
-
-// ---------------------------------------------------------------- medics
-
-/**
- * Medic work: wake paralysed people and stabilize infected ones nearby, unless a
- * Myrr is too close. Returns true while busy (the medic doesn't follow the squad).
- */
-function treatPatients(agent: Agent, ctx: CombatContext): boolean {
-  const s = agent.soldier!
-  if (s.patientId < 0) {
-    if ((ctx.tick + agent.id) % CONFIG.perception.intervalTicks !== 0) return false
-    if (nearestVisible(agent, ctx, S.unsafeRange, (a) => a.side === 'myrr')) return false
-    const patient = nearestVisible(agent, ctx, S.patientRange, (a) => !!needsCare(a, s, ctx))
-    if (!patient) return false
-    s.patientId = patient.id
-    s.workTicks = Math.round((needsCare(patient, s, ctx) === 'wake' ? S.wakeSeconds : S.stabilizeSeconds) * TPS)
-  }
-
-  const patient = ctx.agents[s.patientId]
-  const care = patient && needsCare(patient, s, ctx)
-  if (!care || nearestVisible(agent, ctx, S.unsafeRange, (a) => a.side === 'myrr')) {
-    s.patientId = -1
-    return false
-  }
-
-  if (patient.levelIndex === agent.levelIndex && dist(agent, patient) <= 1.5) {
-    agent.path = []
-    agent.state = { name: 'idle', ticksLeft: 0 }
-    if (--s.workTicks > 0) return true
-    const civ = patient.civ!
-    if (care === 'wake') {
-      civ.paralyzedUntilTick = ctx.tick // wakes up on its own next tick
-    } else if (civ.infection) {
-      // Pause the larva: push the hatch time back by the pause.
-      const pause = Math.round(S.stabilizerPauseSeconds * TPS)
-      civ.infection.stabilizedUntilTick = ctx.tick + pause
-      civ.infection.hatchTick += pause
-      s.stabilizers--
-    }
-    s.patientId = -1
-    return false
-  }
-
-  if (ctx.tick >= s.repathTick || agent.state.name !== 'moving') {
-    s.repathTick = ctx.tick + TPS
-    walkTo(agent, tileOf(patient), ctx)
-  }
-  followPath(agent, ctx.world)
-  return true
-}
-
-/** What a person needs from a medic, if anything. */
-function needsCare(a: Agent, medic: SoldierData, ctx: CombatContext): 'wake' | 'stabilize' | null {
-  const civ = a.civ
-  if (!civ || a.dead || a.side !== 'human') return null
-  if (civ.mode === 'paralyzed') return 'wake'
-  if (civ.infection && ctx.tick >= civ.infection.stabilizedUntilTick && medic.stabilizers > 0 &&
-      civ.mode !== 'cocooned' && civ.mode !== 'captured' && civ.mode !== 'captive') return 'stabilize'
-  return null
-}
-
-// ---------------------------------------------------------------- helpers
-
-export function members(squad: Squad, ctx: CombatContext): Agent[] {
-  return squad.members.map((id) => ctx.agents[id]).filter((a) => a && !a.dead && isFree(a))
-}
-
-/** Squad morale drops when one of its soldiers is hurt or killed (less for veterans). */
-export function soldierHurt(squads: Squad[], soldier: Agent, killed: boolean): void {
-  const squad = squads[soldier.soldier!.squadId]
-  const loss = (killed ? S.morale.squadmateDown : S.morale.hitTaken) * (squad.veteran ? S.veteran.moraleLossScale : 1)
-  squad.morale = Math.max(0, squad.morale - loss)
-}
-
-/** A soldier killed a Myrr: count it for the squad, and make them veterans at enough kills. */
-export function soldierKilled(squads: Squad[], soldier: Agent, ctx: CombatContext): void {
-  const squad = squads[soldier.soldier!.squadId]
-  if (!squad) return
-  squad.kills++
-  if (squad.veteran || squad.kills < S.veteran.kills) return
-  squad.veteran = true
-  for (const a of members(squad, ctx)) {
-    a.maxHealth += S.veteran.healthBonus
-    a.health += S.veteran.healthBonus
-    if (a.weapon) a.weapon.skill = Math.min(1, a.weapon.skill + S.veteran.skillBonus)
-  }
-  squad.morale = Math.min(1, squad.morale + 0.2)
-  logEvent(ctx, 'command', `${squad.name} are veterans now (${squad.kills} Myrr killed)`)
-}
-
-function roomGoal(ctx: CombatContext, types: ('security' | 'armory')[], from: Agent): PathNode | null {
-  const rooms = findRooms(ctx.world, types)
-  if (!rooms.length) return null
-  const here = roomAt(ctx.world, tileOf(from))
-  if (rooms.some((r) => sameRoom(r, here))) return tileOf(from)
-  return randomTileIn(ctx.world, rooms[0], ctx.rng)
-}
-
-function isCocooned(ctx: CombatContext, id: number): boolean {
-  return id >= 0 && ctx.agents[id]?.civ?.mode === 'cocooned'
-}
-
-function walkTo(agent: Agent, to: PathNode, ctx: CombatContext): void {
-  // Squads steer clear of an elevator whose landing a scout found watched.
-  const path = findPath(ctx.world, tileOf(agent), to, 'human', { linkCost: landingCost(ctx) })
-  if (path?.length) {
-    agent.path = path
-    agent.state = { name: 'moving' }
-  }
-}
-
-function dist(a: Agent, b: Agent): number {
-  return a.levelIndex === b.levelIndex ? Math.hypot(a.x - b.x, a.y - b.y) : Infinity
 }

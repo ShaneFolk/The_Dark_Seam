@@ -5,6 +5,7 @@
 //   Escape         the Brood Mother reached the deep tunnels
 //   Evacuation     the evacuation ship left with survivors (Phase 8, Round B)
 
+import { isOut } from '../agents/civilian.ts'
 import type { Agent } from '../agents/agent.ts'
 import type { HiveState } from '../agents/myrr.ts'
 import type { RunStats } from '../core/events.ts'
@@ -29,7 +30,7 @@ export function checkEnding(agents: Agent[], hive: HiveState, stats: RunStats, t
   if (hive.escaped) return { kind: 'escape', tick }
   const myrrLeft = agents.some((a) => !a.dead && a.side === 'myrr')
   if (!myrrLeft) return { kind: 'extermination', tick }
-  const freeHumans = agents.some((a) => !a.dead && a.civ && !['captured', 'captive', 'cocooned', 'dead', 'evacuated'].includes(a.civ.mode))
+  const freeHumans = agents.some((a) => !isOut(a)) // only people have civilian data, so Myrr and turrets don't count
   if (!freeHumans) return { kind: 'overrun', tick }
   return null
 }

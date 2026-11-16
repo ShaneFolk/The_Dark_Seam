@@ -10,6 +10,7 @@ import { CONFIG } from '../config.ts'
 import { totalStock } from '../systems/supplies.ts'
 import { hasPower } from '../systems/power.ts'
 import type { GameEvent } from '../core/events.ts'
+import { isLost } from '../agents/civilian.ts'
 
 function commanderLine(sim: SimState): string {
   const c = sim.commander
@@ -30,7 +31,7 @@ function commanderLine(sim: SimState): string {
 
 /** Soldiers of a squad still in the fight (not dead, taken or evacuated). */
 function soldiersLeft(sim: SimState, ids: number[]): number {
-  return ids.filter((id) => { const a = sim.agents[id]; return a && !a.dead && !['captive', 'cocooned', 'dead', 'evacuated'].includes(a.civ?.mode ?? 'dead') }).length
+  return ids.filter((id) => sim.agents[id] && !isLost(sim.agents[id])).length
 }
 
 function stockLine(sim: SimState): string {

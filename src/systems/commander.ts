@@ -18,12 +18,12 @@
 import type { LandingNotes } from '../agents/scout.ts'
 import { CONFIG } from '../config.ts'
 import type { Agent } from '../agents/agent.ts'
-import { isFree } from '../agents/civilian.ts'
+import { isFree, isOut } from '../agents/civilian.ts'
 import type { CivilianContext } from '../agents/civilian.ts'
 import { members, movableTurret, type Squad } from '../agents/soldier.ts'
 import { logEvent } from '../core/events.ts'
 import { formatDuration } from '../core/clock.ts'
-import { findRooms, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
+import { findLandingPad, randomTileIn, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 import { Tile } from '../world/tiles.ts'
 import { tileOf } from '../agents/agent.ts'
@@ -296,7 +296,7 @@ function enlist(a: Agent, squads: Squad[], ctx: CivilianContext): void {
 function checkCommander(cmd: CommanderState, squads: Squad[], ctx: CivilianContext): void {
   if (cmd.second || cmd.commanderId < 0) return
   const boss = ctx.agents[cmd.commanderId]
-  const lost = boss.dead || ['captured', 'captive', 'cocooned', 'dead'].includes(boss.civ?.mode ?? 'dead')
+  const lost = isOut(boss) && boss.civ?.mode !== 'evacuated' // leaving on the ship isn't losing the Commander
   if (!lost) return
   cmd.second = true
   for (const s of squads) s.morale = Math.max(0, s.morale - C.second.moraleHit)
@@ -360,5 +360,5 @@ function updateShip(cmd: CommanderState, ctx: CivilianContext): void {
 }
 
 export function landingPad(ctx: CivilianContext): RoomRef | null {
-  return findRooms(ctx.world, ['other'], 0).find((r) => r.room.name === 'Landing Pad') ?? null
+  return findLandingPad(ctx.world)
 }

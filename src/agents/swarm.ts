@@ -135,7 +135,7 @@ export function updateSwarm(ctx: HiveContext): void {
   const gathered = members.filter((a) => a.levelIndex === r.levelIndex && Math.hypot(a.x - r.x, a.y - r.y) <= W.gatherRadius)
 
   // The ship swarm waits for most of its members; a screech swarm for a handful.
-  const enough = swarm.heard ? Math.max(W.size, Math.ceil(members.length * 0.75)) : W.size
+  const enough = swarm.heard ? Math.max(W.size, Math.ceil(members.length * W.heardShare)) : W.size
   if (gathered.length >= enough || (age >= swarm.waitSeconds && gathered.length >= 2)) return rush(swarm, gathered, ctx)
   if (age >= swarm.maxWaitSeconds || !members.length) return disband(members, ctx)
 }
@@ -146,7 +146,7 @@ function rush(swarm: Swarm, gathered: Agent[], ctx: HiveContext): void {
   const level = ctx.world.levels[r.levelIndex]
   const prey = ctx.agents
     .filter((h) => !h.dead && h.side === 'human' && h.kind !== 'turret' && isFree(h) && h.levelIndex === r.levelIndex &&
-      Math.hypot(h.x - r.x, h.y - r.y) <= swarm.preyRange && (swarm.heard || gathered.some((m) => canSee(m, h, level, CONFIG.hive.sightRange + 4))))
+      Math.hypot(h.x - r.x, h.y - r.y) <= swarm.preyRange && (swarm.heard || gathered.some((m) => canSee(m, h, level, CONFIG.hive.sightRange + W.sightBonus))))
     .sort((a, b) => Math.hypot(a.x - r.x, a.y - r.y) - Math.hypot(b.x - r.x, b.y - r.y))
   if (!prey.length) return disband(gathered, ctx)
   gathered.forEach((a, i) => {

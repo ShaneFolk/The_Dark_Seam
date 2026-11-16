@@ -8,7 +8,7 @@
 
 import { CONFIG } from '../config.ts'
 import { canWalk, findPath, type PathNode } from '../world/pathfinding.ts'
-import { randomTileIn, roomAt, type RoomRef } from '../world/rooms.ts'
+import { randomTileIn, roomAt, roughDistance, type RoomRef } from '../world/rooms.ts'
 import { tileOf, type Agent } from './agent.ts'
 import { isFree } from './civilian.ts'
 import { followPath, isMoving } from './movement.ts'
@@ -143,5 +143,5 @@ function walk(agent: Agent, to: PathNode, ctx: CombatContext): boolean {
 }
 
 function dist(a: Agent, p: PathNode): number {
-  return Math.abs(a.levelIndex - p.levelIndex) * 200 + Math.hypot(a.x - p.x, a.y - p.y)
+  return roughDistance(a, p)
 }

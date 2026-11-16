@@ -4,12 +4,27 @@
 import { CONFIG } from '../config.ts'
 import { CHAR_TO_TILE, TILE_INFO, Tile, isRoomInterior } from './tiles.ts'
 import { ROOM_LETTERS, type Level, type LevelDef, type Room } from './level.ts'
-import { LINK_KIND_INFO, linkKindOf, type Link } from './links.ts'
+import { LINK_KIND_INFO, linkKindOf, type Link, type LinkKind } from './links.ts'
+import type { Agent } from '../agents/agent.ts'
+import type { PathNode } from './pathfinding.ts'
 
 export interface World {
   /** Levels in order; levels[0] is Level 1. */
   levels: Level[]
   links: Link[]
+  /**
+   * Set by the sim so movement can make noise (breaking things, riding the elevator)
+   * and the hive can notice arrivals. Kept on the world, so each run has its own.
+   */
+  movementHooks: MovementHooks
+}
+
+export interface MovementHooks {
+  onBreak?: (agent: Agent, kind: 'smash' | 'chew') => void
+  /** Every tick of a ride or climb between levels. */
+  onRide?: (agent: Agent, kind: LinkKind | null, from: PathNode, to: PathNode, ticksLeft: number) => void
+  /** Just arrived on the new level. */
+  onArrive?: (agent: Agent, kind: LinkKind | null, from: PathNode, to: PathNode) => void
 }
 
 const NEIGHBOURS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const
@@ -70,7 +85,7 @@ export function loadWorld(defs: LevelDef[]): World {
   checkSurfaceVents(levels, errors)
 
   if (errors.length) throw new Error(`Map problems:\n- ${errors.join('\n- ')}`)
-  return { levels, links }
+  return { levels, links, movementHooks: {} }
 }
 
 /** Flood-fill each room from its marker letter, and name it. */

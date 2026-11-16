@@ -6,7 +6,7 @@
 import { CONFIG } from '../config.ts'
 import type { World } from '../world/loadWorld.ts'
 import { Tile } from '../world/tiles.ts'
-import { roomTiles } from '../world/rooms.ts'
+import { findLandingPad, roomNamed, roomTiles } from '../world/rooms.ts'
 import { strongest } from '../systems/pheromones.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 import { createAgent, type Agent } from './agent.ts'
@@ -31,7 +31,7 @@ export function deploySite(ctx: CombatContext, reserved: PathNode[] = []): PathN
     if (spot && free(spot)) return spot
   }
   for (const name of C.defaultSpots) {
-    const room = ctx.world.levels.flatMap((l, li) => l.rooms.map((r) => ({ levelIndex: li, room: r }))).find((r) => r.room.name === name)
+    const room = roomNamed(ctx.world, name)
     if (!room) continue
     const tiles = roomTiles(ctx.world, room).filter((p) => ctx.world.levels[p.levelIndex].tiles[p.y * ctx.world.levels[p.levelIndex].width + p.x] === Tile.Floor)
     const centre = tiles.sort((a, b) => Math.hypot(a.x - room.room.centerX, a.y - room.room.centerY) - Math.hypot(b.x - room.room.centerX, b.y - room.room.centerY))[0]
@@ -46,10 +46,10 @@ export function deploySite(ctx: CombatContext, reserved: PathNode[] = []): PathN
  */
 export function padSite(ctx: CombatContext, reserved: PathNode[] = []): PathNode | null {
   const level = ctx.world.levels[0]
-  const pad = level.rooms.find((r) => r.name === 'Landing Pad')
-  if (!pad) return null
-  const ref = { levelIndex: 0, room: pad }
-  const from = level.rooms.find((r) => r.name === 'Mine Head') ?? pad
+  const ref = findLandingPad(ctx.world)
+  if (!ref) return null
+  const pad = ref.room
+  const from = roomNamed(ctx.world, 'Mine Head', 0)?.room ?? pad
   const taken: PathNode[] = [...ctx.agents.filter((a) => a.kind === 'turret' && !a.dead).map((a) => ({ levelIndex: a.levelIndex, x: a.x, y: a.y })), ...reserved]
   const spacing = CONFIG.commander.evacuation.padTurretSpacing
   const edge = roomTiles(ctx.world, ref).filter((t) => {

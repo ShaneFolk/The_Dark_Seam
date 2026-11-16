@@ -138,7 +138,7 @@ function burn(attacker: Agent, target: Agent, dmg: number, ctx: CombatContext): 
   const F = CONFIG.flamethrower
   for (const a of ctx.agents) {
     if (a === target || a.dead || a.side !== 'myrr' || a.levelIndex !== target.levelIndex) continue
-    if (Math.hypot(a.x - target.x, a.y - target.y) <= F.splash) damage(a, dmg * 0.6, attacker, ctx)
+    if (Math.hypot(a.x - target.x, a.y - target.y) <= F.splash) damage(a, dmg * F.splashShare, attacker, ctx)
   }
   burnArea(tileOfPoint(target), F.burnRadius, 0, attacker, ctx)
 }
@@ -217,7 +217,7 @@ export function kill(agent: Agent, ctx: CombatContext): void {
       const captive = ctx.agents[m.targetId]
       if (captive?.civ && captive.civ.mode === 'captured') {
         setMode(captive, captive.civ, 'paralyzed')
-        captive.civ.paralyzedUntilTick = ctx.tick + Math.round(CONFIG.hive.paralysisSeconds * TPS * 0.5)
+        captive.civ.paralyzedUntilTick = ctx.tick + Math.round(CONFIG.hive.paralysisSeconds * TPS * CONFIG.hive.dropParalysisShare)
         captive.state = { name: 'idle', ticksLeft: 1e9 }
         ctx.stats.dropped++
         logEvent(ctx, 'rescue', `A Taker carrying ${who(captive, true)} was killed; they were dropped`, captive)

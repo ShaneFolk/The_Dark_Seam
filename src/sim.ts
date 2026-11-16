@@ -6,7 +6,7 @@ import { Rng } from './core/rng.ts'
 import { createWorld, type World } from './world/world.ts'
 import { createAgent, type Agent } from './agents/agent.ts'
 import { updateWanderer } from './agents/wander.ts'
-import { isMoving, movementHooks } from './agents/movement.ts'
+import { isMoving } from './agents/movement.ts'
 import { activityAt, createCivilianData, roomFor, updateCivilian, type CivilianContext } from './agents/civilian.ts'
 import { createMyrrData, planDigging, takerHurt, updateTaker, type HiveState } from './agents/myrr.ts'
 import { updateBroodling, updateCollapse, updateInfections, updateMother, updateSpineback } from './agents/lifecycle.ts'
@@ -24,7 +24,7 @@ import { newSquad, soldierHurt, soldierKilled, updateSoldier, updateSquads, type
 import { countResin, healMyrr, seedHiveResin } from './systems/resin.ts'
 import { makeNoise, pruneNoises, type Noise } from './systems/noise.ts'
 import { createPheromones, decayPheromones, type Pheromones } from './systems/pheromones.ts'
-import { findRooms, randomTileIn, roomTiles, type RoomRef } from './world/rooms.ts'
+import { centreTile, findRooms, randomTileIn, roomNamed, roomTiles, type RoomRef } from './world/rooms.ts'
 import { createSupplies, type Supplies } from './systems/supplies.ts'
 import { createMedBays, updateMedBays, type MedBay } from './systems/medbay.ts'
 import { createPower, hasPower, type PowerState } from './systems/power.ts'
@@ -131,9 +131,11 @@ export function step(sim: SimState): void {
     onMyrrHurt: (myrr, source) => takerHurt(myrr, source, ctx),
   }
 
-  movementHooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
-  movementHooks.onRide = (agent, kind, from, to, ticksLeft) => elevatorRide(agent, kind, from, to, ticksLeft, ctx)
-  movementHooks.onArrive = (agent, kind, from, to) => noteArrival(agent, kind, from, to, ctx)
+  // The hooks close over this tick's context.
+  const hooks = sim.world.movementHooks
+  hooks.onBreak = (agent, kind) => makeNoise(sim.noises, kind, agent.levelIndex, agent.x, agent.y, sim.tick, agent.id)
+  hooks.onRide = (agent, kind, from, to, ticksLeft) => elevatorRide(agent, kind, from, to, ticksLeft, ctx)
+  hooks.onArrive = (agent, kind, from, to) => noteArrival(agent, kind, from, to, ctx)
   updateInfections(ctx)
   updateMedBays(sim.medbays, sim.agents, sim.world, hasPower(sim.power), ctx)
   updateCollapse(ctx)
@@ -260,13 +262,6 @@ const BEATS: { level: number; types: RoomType[] }[][] = [
   [{ level: 0, types: ['other', 'workshop', 'generator'] }, { level: 1, types: ['other'] }],
 ]
 
-/** The walkable tile nearest a room's middle. */
-function centreTile(world: World, room: RoomRef): PathNode {
-  const tiles = roomTiles(world, room)
-  return tiles.reduce((best, t) =>
-    Math.hypot(t.x - room.room.centerX, t.y - room.room.centerY) < Math.hypot(best.x - room.room.centerX, best.y - room.room.centerY) ? t : best)
-}
-
 /** A new squad starting in `room` (all at `at` if given). The last member is its medic. */
 function addSquad(sim: SimState, room: RoomRef, size: number, beat: { level: number; types: RoomType[] }[], at?: PathNode): void {
   const { world, rng } = sim
@@ -301,20 +296,17 @@ function spawnHive(sim: SimState): void {
   const hive = findRooms(world, ['hive'])[0]
   if (!hive) return
   const tiles = roomTiles(world, hive)
-  const centre = tiles.reduce((best, t) =>
-    Math.hypot(t.x - hive.room.centerX, t.y - hive.room.centerY) < Math.hypot(best.x - hive.room.centerX, best.y - hive.room.centerY) ? t : best,
-  )
+  const centre = centreTile(world, hive)
   const mother = createAgent(sim.agents.length, 'brood-mother', 'myrr', centre, 0, CONFIG.health.broodMother)
   mother.myrr = createMyrrData('mother')
   mother.weapon = makeWeapon('maw', CONFIG.combat.skill.myrr)
   sim.hive.motherId = mother.id
   sim.hive.motherHome = centre
   // Her fallback chamber, already coated in resin.
-  const deep = findRooms(world, ['other'], hive.levelIndex).find((r) => r.room.name === 'Deep Chamber')
+  const deep = roomNamed(world, 'Deep Chamber', hive.levelIndex)
   if (deep) {
     const deepTiles = roomTiles(world, deep)
-    sim.hive.deepHome = deepTiles.reduce((best, t) =>
-      Math.hypot(t.x - deep.room.centerX, t.y - deep.room.centerY) < Math.hypot(best.x - deep.room.centerX, best.y - deep.room.centerY) ? t : best)
+    sim.hive.deepHome = centreTile(world, deep)
     const level = world.levels[deep.levelIndex]
     for (const t of deepTiles) level.resin[t.y * level.width + t.x] = 1
     sim.hive.resinTiles = countResin(world)

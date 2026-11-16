@@ -191,7 +191,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       // Pounce: speed up for the last few tiles.
       const close = target.levelIndex === agent.levelIndex && Math.hypot(target.x - agent.x, target.y - agent.y) <= H.pounceRange
       agent.speed = agent.baseSpeed * (close ? H.pounceMultiplier : 1)
-      if (target.levelIndex === agent.levelIndex && Math.hypot(target.x - agent.x, target.y - agent.y) <= 1.1) {
+      if (target.levelIndex === agent.levelIndex && Math.hypot(target.x - agent.x, target.y - agent.y) <= H.grabReach) {
         m.task = 'attack'
         // Grab hold: the human can't run, only fight back.
         target.heldBy = agent.id
@@ -212,7 +212,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
     case 'attack': {
       // Claw at the human until they are weak enough to sting.
       const target = ctx.agents[m.targetId]
-      if (!target || !isFree(target) || target.levelIndex !== agent.levelIndex || Math.hypot(target.x - agent.x, target.y - agent.y) > 1.6) {
+      if (!target || !isFree(target) || target.levelIndex !== agent.levelIndex || Math.hypot(target.x - agent.x, target.y - agent.y) > H.holdReach) {
         m.task = 'hunt'
         m.repathTick = ctx.tick
         return
@@ -248,13 +248,13 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
 
     case 'haul':
     case 'haulCarry': {
-      if (updateHaul(agent, ctx)) rest(agent, m, ctx, 0.3)
+      if (updateHaul(agent, ctx)) rest(agent, m, ctx, H.restAfter.haul)
       return
     }
 
     case 'swarm': {
       // Gathering at the caller's spot; the swarm (swarm.ts) decides when to rush.
-      if (!ctx.hive.swarm || !ctx.hive.swarm.members.includes(agent.id)) return rest(agent, m, ctx, 0.2)
+      if (!ctx.hive.swarm || !ctx.hive.swarm.members.includes(agent.id)) return rest(agent, m, ctx, H.restAfter.swarm)
       if (agent.state.name === 'moving') followPath(agent, ctx.world)
       return
     }
@@ -301,7 +301,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
     case 'sabotage': {
       const gen = ctx.power.generators[m.targetId]
       if (!gen || gen.broken) { m.targetId = -1; return goHome(agent, m, ctx) }
-      const close = agent.levelIndex === gen.at.levelIndex && Math.hypot(agent.x - (gen.at.x + 0.5), agent.y - (gen.at.y + 0.5)) <= 1.6
+      const close = agent.levelIndex === gen.at.levelIndex && Math.hypot(agent.x - (gen.at.x + 0.5), agent.y - (gen.at.y + 0.5)) <= H.sabotageReach
       if (!close) {
         if (agent.state.name === 'moving' && !followPath(agent, ctx.world)) return
         if (!close && !goTo(agent, ctx, gen.at)) { m.targetId = -1; return goHome(agent, m, ctx) }
@@ -342,7 +342,7 @@ export function updateTaker(agent: Agent, ctx: CombatContext): void {
       if (--m.ticksLeft > 0) return
       const room = CONFIG.resin.maxTiles - ctx.hive.resinTiles
       ctx.hive.resinTiles += coatResin(ctx.world, tileOf(agent), room)
-      return rest(agent, m, ctx, 0.3)
+      return rest(agent, m, ctx, H.restAfter.coat)
     }
   }
 }
@@ -363,19 +363,19 @@ function startLurk(agent: Agent, m: MyrrData, gen: Generator, ctx: CombatContext
  * is high and the cooldown is over, giving it to the nearest Taker that's free.
  */
 export function planDigging(ctx: HiveContext): void {
-  if (ctx.tick % (5 * TPS) !== 0) return
+  if (ctx.tick % (H.digPlanSeconds * TPS) !== 0) return
   const { hive } = ctx
   if (hive.dig) {
     const digger = ctx.agents[hive.dig.takerId]
     if (!digger || digger.dead || digger.myrr?.task !== 'dig') {
       hive.dig = null
-      hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS * 0.5)
+      hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS * H.digRetryShare.diggerLost)
     }
     return
   }
   if (ctx.tick < hive.nextDigTick) return
   const site = findDigSite(ctx.world, ctx.pheromones, ctx.rng)
-  if (!site) { hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS * 0.25); return }
+  if (!site) { hive.nextDigTick = ctx.tick + Math.round(H.digCooldownSeconds * TPS * H.digRetryShare.noSite); return }
 
   const free = ctx.agents.filter((a) => !a.dead && a.myrr?.role === 'taker' && ['rest', 'scout', 'return', 'spread'].includes(a.myrr.task))
   free.sort((a, b) => (a.levelIndex !== site.levelIndex ? 1000 : 0) - (b.levelIndex !== site.levelIndex ? 1000 : 0) +
@@ -426,7 +426,7 @@ function chooseNextJob(agent: Agent, m: MyrrData, ctx: CombatContext): void {
   const boss = ctx.agents.find((a) => a.kind === 'commander' && !a.dead && isFree(a))
   if (boss && fought > 0) {
     const guards = ctx.agents.filter((a) => a.soldier && !a.dead && isFree(a) && a.levelIndex === boss.levelIndex && Math.hypot(a.x - boss.x, a.y - boss.y) <= CONFIG.commander.guardRange).length
-    options.push({ action: 'commander', score: U.commanderMax * fought * (guards >= CONFIG.commander.guardSquadSize ? 0.5 : 1) * nerve })
+    options.push({ action: 'commander', score: U.commanderMax * fought * (guards >= CONFIG.commander.guardSquadSize ? H.guardedCommanderScale : 1) * nerve })
   }
   const pick = pickByScore(options, ctx.rng, CONFIG.utility.sharpness)?.action ?? 'scout'
   m.lastChoice = `${pick} (${scoreList(options)})`
@@ -468,7 +468,7 @@ function lookForPrey(agent: Agent, m: MyrrData, ctx: HiveContext): void {
     if (human.weapon && isRanged(human.weapon) && !spine && !m.swarmHunt) {
       if (m.task !== 'hunt' && callSwarm(agent, ctx)) return
       // Not worth it here: wipe out the prey scent around this spot so scouts look elsewhere.
-      weakenScent(ctx, tileOf(agent), 8, 0.05)
+      weakenScent(ctx, tileOf(agent), H.armedPreyScent.radius, H.armedPreyScent.keep)
       if (m.task !== 'return' && m.task !== 'rest') goHome(agent, m, ctx)
       return
     }
@@ -559,7 +559,7 @@ function deliver(agent: Agent, m: MyrrData, ctx: HiveContext): void {
   const captive = ctx.agents[m.targetId]
   const mother = ctx.agents[ctx.hive.motherId]
   // Not home yet (e.g. the first route failed): try again.
-  if (mother && !mother.dead && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > 4)) {
+  if (mother && !mother.dead && (agent.levelIndex !== mother.levelIndex || Math.hypot(mother.x - agent.x, mother.y - agent.y) > H.deliverRange)) {
     if (goTo(agent, ctx, nearMother(ctx))) return
   }
   // A captive that hatched on the way is already dead: nothing to hand over.
@@ -591,7 +591,7 @@ function giveUp(agent: Agent, m: MyrrData, ctx: HiveContext): void {
 // ---------------------------------------------------------------- moving about
 
 function nextScoutTrip(agent: Agent, m: MyrrData, ctx: HiveContext): void {
-  const spots = ctx.rng.chance(H.followTrailChance) ? strongestTrail(ctx.pheromones, ctx.world, 12) : []
+  const spots = ctx.rng.chance(H.followTrailChance) ? strongestTrail(ctx.pheromones, ctx.world, H.scoutTrailSpots) : []
   if (spots.length) {
     // Stronger scent is more likely to be picked.
     let roll = ctx.rng.next() * spots.reduce((s, p) => s + p.strength, 0)
@@ -621,9 +621,9 @@ export function takerHurt(agent: Agent, source: Agent | null, ctx: HiveContext):
   const m = agent.myrr!
   if (source?.weapon && isRanged(source.weapon)) m.shotTick = ctx.tick
   if (m.role !== 'taker' || m.task === 'carry' || m.task === 'haulCarry' || m.task === 'return' || m.task === 'dig' || m.swarmHunt) return
-  if (m.task === 'sabotage' && agent.health > agent.maxHealth * 0.4) return // determined
+  if (m.task === 'sabotage' && agent.health > agent.maxHealth * H.fleeBelowHealth) return // determined
   const shot = !!source?.weapon && isRanged(source.weapon)
-  if (!shot && agent.health > agent.maxHealth * 0.4) return
+  if (!shot && agent.health > agent.maxHealth * H.fleeBelowHealth) return
   m.targetId = -1
   agent.speed = agent.baseSpeed
   goHome(agent, m, ctx)
@@ -658,7 +658,7 @@ function nearMother(ctx: HiveContext): PathNode {
   const home = ctx.hive.motherHome
   const hive = (home && roomAt(ctx.world, home)) ?? findRooms(ctx.world, ['hive'])[0]
   const tiles = roomTiles(ctx.world, hive).filter(
-    (t) => !mother || mother.dead || Math.hypot(t.x + 0.5 - mother.x, t.y + 0.5 - mother.y) <= 4,
+    (t) => !mother || mother.dead || Math.hypot(t.x + 0.5 - mother.x, t.y + 0.5 - mother.y) <= H.deliverRange,
   )
   return ctx.rng.pick(tiles.length ? tiles : roomTiles(ctx.world, hive))
 }

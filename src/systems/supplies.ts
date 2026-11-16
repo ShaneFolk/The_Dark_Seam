@@ -5,7 +5,7 @@
 import { CONFIG } from '../config.ts'
 import type { Rng } from '../core/rng.ts'
 import type { World } from '../world/loadWorld.ts'
-import { findRooms, type RoomRef } from '../world/rooms.ts'
+import { findRooms, roughDistance, type RoomRef } from '../world/rooms.ts'
 
 export interface Stock {
   rifleMags: number
@@ -60,7 +60,7 @@ export function roomsWith(supplies: Supplies, item: StockItem, from: { levelInde
     .sort((a, b) => cost(a) - cost(b))
 
   function cost(r: RoomRef): number {
-    return Math.abs(r.levelIndex - from.levelIndex) * 200 + Math.hypot(r.room.centerX - from.x, r.room.centerY - from.y)
+    return roughDistance({ levelIndex: r.levelIndex, x: r.room.centerX, y: r.room.centerY }, from)
   }
 }
 

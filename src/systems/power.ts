@@ -6,7 +6,7 @@
 
 import { CONFIG } from '../config.ts'
 import type { World } from '../world/loadWorld.ts'
-import { findRooms, roomTiles, type RoomRef } from '../world/rooms.ts'
+import { centreTile, findRooms, type RoomRef } from '../world/rooms.ts'
 import type { PathNode } from '../world/pathfinding.ts'
 
 export interface Generator {
@@ -29,9 +29,7 @@ export interface PowerState {
 
 export function createPower(world: World): PowerState {
   const generators = findRooms(world, ['generator']).map((room) => {
-    const tiles = roomTiles(world, room)
-    const at = tiles.reduce((best, t) =>
-      Math.hypot(t.x - room.room.centerX, t.y - room.room.centerY) < Math.hypot(best.x - room.room.centerX, best.y - room.room.centerY) ? t : best)
+    const at = centreTile(world, room)
     return { room, at, health: CONFIG.power.generatorHp, maxHealth: CONFIG.power.generatorHp, broken: false, sabotaged: false, coverSquad: -1 }
   })
   return { generators }

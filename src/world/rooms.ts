@@ -5,6 +5,7 @@ import type { World } from './loadWorld.ts'
 import type { Room, RoomType } from './level.ts'
 import type { PathNode } from './pathfinding.ts'
 import { TILE_INFO, Tile } from './tiles.ts'
+import { CONFIG } from '../config.ts'
 
 /** A room plus the level it is on. */
 export interface RoomRef {
@@ -69,4 +70,41 @@ export function cornerTiles(world: World, ref: RoomRef): PathNode[] {
     }
     return walls >= 2
   })
+}
+
+/** The walkable tile nearest a room's middle. */
+export function centreTile(world: World, ref: RoomRef): PathNode {
+  const { centerX, centerY } = ref.room
+  return roomTiles(world, ref).reduce((best, t) =>
+    Math.hypot(t.x - centerX, t.y - centerY) < Math.hypot(best.x - centerX, best.y - centerY) ? t : best)
+}
+
+/** A room found by its name (as written in the map file), or null. */
+export function roomNamed(world: World, name: string, levelIndex?: number): RoomRef | null {
+  for (let li = 0; li < world.levels.length; li++) {
+    if (levelIndex !== undefined && li !== levelIndex) continue
+    const room = world.levels[li].rooms.find((r) => r.name === name)
+    if (room) return { levelIndex: li, room }
+  }
+  return null
+}
+
+/** The Landing Pad on the surface (where ships land and the evacuation gathers). */
+export function findLandingPad(world: World): RoomRef | null {
+  return roomNamed(world, 'Landing Pad', 0)
+}
+
+/** Is a point (an agent or a tile) inside this room? */
+export function isIn(world: World, at: { levelIndex: number; x: number; y: number }, ref: RoomRef | null): boolean {
+  if (!ref || at.levelIndex !== ref.levelIndex) return false
+  const level = world.levels[at.levelIndex]
+  return level.roomOf[Math.floor(at.y) * level.width + Math.floor(at.x)] === ref.room.index
+}
+
+/**
+ * A rough "how far" for picking the nearest of several things across levels: the
+ * straight-line distance, plus CONFIG.movement.otherLevelDistance for each level apart.
+ */
+export function roughDistance(a: { levelIndex: number; x: number; y: number }, b: { levelIndex: number; x: number; y: number }): number {
+  return Math.abs(a.levelIndex - b.levelIndex) * CONFIG.movement.otherLevelDistance + Math.hypot(a.x - b.x, a.y - b.y)
 }

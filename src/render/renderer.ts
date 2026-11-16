@@ -231,7 +231,7 @@ export class Renderer {
     const { ctx } = this
     for (const s of sim.sensors) {
       if (s.levelIndex !== levelIndex) continue
-      ctx.fillStyle = sim.tick - s.lastAlert < 40 ? '#ff4d4d' : '#4da6ff'
+      ctx.fillStyle = sim.tick - s.lastAlert < CONFIG.sensors.flashSeconds * CONFIG.sim.ticksPerSecond ? '#ff4d4d' : '#4da6ff'
       ctx.fillRect(ox + s.x * tile - tile * 0.15, oy + s.y * tile - tile * 0.15, tile * 0.3, tile * 0.3)
     }
   }

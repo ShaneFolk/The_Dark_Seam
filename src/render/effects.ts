@@ -20,7 +20,7 @@ import { CONFIG } from '../config.ts'
 import type { SimState } from '../sim.ts'
 import type { Agent } from '../agents/agent.ts'
 import { isFree } from '../agents/civilian.ts'
-import { findRooms } from '../world/rooms.ts'
+import { findLandingPad } from '../world/rooms.ts'
 import { drawSprite } from './sprites.ts'
 
 const TPS = CONFIG.sim.ticksPerSecond
@@ -161,7 +161,7 @@ export class Effects {
 
   /** The ship on the Landing Pad, and how high it is (0 landed, 1 out of sight), or null if there is none. */
   private ship(sim: SimState): { x: number; y: number; height: number } | null {
-    const pad = findRooms(sim.world, ['other'], 0).find((r) => r.room.name === 'Landing Pad')
+    const pad = findLandingPad(sim.world)
     if (!pad) return null
     const move = E.shipMoveSeconds * TPS
     const c = sim.commander
