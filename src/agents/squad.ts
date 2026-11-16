@@ -82,6 +82,8 @@ export interface Squad {
   scouting: Scouting | null
   /** Someone just cut free that this squad is walking to the med bay, or -1. */
   escortId: number
+  /** Split off from an assault as an escort: others don't merge into it (it rejoins a squad when done). */
+  isEscort: boolean
 }
 
 /** A fresh squad on patrol with no members yet (add them with squad.members.push). */
@@ -91,7 +93,7 @@ export function newSquad(id: number, name: string, patrol: RoomRef[], patrolInde
     lastContactTick: tick, patrol, patrolIndex, ticksLeft: 0, welded: false,
     charges: 0, carryingTurret: false, mission: null, missionGoal: null, missionReached: false,
     incendiaries: 0, burnAt: null, riskTaken: false, riskLoggedTick: -1e9, guardId: -1, flares: 0,
-    turretAmmo: null, scouting: null, searches: 0, kills: 0, veteran: false, escortId: -1,
+    turretAmmo: null, scouting: null, searches: 0, kills: 0, veteran: false, escortId: -1, isEscort: false,
   }
 }
 

@@ -28,11 +28,11 @@ export function mergeSquads(squads: Squad[], ctx: CombatContext): void {
     let best: Squad | null = null, bestD = Infinity
     for (const other of squads) {
       // Not into the command squad, nor one busy with something it can't share (an escort walking someone out).
-      if (other === small || other.guardId >= 0 || NO_MERGE.has(other.order)) continue
+      if (other === small || other.guardId >= 0 || other.isEscort || NO_MERGE.has(other.order)) continue
       const theirs = members(other, ctx)
       if (!theirs.length || theirs.length + mine.length > G.maxSize) continue
-      // Only squads on the same level merge (a lone soldier doesn't cross the mine to find one).
-      const d = theirs[0].levelIndex === mine[0].levelIndex ? roughDistance(theirs[0], mine[0]) : Infinity
+      // The nearest squad with room, on any level (another level counts as far: see roughDistance).
+      const d = roughDistance(theirs[0], mine[0])
       if (d < bestD) { best = other; bestD = d }
     }
     if (!best) continue
@@ -76,6 +76,7 @@ export function detachEscort(squad: Squad, person: Agent, squads: Squad[], ctx: 
     a.soldier!.squadId = escort.id
   }
   escort.escortId = person.id
+  escort.isEscort = true
   setOrder(escort, 'guide', tileOf(person))
   escort.targetId = person.id
   return escort
