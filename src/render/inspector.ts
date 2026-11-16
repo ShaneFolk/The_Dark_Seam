@@ -8,6 +8,11 @@ import { describeAgent } from '../agents/describe.ts'
 import { describeTile } from '../world/loadWorld.ts'
 import { currentCamera, type Selection, type ViewState } from './view.ts'
 import { toggleFollow } from './input.ts'
+import type { Agent } from '../agents/agent.ts'
+import { who } from '../agents/describe.ts'
+import { knownInfected } from '../systems/medbay.ts'
+import { hasPower } from '../systems/power.ts'
+import { formatDuration } from '../core/clock.ts'
 
 /** What is at a screen point on the shown level: the nearest agent within reach, or else the tile. */
 export function pickAt(sim: SimState, view: ViewState, sx: number, sy: number, viewW: number, viewH: number, touch: boolean): Selection | null {
@@ -56,7 +61,7 @@ export class Inspector {
     if (sel) {
       const level = sim.world.levels[sel.levelIndex]
       text = agent
-        ? describeAgent(agent, sim.tick) + `\nLevel ${level.id} · ${level.rooms[level.roomOf[sel.y * level.width + sel.x]]?.name ?? (sel.levelIndex === 0 ? 'outside' : 'tunnels')}`
+        ? describeAgent(agent, sim.tick) + rescueLine(sim, agent) + `\nLevel ${level.id} · ${level.rooms[level.roomOf[sel.y * level.width + sel.x]]?.name ?? (sel.levelIndex === 0 ? 'outside' : 'tunnels')}`
         : `Level ${level.id} · tile ${sel.x}, ${sel.y}\n${describeTile(level, sel.x, sel.y)}`
     }
     this.panel.hidden = !sel
@@ -65,6 +70,21 @@ export class Inspector {
     this.followBtn.textContent = view.following ? 'Following' : 'Follow'
     if (text !== this.shown) { this.shown = text; this.text.textContent = text }
   }
+}
+
+/** For someone carrying a larva the colony knows about, or an escort: where the rescue stands. */
+function rescueLine(sim: SimState, agent: Agent): string {
+  const escorting = sim.squads.find((s) => s.escortId >= 0 && s.members.includes(agent.id))
+  if (escorting) return `\nEscorting ${who(sim.agents[escorting.escortId], true)} to the med bay`
+  if (!knownInfected(agent)) return ''
+  const civ = agent.civ!
+  const hatch = `the larva hatches in ${formatDuration(Math.max(0, civ.infection!.hatchTick - sim.tick))}`
+  if (sim.medbays.some((b) => b.beds.includes(agent.id))) {
+    const cure = formatDuration(Math.max(0, CONFIG.medbay.cureSeconds * CONFIG.sim.ticksPerSecond - civ.cureTicks))
+    return `\nIn a med bay bed: cured in ${cure}${hasPower(sim.power) ? '' : ' (no power: the cure is paused)'}; ${hatch}`
+  }
+  const escort = sim.squads.find((s) => s.escortId === agent.id)
+  return `\n${escort ? `Walking to the med bay with ${escort.name}` : 'Making their own way to the med bay'}; ${hatch}`
 }
 
 function button(label: string, onClick: () => void): HTMLButtonElement {

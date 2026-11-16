@@ -10,6 +10,7 @@ import { BARRIER_SPRITES, TILE_SPRITES, drawResinSprite, type TileSpot } from '.
 import { AGENT_SPRITES } from './agentSprites.ts'
 import { drawSprite, spritesReady } from './sprites.ts'
 import { Effects } from './effects.ts'
+import { drawRescues } from './rescueMarks.ts'
 import { isHidden } from '../systems/camouflage.ts'
 import { describeAgent } from '../agents/describe.ts'
 import { formatClock } from '../core/clock.ts'
@@ -128,6 +129,7 @@ export class Renderer {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
       ctx.fillRect(ox, oy, level.width * tile, level.height * tile)
     }
+    drawRescues(ctx, sim, view.levelIndex, ox, oy, tile)
     this.drawRoomLabels(level, ox, oy, tile)
     const hovered = this.hoveredTile(level, camera, view, w, h)
     if (hovered) {

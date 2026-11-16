@@ -66,7 +66,9 @@ export function detachEscort(squad: Squad, person: Agent, squads: Squad[], ctx: 
   const picks = [...alive]
     .sort((a, b) => (a.soldier!.role === 'medic' ? 0 : 1) - (b.soldier!.role === 'medic' ? 0 : 1) || dist(a, person) - dist(b, person))
     .slice(0, spare)
-  const escort = newSquad(squads.length, `${squad.name.replace(/ Squad$/, '')} Escort`, squad.patrol, squad.patrolIndex, ctx.tick)
+  const base = `${squad.name.replace(/ Squad$/, '')} Escort`
+  const same = squads.filter((s) => s.name === base || s.name.startsWith(base + ' ')).length
+  const escort = newSquad(squads.length, same ? `${base} ${same + 1}` : base, squad.patrol, squad.patrolIndex, ctx.tick)
   escort.morale = squad.morale
   escort.veteran = squad.veteran
   squads.push(escort)

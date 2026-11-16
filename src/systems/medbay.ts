@@ -9,6 +9,7 @@ import { findRooms, roomAt, sameRoom, type RoomRef } from '../world/rooms.ts'
 import { tileOf } from '../agents/agent.ts'
 import { logEvent, type Log } from '../core/events.ts'
 import { who } from '../agents/describe.ts'
+import { formatDuration } from '../core/clock.ts'
 
 export interface MedBay {
   room: RoomRef
@@ -22,12 +23,17 @@ export function createMedBays(world: World): MedBay[] {
 
 const TPS = CONFIG.sim.ticksPerSecond
 
+/** Infected, and they (and the colony) know it: they were cut free or stabilized. */
+export function knownInfected(agent: Agent): boolean {
+  const civ = agent.civ
+  return !!civ && !agent.dead && !!civ.infection && (civ.rescued || civ.infection.stabilizedUntilTick > 0)
+}
+
 /** Does this person need the med bay? (Infected people only know if they were rescued or stabilized.) */
 export function needsMedBay(agent: Agent): boolean {
   const civ = agent.civ
   if (!civ || agent.dead) return false
-  const knowsInfected = !!civ.infection && (civ.rescued || civ.infection.stabilizedUntilTick > 0)
-  return knowsInfected || agent.health < CONFIG.medbay.seekBelowHealth
+  return knownInfected(agent) || agent.health < CONFIG.medbay.seekBelowHealth
 }
 
 /** Fill free beds with patients standing in the room; heal and cure those in beds. */
@@ -45,6 +51,11 @@ export function updateMedBays(medbays: MedBay[], agents: Agent[], world: World, 
         if (!sameRoom(roomAt(world, tileOf(a)), bay.room)) continue
         bay.beds.push(a.id)
         a.civ!.cureTicks = 0
+        // Someone carrying a larva made it: how close was it?
+        if (knownInfected(a)) {
+          const left = a.civ!.infection!.hatchTick - log.tick
+          logEvent(log, 'rescue', `${who(a)} reached the med bay with ${formatDuration(left)} to spare; the cure takes ${formatDuration(CONFIG.medbay.cureSeconds * TPS)}`, a)
+        }
       }
     }
     for (const id of bay.beds) {

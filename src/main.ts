@@ -54,6 +54,9 @@ const sidebarRoot = document.querySelector<HTMLElement>('#sidebar')
 if (!sidebarRoot) throw new Error('Missing #sidebar')
 const sidebar = new Sidebar(sidebarRoot, sim, view, selectLevel, (ev) => jumpTo(sim, view, ev))
 
+// Dev server only (npm run dev): the sim and step() in the browser console, for poking at a run.
+if (import.meta.env.DEV) Object.assign(window, { sim, step: (n = 1) => { for (let i = 0; i < n && !sim.ending; i++) step(sim) }, view })
+
 startLoop(CONFIG.sim.ticksPerSecond, CONFIG.sim.maxTicksPerFrame, {
   update: () => step(sim),
   speed: () => (view.paused ? 0 : view.speed),
